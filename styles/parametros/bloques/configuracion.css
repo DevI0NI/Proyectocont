@@ -1,0 +1,627 @@
+/* ===== configuracion.css — bloque 1/?: Base + Header + Form + Botón regresar (OPTIMIZADO) ===== */
+
+/* Variables de color y texto */
+:root{
+  --bg:#f0f2f5;
+  --text:#000;
+  --primary:#80CBC4;
+  --primary-dark:#00695C;
+}
+
+/* Estilos generales */
+body{
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Header */
+header{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background: linear-gradient(90deg, var(--primary-dark), var(--primary));
+  color: var(--text);
+}
+
+.header-left{ display:flex; align-items:center; }
+.header-left a{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.header-left .logo{
+  width: 50px;       /* conservamos tu tamaño */
+  height: auto;      /* evita deformación */
+  margin-right: 10px;
+}
+
+.header-right{ display:flex; align-items:center; gap:10px; }
+
+.logout-button{
+  background-color: #ff4d4d;
+  color: var(--text);
+  padding: 5px 10px;
+  text-decoration: none;
+  border-radius: 5px;
+}
+.logout-button:hover{ background-color: #ff1a1a; }
+
+/* Main */
+main{
+  padding: 20px;
+  text-align: left;
+  flex: 1;
+}
+
+h1, h2{
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* Formularios (ambos) */
+form{
+  width: 60%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* NOTA: .form-group no se usa en esta vista (puedes eliminarlo si quieres) */
+/* .form-group{ display:flex; align-items:center; margin-bottom:10px; } */
+
+/* Etiquetas e inputs */
+label{
+  width: 200px;
+  margin-right: 10px;
+  background-color: var(--primary);
+  padding: 8px;
+  border-radius: 5px;
+  text-align: center;  /* quitamos el right redundante */
+  color: var(--text);
+}
+
+input[type="text"],
+input[type="number"]{
+  flex: 1;
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* Botonera inferior (Regresar) */
+.buttons{
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.regresar-button{
+  display: inline-flex;     /* mejora alineación si hay icono + texto */
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 120px;
+  height: 55px;
+  padding: 10px;
+  background-color: var(--primary);
+  color: var(--text);
+  border: none;
+  border-radius: 5px;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+
+/* ===== configuracion.css — bloque 2/?: Footer + Botoneras + Fila (OPTIMIZADO) ===== */
+
+/* Hover del botón Regresar */
+.regresar-button:hover{
+  background-color: var(--primary-dark);
+  color: var(--text);
+}
+
+/* Quitar: .guardar-button (no se usa) */
+
+/* Imagen dentro del botón Regresar (si llevas ícono) */
+.regresar-button img{
+  display: block;
+  margin: 0 auto;
+  width: 24px;
+  height: 24px;
+}
+
+/* Footer */
+footer{
+  text-align: center;
+  padding: 10px;
+  background: linear-gradient(90deg, var(--primary-dark), var(--primary));
+  color: var(--text);
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Botoneras (Patios / Bloques) */
+.patios-buttons,
+.bloques-buttons{
+  display: flex;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+/* Botones de acción (editar/agregar) */
+.agregar-patio,
+.agregar-bloque,
+.editar-patio,
+.editar-bloque{
+  background-color: var(--primary);
+  color: var(--text);
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.agregar-patio:hover,
+.agregar-bloque:hover,
+.editar-patio:hover,
+.editar-bloque:hover{
+  background-color: var(--primary-dark);
+  color: #fff;
+}
+
+/* Quitar: .eliminar-bloque, .eliminar-bloque:hover, .eliminar-patio (usas .eliminar-button) */
+
+/* Fila (label + input). Aquí mantenemos flex como tenías */
+.checkbox-container{
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+/* Detalles del label dentro de la fila (dejamos solo lo necesario;
+   color y bold ya vienen de label global del bloque 1) */
+.checkbox-container label{
+  font-size: 16px;
+  margin-right: 10px;
+}
+
+/* Quitar: .checkbox-container input[type="checkbox"] (ya no hay checkboxes) */
+
+/* ===== configuracion.css — bloque 3/?: Eliminar + Toasts + Responsive (OPTIMIZADO) ===== */
+
+/* Botón Eliminar (usa .eliminar-button en tu HTML) */
+.eliminar-button{
+  background-color: var(--danger); /* #e53935 */
+  color: #fff;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: filter .15s ease, transform .05s ease, background-color .15s ease;
+}
+.eliminar-button:disabled{
+  background-color: #ccc;
+  cursor: not-allowed;
+  color: #666;
+}
+.eliminar-button:hover:not(:disabled){
+  background-color: var(--danger-dark); /* #b71c1c / o #FF1A1A si prefieres más vivo */
+}
+
+/* Mensajes simples */
+.alerta{
+  color: var(--danger);
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+/* ===== Toasts ===== */
+.toast-container{
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+.toast{
+  background-color: #323232;
+  color: #fff;
+  padding: 15px 20px;
+  border-radius: 5px;
+  box-shadow: 0 4px 6px rgba(0,0,0,.2);
+  animation: fadeInOut 4s ease forwards;
+  font-size: 14px;
+  max-width: 300px;
+  word-wrap: break-word;
+  text-align: center;
+}
+.toast.error{   background-color: var(--danger); }
+.toast.success{ background-color: #4CAF50; }
+
+@keyframes fadeInOut{
+  0%   { opacity: 0; transform: translateY(-20px); }
+  10%,90% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-20px); }
+}
+
+/* ===== Tipografía adaptable ===== */
+h1{ font-size: clamp(20px, 4.8vw, 28px); }
+h2{ font-size: clamp(16px, 3.8vw, 22px); }
+
+/* ===== Responsive ===== */
+@media (max-width: 768px){
+  main{ padding: 16px 12px; }
+
+  /* Formularios más fluidos (esto complementa el bloque 1) */
+  form{ width: 100%; max-width: 560px; }
+
+  /* Fila como grid: etiqueta | input */
+  .checkbox-container{
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 10px;
+    align-items: center;
+  }
+  .checkbox-container > *{ min-width: 0; }
+  label{
+    width: auto;           /* no ancho fijo en móvil */
+    margin-right: 0;
+    text-align: center;
+    padding: 10px;         /* target táctil */
+  }
+  input[type="text"],
+  input[type="number"],
+  select,
+  textarea{
+    width: 100%;
+    min-height: 44px;      /* target táctil recomendado */
+  }
+
+  /* Botoneras con wrap */
+  .patios-buttons,
+  .bloques-buttons,
+  .buttons{
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  /* Botones principales cómodos en móvil */
+  .buttons .regresar-button,
+  .buttons .guardar-local{
+    width: 100%;
+    height: 56px;
+    font-weight: 700;
+  }
+}
+
+/* Móvil estrecho */
+@media (max-width: 480px){
+  .checkbox-container{ grid-template-columns: 1fr; } /* apilado total */
+  label{ width: 100%; }
+}
+
+/* Paisaje con poca altura: apilado para evitar solapes */
+@media (orientation: landscape) and (max-height: 480px){
+  .checkbox-container{
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  input[type="text"],
+  input[type="number"]{ min-height: 40px; }
+}
+/* ===== configuracion.css — penúltimo bloque (OPTIMIZADO) ===== */
+
+/* Ajuste global de seguridad */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ===== Modo escritorio en landscape con espacio suficiente =====
+   - Mantiene el ancho de form como en desktop
+   - Fila con label fijo (200px) + input flexible
+   - Botoneras sin wrap
+*/
+@media (orientation: landscape) and (min-width: 700px) and (min-height: 360px){
+  form{ width: 60% !important; max-width: none; }
+
+  /* Fila: label 200px | input 1fr */
+  .checkbox-container{
+    display: grid !important;
+    grid-template-columns: 200px 1fr !important;  /* ya no hay tercera columna (sin checkbox) */
+    align-items: center !important;
+    gap: 10px !important;
+  }
+  .checkbox-container > label{
+    width: 200px !important;
+    margin-right: 10px !important;
+    text-align: center !important;
+    padding: 8px !important;
+    line-height: 1.1 !important;
+    background-color: var(--primary);
+    border-radius: 5px;
+  }
+
+  /* Botoneras como PC */
+  .patios-buttons,
+  .bloques-buttons,
+  .buttons{
+    flex-wrap: nowrap !important;
+    gap: 10px !important;
+  }
+
+  /* Botones principales como en PC */
+  .buttons .regresar-button,
+  .buttons .guardar-local{
+    width: 120px !important;
+    height: 55px !important;
+  }
+}
+
+/* ===== Utilitarios ===== */
+.hidden{ display: none !important; }
+
+.btn-cancel{
+  background-color: #b0bec5;
+  color: #000;
+}
+.btn-cancel:hover{
+  background-color: #90a4ae;
+  color: #000;
+}
+
+/* Resalta las filas temporales agregadas antes de guardar */
+.is-temp{
+  outline: 2px dashed var(--primary);
+  border-radius: 6px;
+  padding: 6px;
+}
+
+/* ===== Header base tweaks (opcionales) ===== */
+/* ===== Header responsivo ===== */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+}
+.header-left a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.logo { height: 36px; width: auto; }
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ===== Versión móvil vertical ===== */
+@media (max-width: 480px) {
+  .brand-name,         /* ocultar nombre empresa */
+  .welcome-label {     /* ocultar texto “Bienvenido” */
+    display: none !important;
+  }
+  .logo { height: 28px; }
+  .username {
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  .logout-button {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+}
+   /* utilitarios mínimos */
+    .hidden { display: none !important; }
+    .is-temp { outline: 2px dashed #80CBC4; border-radius: 6px; padding: 6px; }
+
+    /* Botones de cancelar (rojo) */
+    .btn-cancel {
+        background: #e53935;   /* rojo */
+        color: #fff;           /* texto blanco */
+    }
+    .btn-cancel:hover {
+        background: #c62828;   /* rojo más oscuro */
+        color: #fff;
+    }
+
+    /* Eliminar con texto negro */
+    .eliminar-button {
+        background: #ff5252;   /* rojo claro */
+        color: #ffffffff;           /* texto negro */
+        border-radius: 6px;
+        padding: 6px 12px;
+    }
+    .eliminar-button:disabled {
+        background: #ccc;
+        color: #666;
+    }
+    .eliminar-button:hover:not(:disabled) {
+        background: #ff1744;
+        color: #000;
+    }
+
+    /* Guardar cambios (amarillo) */
+    .guardar-local {
+        background: #ffb300;   /* amarillo */
+        color: #000;           /* texto negro */
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: .9rem;
+        font-weight: 500;
+        border: none;
+    }
+    .guardar-local:hover {
+        background: #ffa000;   /* amarillo más oscuro */
+        color: #000;
+    }
+
+    /* Mantén la clase disabled para bloqueo */
+    .disabled {
+        opacity: .6;
+        pointer-events: none;
+    }
+
+    /* =============================
+   Modo eliminar (patios/bloques)
+   ============================= */
+:root{
+  --danger:#e53935;
+  --danger-dark:#b71c1c;
+}
+
+/* Activado en el contenedor (patios-container o bloques-container-*) */
+.delete-mode-hint{
+  outline: 2px dashed var(--danger);
+  border-radius: 8px;
+  padding: 6px;
+  background: #fff7f7;
+}
+
+/* Mensaje visual (opcional) */
+.delete-mode-hint::before{
+  content: "Modo eliminar activo: toca elementos para seleccionarlos";
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--danger-dark);
+  margin: 2px 0 8px;
+}
+
+/* Fila clickeable en modo eliminar */
+.delete-mode-hint .checkbox-container{
+  cursor: pointer;
+  user-select: none;
+  border-radius: 8px;
+  transition: background .15s ease, outline-color .15s ease, box-shadow .15s ease, transform .05s ease;
+}
+
+.delete-mode-hint .checkbox-container:hover{
+  background: #fff0f0;
+}
+
+/* Evitar que los inputs capten el foco al hacer click para seleccionar */
+.delete-mode-hint .checkbox-container input{
+  pointer-events: none;
+}
+
+/* Ocultar los checkboxes clásicos mientras está activo el modo eliminar */
+.delete-mode-hint .checkbox-patio,
+.delete-mode-hint .checkbox-bloque{
+  display: none !important;
+}
+
+/* Elemento marcado para eliminar */
+.to-delete{
+  outline: 3px solid var(--danger) !important;
+  background: #ffecec !important;
+  box-shadow: 0 0 0 2px rgba(229,57,53,.12) inset;
+}
+
+.to-delete label{
+  color: var(--danger-dark);
+}
+
+.to-delete input[type="text"],
+.to-delete input[type="number"]{
+  background: #fffafa;
+  border-color: #ef9a9a;
+}
+
+/* Botón eliminar (si quieres un feedback sutil al entrar/salir del modo)
+   Nota: no es requerido por el JS; es solo visual. */
+.eliminar-button{
+  transition: filter .15s ease, transform .05s ease;
+}
+.delete-mode-hint ~ .bloques-buttons .eliminar-button,
+#patios-container.delete-mode-hint ~ .patios-buttons .eliminar-button{
+  filter: drop-shadow(0 0 0.25rem rgba(229,57,53,.35));
+}
+/* ocultar cualquier checkbox residual, por si queda alguno en el HTML */
+.checkbox-container input[type="checkbox"]{ display:none !important; }
+
+/* iOS/Android: evita auto-zoom al enfocar inputs */
+@media (max-width: 768px){
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="password"],
+  select,
+  textarea{
+    font-size: 16px !important;
+  }
+}
+
+/* Mantén el ajuste de texto de Safari estable */
+html{ -webkit-text-size-adjust: 100%; }
+
+
+/* Marco de selección SOLO alrededor de la lista (patios y bloques) */
+#patios-container.delete-mode-hint,
+.delete-frame.delete-mode-hint{
+  border: 2px dashed var(--danger);
+  border-radius: 8px;
+  padding: 8px 10px 12px;
+  margin-bottom: 12px;      /* separa del bloque de botones */
+  background: #fff7f7;
+  outline: none;            /* por si quedó alguna regla previa con outline */
+}
+
+/* Mensaje guía dentro del marco */
+.delete-frame.delete-mode-hint::before,
+#patios-container.delete-mode-hint::before{
+  content: "Modo eliminar activo: toca elementos para seleccionarlos";
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--danger-dark);
+  margin: 2px 0 8px;
+}
+
+
+/* Icono dentro del botón */
+.regresar-button img {
+  width: 20px;
+  height: 20px;
+  margin: 0;   /* quita margen auto que lo descentraba */
+}
+
+.buttons {
+  display: flex;              /* mantiene 100% del ancho */
+  justify-content: center;    /* centra su contenido */
+  margin-top: 20px;
+}
+
+.regresar-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 120px;
+  padding: 10px 20px;
+  background-color: #80CBC4;
+  color: #000;
+  border-radius: 5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+

@@ -1,0 +1,193 @@
+/* ========== Base ========== */
+body{
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f0f2f5;
+  opacity: 0;                      /* oculto al inicio para el fade */
+  transition: opacity .5s ease-in-out;
+}
+body.fade-in{ opacity: 1; }
+body.preload{ opacity: 0; }
+
+/* ========== Header (igual a parámetros) ========== */
+header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  background: linear-gradient(90deg, #00695C, #80CBC4);
+  color: #000;
+}
+
+.header-left,
+.header-right{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-left a{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.header-left .logo,
+.logo{
+  height: 36px;                    /* mismo alto que parámetros (desktop) */
+  width: auto;
+}
+
+.header-right span{ color: #000; }
+
+.logout-button{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 5px;
+  background-color: #ff4d4d;
+  color: #000;
+  text-decoration: none;
+  transition: background-color .3s;
+}
+.logout-button:hover{ background-color: #ff1a1a; }
+
+/* ========== Contenido & menú ========== */
+main{
+  padding: 20px;
+  text-align: center;
+  /* espacio para que el footer fijo no tape el contenido */
+  padding-bottom: max(80px, env(safe-area-inset-bottom));
+}
+
+.menu{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.menu-item{
+  margin: 10px;
+  text-align: center;
+  width: 150px;
+  transition: transform .3s ease;
+}
+.menu-item:hover{ transform: scale(1.1); }
+.menu-item a{
+  text-decoration: none;
+  color: #333;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.menu-item img{
+  width: 100px;
+  height: 100px;
+  margin-bottom: 10px;
+}
+
+/* ========== Footer fijo ========== */
+footer{
+  text-align: center;
+  padding: 10px;
+  background: linear-gradient(90deg, #00695C, #80CBC4);
+  color: #000;
+  position: fixed;
+  width: 100%;
+  bottom: 0;
+}
+
+/* ========== Responsive ========== */
+/* Tablets */
+@media (max-width: 768px){
+  header{ padding: 12px 20px; }
+  .header-left .logo, .logo{ height: 32px; }
+
+  /* dos columnas si lo necesitas en tablet */
+  .menu-item{ flex: 1 1 calc(50% - 20px); width: auto; }
+}
+
+/* Móvil vertical */
+@media (max-width: 480px) and (orientation: portrait){
+  /* Header en una sola línea: logo | espacio | usuario+botón */
+  header{
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    column-gap: 10px;
+    padding: 8px 12px;
+    min-height: 48px;
+  }
+
+  .header-left{ display: flex; align-items: center; gap: 8px; }
+  .header-left .logo, .logo{ height: 28px; }
+
+  .header-right{
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;            /* evita saltos */
+    margin-top: 0;                  /* por si algún estilo anterior lo empujaba */
+  }
+
+  /* ocultar textos largos para compactar (igual que parámetros) */
+  .brand-name,
+  .welcome-label{ display: none; }
+
+  .username{ font-size: .9rem; line-height: 1; }
+  .logout-button{ height: 30px; padding: 0 10px; font-size: .9rem; }
+
+  /* imágenes un poco más chicas en móvil */
+  .menu-item{ flex: 1 1 100%; width: auto; }
+  .menu-item img{ width: 80px; height: 80px; }
+
+  footer{ font-size: .85em; }
+}
+/* === Móvil vertical: header más compacto (solo mobile portrait) === */
+@media (max-width: 480px) and (orientation: portrait){
+  header{
+    padding: 6px 10px;
+    padding-top: max(6px, env(safe-area-inset-top));
+    min-height: 35px;                 /* antes 48px */
+  }
+  .header-left .logo, .logo{
+    height: 24px;                      /* antes 28px */
+  }
+  .header-right{
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .username{ font-size: .85rem; line-height: 1; }
+  .logout-button{
+    height: 28px;                      /* antes 30px */
+    padding: 0 8px;
+    font-size: .85rem;
+    border-radius: 5px;
+  }
+}
+/* === Móvil vertical: botones 2 por fila (sin tocar desktop) === */
+@media (max-width: 480px) and (orientation: portrait){
+  .menu{
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;                 /* separación entre cards */
+    justify-items: center;     /* centra cada botón en su celda */
+  }
+  .menu-item{
+    width: 100%;
+    max-width: 200px;          /* evita que se estiren de más */
+    margin: 0;                 /* el gap ya da el espacio */
+  }
+  .menu-item a{ padding: 6px 0; }
+  .menu-item img{
+    width: 80px;               /* como ya usas en móvil */
+    height: 80px;
+  }
+}

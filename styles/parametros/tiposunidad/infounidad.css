@@ -1,0 +1,191 @@
+/* ====== Base (PC intacto) ====== */
+*,
+*::before,
+*::after{ box-sizing:border-box; }
+
+body{
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f0f2f5;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;            /* cubrir alto */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Header (ya responsive) */
+header{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 20px;
+  background: linear-gradient(90deg, #00695C, #80CBC4);
+  color:#000;
+}
+.header-left{ display:flex; align-items:center; }
+.header-left a{ display:flex; align-items:center; text-decoration:none; color:#000; }
+.header-left .logo{ width:50px; margin-right:10px; }
+.header-right{ display:flex; align-items:center; }
+.header-right span{ margin-right:10px; }
+.logout-button{ background:#ff4d4d; color:#000; padding:5px 10px; text-decoration:none; border-radius:5px; }
+.logout-button:hover{ background:#ff1a1a; }
+
+/* Main (PC) */
+main{ padding:20px; text-align:left; flex:1; }
+h1{ margin-bottom:20px; width:76%; text-align:center; }
+
+/* Formulario (PC intacto) */
+form{
+  width:60%; margin:0 auto; display:flex; flex-direction:column;
+}
+.form-group{
+  display:flex; align-items:center; margin-bottom:10px;
+}
+label{
+  width:107px; margin-right:10px;
+  background:#80CBC4; padding:8px; border-radius:5px; color:#000; text-align:center;
+}
+input[type="text"], input[type="email"], textarea{
+  flex:1; padding:6px; border:1px solid #ccc; border-radius:4px;
+  background:#fff;
+}
+textarea#observaciones{ text-align:justify; line-height:1.5; resize:vertical; }
+input[type="checkbox"]{ margin-left:25px; width:20px; height:20px; }
+
+/* Botones (PC) */
+.buttons{ display:flex; justify-content:center; gap:20px; margin-top:15px; }
+
+.regresar-button,
+.guardar-button,
+.modificar-button{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:120px; min-height:56px; padding:10px 14px;
+  border:none; border-radius:5px; cursor:pointer; text-decoration:none; text-align:center; gap:8px;
+}
+
+/* Colores (PC) */
+.regresar-button{ background:#80CBC4; color:#000; }
+.regresar-button:hover{ background:#00695C; }
+
+.guardar-button,
+.modificar-button{ background:#FFA500; color:#000; }
+.guardar-button:hover,
+.modificar-button:hover{ background:#FF8C00; }
+
+/* Iconos */
+.regresar-button img,
+.guardar-button img,
+.modificar-button img{ width:24px; height:24px; display:block; }
+
+/* Modelos (si aparece en esta vista) */
+#modelos-container{
+  display:flex; flex-wrap:wrap; gap:10px; margin-top:1px; justify-content:flex-start;
+}
+#modelos-container input[type="text"]{
+  flex:1 1 calc(20% - 8px); min-width:80px; padding:6px; border:1px solid #ccc; border-radius:4px;
+}
+
+/* Footer */
+footer{
+  text-align:center; padding:10px;
+  background:linear-gradient(90deg,#00695C,#80CBC4);
+  color:#000; width:100%; position:relative;
+}
+
+/* ===== Desktop-only pequeño ajuste ===== */
+@media (min-width: 993px){
+  label{ width:130px; white-space:nowrap; }
+}
+
+/* =========================================================
+   RESPONSIVE (tablet/móvil) — PC queda intacto
+   ========================================================= */
+
+/* Anti-zoom iOS + altura estable */
+html{ -webkit-text-size-adjust:100%; }
+@media (max-width:480px){
+  input, textarea, select, button{ font-size:16px; }  /* evita zoom al enfocar */
+}
+body{ min-height:100dvh; }
+@supports (min-height:100svh){ body{ min-height:100svh; } }
+
+/* Tablet ≤ 992px */
+@media (max-width: 992px){
+  h1{ width:80%; margin:0 auto 20px; }
+  form{ width:80%; margin:0 auto; }
+}
+
+/* Móvil ≤ 768px (vertical) */
+@media (max-width: 768px){
+  html, body{ overflow-x:hidden; }
+
+  /* márgenes laterales y ancho amigable */
+  h1, form{
+    width:100%;
+    max-width:720px;
+    margin:0 auto;
+    padding:0 16px;
+  }
+
+  /* etiquetas arriba, campos abajo */
+  .form-group{
+    display:flex; flex-direction:column; align-items:stretch;
+    gap:8px; margin-bottom:12px;
+  }
+  label{ width:100%; margin-right:0; text-align:left; }
+  input[type="text"], input[type="email"], textarea{ width:100%; max-width:100%; }
+
+  /* Observaciones más alto en móvil */
+  textarea#observaciones{
+    min-height:100px;          /* ~4 líneas visibles */
+    resize: vertical;          /* se puede estirar hacia abajo */
+  }
+
+  /* Botones a 2 columnas centrados */
+  .buttons{
+    display:grid; grid-template-columns:1fr 1fr; gap:12px;
+    width:100%; max-width:720px; margin:12px auto 0; justify-content:center;
+  }
+  .buttons .regresar-button,
+  .buttons .guardar-button,
+  .buttons .modificar-button{
+    width:100%; height:56px; min-height:56px;
+  }
+}
+
+/* Landscape ≤ 992px (móvil horizontal) */
+@media (max-width: 992px) and (orientation: landscape){
+  /* anti-zoom iOS también aquí */
+  input, textarea, select, button{ font-size:16px !important; }
+
+  .form-group{ flex-direction:row; align-items:center; gap:10px; }
+  .form-group label{ width:130px; text-align:center; }
+
+  .buttons{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px;
+    width:520px; max-width:100%;
+    margin:10px auto 0; justify-content:center;
+  }
+  .buttons .regresar-button,
+  .buttons .guardar-button,
+  .buttons .modificar-button{ height:50px; min-height:50px; }
+}
+
+/* Móvil muy angosto ≤ 420px */
+@media (max-width:420px){
+  .buttons .regresar-button,
+  .buttons .guardar-button,
+  .buttons .modificar-button{
+    min-height:50px; height:50px;
+  }
+  .regresar-button img,
+  .guardar-button img,
+  .modificar-button img{ width:20px; height:20px; }
+}
+
+/* Header compacto móvil */
+@media (max-width: 480px){
+  .brand-name, .welcome-label{ display:none !important; }
+  .logo { height:28px; }
+  .username { font-size:0.9rem; font-weight:500; }
+  .logout-button { padding:6px 10px; font-size:0.85rem; }
+}

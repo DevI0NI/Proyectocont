@@ -1,0 +1,286 @@
+/* ===== Bloques – CSS optimizado ===== */
+
+/* Header */
+header{display:flex;justify-content:space-between;align-items:center;padding:10px 20px;background:linear-gradient(90deg,#00695C,#80CBC4);color:#fff;width:100%;box-sizing:border-box}
+.header-left,.header-right{display:flex;align-items:center}
+.header-left a{display:flex;align-items:center;text-decoration:none;color:#000}
+.header-left .logo{width:50px;margin-right:10px}
+.header-right span{margin-right:10px;color:#000}
+.logout-button{background:#ff4d4d;color:#000;padding:5px 10px;text-decoration:none;border-radius:5px;transition:.2s}
+.logout-button:hover{background:#ff1a1a}
+
+/* Base */
+body{font-family:Arial,sans-serif;margin:0;padding:0;background:#f0f2f5;display:flex;flex-direction:column;min-height:100vh}
+main{flex:1;padding:20px;text-align:left}
+
+/* Títulos y contenedores */
+.title-container,.patio-header{display:flex;justify-content:space-between;align-items:center;width:65%;margin:10px auto}
+.title-container{padding:0}
+h1{margin:0;display:inline-block}
+h2{width:65%;margin:10px auto;text-align:center}
+.patio-titulo{margin:0;text-align:left}
+
+/* Selector de patios */
+.patio-selector{position:relative;display:flex;flex-direction:column;align-items:center;width:auto}
+.patio-button{padding:5px 10px;background:#80CBC4;color:#000;text-decoration:none;border-radius:5px;cursor:pointer}
+.patio-button:hover{background:#4DB6AC}
+.patio-menu{display:none;position:absolute;background:#f9f9f9;min-width:160px;box-shadow:0 8px 16px rgba(0,0,0,.2);z-index:1;right:0;border-radius:5px;margin-top:5px;top:100%}
+.patio-menu a{color:#000;padding:12px 16px;text-decoration:none;display:block;text-align:center}
+.patio-menu a:hover{background:rgba(128,203,196,0.4)}
+
+/* Tabla */
+.table-container{width:65%;margin:10px auto}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px;table-layout:fixed}
+table,th,td{border:1px solid #ddd}
+th,td{padding:3.7px;text-align:left;word-wrap:break-word}
+th{background:linear-gradient(90deg,#00695C,#80CBC4);color:#fff;padding:10px;height:15px}
+tr:nth-child(even){background:#f2f2f2}
+tr:nth-child(odd){background:#fff}
+tr:hover{background:#e0f7fa}
+th:nth-child(1),td:nth-child(1){width:8%}
+th:nth-child(2),td:nth-child(2){width:16%}
+th:nth-child(3),td:nth-child(3){width:12%}
+th:nth-child(4),td:nth-child(4){width:12%}
+th:nth-child(5),td:nth-child(5){width:10%}
+th:nth-child(6),td:nth-child(6){width:16%}
+th:nth-child(7),td:nth-child(7){width:10%}
+table th:last-child,table td:last-child{width:15%;white-space:nowrap;text-align:center}
+
+/* Paginación */
+.pagination-container{display:flex;justify-content:center;align-items:center;width:65%;margin:20px auto}
+.pagination{text-align:center}
+.pagination-button{display:inline-block;margin:0 2px;padding:10px 15px;background:#80CBC4;color:#000!important;text-decoration:none;border-radius:5px;transition:.2s}
+.pagination-button:hover,.pagination-button.active{background:#00695C;color:#000!important}
+
+/* Botón Regresar */
+.regresar-button{display:flex;align-items:center;justify-content:center;padding:8px;background:#80CBC4;color:#000!important;text-decoration:none;border-radius:5px;width:auto;text-align:center;margin-right:auto}
+.regresar-button:hover{background:#4DB6AC;color:#000!important}
+.regresar-content{display:flex;flex-direction:column;align-items:center}
+.regresar-button img.regresar-icon{width:20px;height:20px;margin-bottom:5px}
+
+/* Footer */
+footer{text-align:center;padding:10px;background:linear-gradient(90deg,#00695C,#80CBC4);color:#000;width:100%;box-sizing:border-box;position:relative}
+
+/* Botón flotante configuración */
+.configuracion-button{position:fixed;bottom:75px;right:20px;text-align:center}
+.configuracion-button a{display:flex;flex-direction:column;align-items:center;text-decoration:none;color:#000}
+.configuracion-button img{width:50px;height:50px;margin-bottom:5px;transition:transform .2s}
+.configuracion-button span{font-size:14px;font-weight:700}
+.configuracion-button a:hover img{transform:scale(1.1)}
+
+/* Barra de acciones */
+.actions-container{display:flex;align-items:center;gap:15px;margin:0}
+.actions-container input[type=text]{padding:8px 12px;border:1px solid #ccc;border-radius:4px;width:200px;font-size:14px}
+.nuevo-button{display:flex;align-items:center;padding:8px 15px;background:#FFA500;color:#000;text-decoration:none;border-radius:4px;transition:.3s}
+.nuevo-button:hover{background:#FF8C00}
+.nuevo-content{display:flex;align-items:center;gap:8px}
+.nuevo-icon{width:20px;height:20px}
+
+/* Buscador */
+.search-container{position:relative;width:300px}
+.search-results{display:none;position:absolute;top:100%;left:0;width:100%;max-height:300px;overflow-y:auto;background:#fff;border:1px solid #ddd;border-radius:4px;box-shadow:0 2px 4px rgba(0,0,0,.1);z-index:1000}
+.search-result-item{padding:10px;border-bottom:1px solid #eee;cursor:pointer}
+.search-result-item:hover{background:#f5f5f5}
+.search-result-item .contenedor-nombre{font-weight:700}
+.search-result-item .contenedor-ubicacion{font-size:.9em;color:#666}
+
+/* Acciones fila */
+a.modificar,a.informacion{color:#007bff;text-decoration:none;margin:0 3px}
+a.modificar:hover,a.informacion:hover{text-decoration:underline}
+
+/* =========================
+   RESPONSIVE
+   ========================= */
+
+/* Tablet */
+@media(max-width:768px){
+  .title-container,.patio-header,.table-container,.pagination-container,h2{width:90%}
+  .actions-container{gap:10px}
+  .actions-container input[type=text]{width:230px}
+}
+
+/* Teléfono */
+@media(max-width:480px){
+  input,select,textarea{font-size:16px;line-height:1.4}
+  .title-container,.patio-header{flex-direction:column;align-items:stretch;width:94%;gap:10px;margin-top:6px}
+
+  /* Centrado del buscador */
+  .actions-container{flex-direction:column;align-items:center;gap:10px;margin-bottom:10px;width:100%}
+  .actions-container input[type=text]{width:94%!important;margin:0 auto 10px auto!important;display:block;padding:10px;border-radius:6px}
+
+  .nuevo-button{justify-content:center;width:100%;padding:12px;font-size:15px}
+
+  /* ✅ Selector de patios móvil centrado y con colores IPSA */
+  .patio-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin-top: 10px;
+    text-align: center;
+    position: relative;
+  }
+
+  .patio-selector {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin-top: 6px;
+  }
+
+  .patio-button {
+    width: 80%;
+    max-width: 350px;
+    padding: 12px;
+    text-align: center;
+    border-radius: 8px;
+    background: #80CBC4; /* tono IPSA */
+    color: #000; /* texto negro */
+    font-weight: 600;
+    border: none;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  }
+
+  .patio-button:hover {
+    background: #4DB6AC; /* tono hover */
+    color: #000;
+  }
+
+  .patio-menu {
+    position: absolute !important;
+    top: calc(100% + 6px) !important;
+    left: 50% !important;
+    transform: translateX(-50%);
+    width: 80% !important;
+    max-width: 350px;
+    background: #f9f9f9; /* fondo claro */
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    overflow: hidden;
+    z-index: 9999;
+  }
+
+  .patio-menu a {
+    display: block;
+    text-align: center;
+    padding: 12px;
+    font-weight: 600;
+    color: #000;
+    text-decoration: none;
+    transition: background 0.2s;
+  }
+
+  .patio-menu a:hover {
+    background: rgba(128,203,196,0.4);
+  }
+
+  /* Tabla adaptativa */
+  table,thead,tbody,th,td,tr{display:block;width:100%}
+  table{border:none}
+  thead{display:none}
+  tr{background:#fff;border-radius:8px;margin:0 auto 15px;box-shadow:0 2px 4px rgba(0,0,0,.08);padding:12px;width:95%}
+  td{border:none;padding:6px;text-align:left}
+  td:before{content:attr(data-label);font-weight:700;color:#00695C;display:block;margin-bottom:2px}
+
+  /* Paginación móvil */
+  .pagination-container{flex-direction:column;align-items:center;gap:10px;width:100%;margin-top:20px}
+  .pagination{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;width:100%}
+  .pagination-button{padding:8px 12px;border-radius:20px;font-size:14px;color:#000!important}
+  .pagination-container.mobile-top{display:flex!important;justify-content:center;flex-wrap:wrap;gap:8px;margin:10px auto 15px;width:100%}
+  .pagination-container:not(.mobile-top){flex-direction:column;align-items:center;margin:20px auto}
+  .pagination-container .regresar-button{margin-top:10px;align-self:center;justify-content:center;width:auto}
+  .regresar-button{width:auto;margin:20px auto 0;padding:12px 20px;font-size:16px;gap:6px}
+  .regresar-button img.regresar-icon{width:22px;height:22px}
+  .configuracion-button img{width:42px;height:42px}
+
+  /* Header y layout */
+  .brand-name,.welcome-label{display:none!important}
+  header{flex-wrap:wrap;justify-content:space-between;padding:8px 15px;gap:5px}
+  .header-left{gap:6px}
+  .header-left a{flex-direction:row;color:#000;text-decoration:none}
+  .logo{width:40px;height:auto;margin-right:6px}
+  .header-right{flex:1;justify-content:flex-end;text-align:right}
+  .username{font-size:.9rem;font-weight:500;margin-right:5px}
+  .logout-button{padding:6px 10px;font-size:.85rem}
+  main{padding:12px;display:flex;flex-direction:column;align-items:center;box-sizing:border-box}
+  footer{text-align:center;font-size:.9rem}
+  .full-mobile{width:100%!important;max-width:100%!important;margin:0!important;padding:0 10px}
+  .full-mobile table{width:100%!important;table-layout:auto!important}
+  .full-mobile tr{width:100%!important;margin:0 auto 15px!important;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1);background:#fff;padding:12px 14px}
+  .full-mobile td{display:block;width:100%;text-align:left;word-break:break-word}
+  .full-mobile td:before{content:attr(data-label);font-weight:700;color:#00695C;display:block;margin-bottom:3px}
+
+  .title-container{margin-bottom:8px}
+  .patio-header{margin-top:5px;margin-bottom:12px}
+  h2,.patio-titulo{margin-top:12px;margin-bottom:8px}
+  .nuevo-button,.regresar-button,.patio-button,.pagination,.pagination-container{align-self:center;justify-content:center;text-align:center}
+  tr,.full-mobile tr{margin-left:auto!important;margin-right:auto!important;width:96%!important;box-sizing:border-box}
+  td{padding-left:6px;padding-right:6px}
+}
+
+/* Desktop fix */
+@media(min-width:769px){
+  .pagination-container.mobile-top{display:none!important}
+}
+/* ===== Mostrar/Ocultar los botones Regresar según dispositivo ===== */
+
+/* Por defecto: mostrar el de PC, ocultar el de móvil */
+.pagination-container > .regresar-button {
+  display:flex!important;
+  align-items:center;
+  justify-content:center;
+}
+.pagination-container > .regresar-button.regresar-movil {
+  display:none!important;
+}
+
+/* --- En móviles (<=480px) --- */
+@media(max-width:480px){
+  /* Ocultar el botón de PC */
+  .pagination-container > .regresar-button:not(.regresar-movil){
+    display:none!important;
+    visibility:hidden!important;
+  }
+
+  /* Mostrar el de móvil (idéntico al de PC, solo centrado) */
+  .pagination-container > .regresar-button.regresar-movil{
+    display:flex!important;
+    align-items:center;
+    justify-content:center;
+    padding:8px 20px;
+    background:#80CBC4;
+    color:#000!important;
+    text-decoration:none;
+    border-radius:5px;
+    width:auto; /* ✅ No ocupa todo el ancho */
+    text-align:center;
+    margin:20px auto 0;
+  }
+
+  .pagination-container > .regresar-button.regresar-movil:hover{
+    background:#4DB6AC;
+    color:#000!important;
+  }
+
+  .pagination-container > .regresar-button.regresar-movil .regresar-content{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+
+  .pagination-container > .regresar-button.regresar-movil .regresar-icon{
+    width:20px;
+    height:20px;
+    margin-bottom:5px;
+  }
+}
+
+/* --- En pantallas grandes (>=481px) --- */
+@media(min-width:481px){
+  .pagination-container > .regresar-button.regresar-movil{
+    display:none!important;
+    visibility:hidden!important;
+  }
+}

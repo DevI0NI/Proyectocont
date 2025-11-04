@@ -1,0 +1,260 @@
+/* General */
+body{
+  font-family:Arial,sans-serif;
+  margin:0;
+  padding:0;
+  background-color:#f0f2f5;
+  display:flex;
+  flex-direction:column;
+  min-height:100vh;
+}
+
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px 20px;
+  background:linear-gradient(90deg,#00695C,#80CBC4);
+  color:#000;
+}
+
+.header-left a{
+  display:flex;
+  align-items:center;
+  text-decoration:none;
+  color:#000;
+}
+
+.header-left .logo{width:50px;margin-right:10px}
+.header-right span{margin-right:10px}
+
+.logout-button{
+  background-color:#ff4d4d;
+  color:#000;
+  padding:5px 10px;
+  text-decoration:none;
+  border-radius:5px;
+}
+.logout-button:hover{background-color:#ff1a1a}
+
+main{padding:20px;text-align:left;flex:1}
+
+h1{text-align:center;margin-bottom:20px;color:#000}
+
+form{
+  width:60%;
+  margin:0 auto;
+  display:flex;
+  flex-direction:column;
+  background-color:#fff;
+  padding:20px;
+  border-radius:5px;
+  box-shadow:0 2px 5px rgba(0,0,0,.1);
+}
+
+.form-group{display:flex;flex-direction:column;margin-bottom:15px}
+
+label{margin-bottom:5px;font-weight:bold;color:#000}
+
+input,select{
+  padding:8px;
+  border:1px solid #ccc;
+  border-radius:4px;
+  font-size:14px;
+}
+input:focus,select:focus{
+  outline:none;
+  border-color:#00695C;
+  box-shadow:0 0 5px rgba(0,105,92,.5);
+}
+
+.buttons{
+  display:flex;
+  justify-content:center;
+  gap:20px;
+  margin-top:20px;
+}
+
+/* Botones (regresar/trasladar): estilos compartidos */
+.regresar-button,.trasladar-button{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  width:140px;
+  padding:10px;
+  color:#000;
+  border:none;
+  border-radius:5px;
+  cursor:pointer;
+  text-align:center;
+  text-decoration:none;
+}
+
+/* Específicos */
+.regresar-button{height:50px;background-color:#80CBC4}
+.regresar-button:hover{background-color:#00695C}
+
+.trasladar-button{height:70px;background-color:#FFA500}
+.trasladar-button:hover{background-color:#FF8C00}
+
+.regresar-button img,.trasladar-button img{width:24px;height:24px}
+.regresar-button span,.trasladar-button span{margin-top:5px}
+
+footer{
+  text-align:center;
+  padding:10px;
+  background:linear-gradient(90deg,#00695C,#80CBC4);
+  color:#000;
+  width:100%;
+  box-sizing:border-box;
+}
+
+/* Sección de ubicación */
+.ubicacion-container{display:flex;flex-direction:column;margin-bottom:20px}
+
+.ubicacion-container h2{
+  background-color:#80CBC4;
+  color:#000;
+  padding:10px;
+  border-radius:5px;
+  text-align:center;
+  font-size:18px;
+  margin-bottom:10px;
+}
+
+.ubicacion-fields{
+  display:flex;
+  gap:10px;
+  justify-content:space-between;
+  width:100%;
+}
+.ubicacion-fields select,.ubicacion-fields input{
+  flex:1;
+  padding:6px;
+  border:1px solid #ccc;
+  border-radius:4px;
+}
+
+/* Notificaciones tipo "toast" */
+.toast-container{
+  position:fixed;
+  top:20px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:1000;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  align-items:center;
+}
+
+.toast{
+  background-color:#323232;
+  color:#fff;
+  padding:15px 20px;
+  border-radius:5px;
+  box-shadow:0 4px 6px rgba(0,0,0,.2);
+  animation:fadeInOut 4s ease forwards;
+  font-size:14px;
+  max-width:300px;
+  word-wrap:break-word;
+  text-align:center;
+}
+.toast.error{background-color:#FF4D4D}
+.toast.success{background-color:#4CAF50}
+
+@keyframes fadeInOut{
+  0%{opacity:0;transform:translateY(-20px)}
+  10%,90%{opacity:1;transform:translateY(0)}
+  100%{opacity:0;transform:translateY(-20px)}
+}
+
+/* Autocomplete resultados */
+.resultados-container{
+  border:1px solid #ccc;
+  background-color:#fff;
+  max-height:150px;
+  overflow-y:auto;
+  position:absolute;
+  top:calc(100% + 5px);
+  left:0;
+  width:100%;
+  z-index:1000;
+  box-shadow:0 4px 6px rgba(0,0,0,.1);
+  border-radius:4px;
+}
+.resultado-item{padding:10px;cursor:pointer;font-size:14px}
+.resultado-item:hover{background-color:#f0f0f0}
+
+/* =========================
+   RESPONSIVE BREAKPOINTS
+   ========================= */
+
+/* 1) Ajustes suaves en pantallas grandes/chicas */
+@media (max-width:1200px){
+  form{width:70%}
+}
+@media (max-width:992px){
+  form{width:80%}
+}
+
+/* 2) Tablet (≤768px): form más ancho, ubicación en 2 columnas */
+@media (max-width:768px){
+  form{width:90%}
+  .ubicacion-fields{
+    flex-wrap:wrap;           /* permite que bajen a otra fila */
+    gap:10px;
+  }
+  .ubicacion-fields > *{
+    flex:1 1 calc(50% - 10px); /* 2 por fila */
+  }
+}
+
+/* 3) Móvil (≤480px): botones 2x fila, campos 1 por fila */
+@media (max-width:480px){
+  header{padding:8px 12px}
+  h1{font-size:22px}
+  form{width:94%;padding:16px}
+
+  .ubicacion-container h2{font-size:16px}
+  .ubicacion-fields > *{flex:1 1 100%}   /* 1 por fila */
+
+  /* Botones lado a lado (override fuerte por si hay reglas previas) */
+  .buttons{
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+    gap:12px !important;
+    justify-items:stretch;
+  }
+  .buttons .regresar-button,
+  .buttons .trasladar-button{
+    width:auto !important;   /* ignora el width fijo en móvil */
+  }
+
+  .toast{max-width:90vw}
+}
+
+/* 4) Muy estrecho (≤360px): si no caben dos, se apilan */
+@media (max-width:360px){
+  .buttons{
+    grid-template-columns:1fr !important;
+  }
+}
+
+/* Responsive: ocultar empresa y Bienvenido en móvil */
+@media (max-width:480px){
+  .brand-name,        /* nombre empresa */
+  .welcome-label{     /* texto Bienvenido */
+    display:none !important;
+  }
+  .logo{height:28px}
+  .username{
+    font-size:.9rem;
+    font-weight:500;
+  }
+  .logout-button{
+    padding:6px 10px;
+    font-size:.85rem;
+  }
+}

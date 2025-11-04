@@ -1,0 +1,295 @@
+/* ===== Base ===== */
+:root{
+  --bg:#f0f2f5;
+  --text:#000;
+  --primary:#80CBC4;
+  --primary-dark:#00695C;
+  --accent:#FFA500;
+}
+
+*{ box-sizing: border-box; }
+
+body{
+  font-family: Arial, sans-serif;
+  margin: 0; padding: 0;
+  background-color: var(--bg);
+  display: flex; flex-direction: column; min-height: 100vh;
+}
+
+/* ===== Header (igual al que ya tienes) ===== */
+header{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 20px;
+  background: linear-gradient(90deg, var(--primary-dark), var(--primary));
+  color:var(--text);
+}
+.header-left{ display:flex; align-items:center; }
+.header-left a{
+  display:inline-flex; align-items:center; gap:10px;
+  text-decoration:none; color:var(--text);
+}
+.header-left .logo{ width:50px; height:auto; }
+.header-right{ display:flex; align-items:center; gap:10px; }
+
+.logout-button{
+  background:#ff4d4d; color:var(--text);
+  padding:5px 10px; text-decoration:none; border-radius:5px;
+}
+.logout-button:hover{ background:#ff1a1a; }
+
+/* ===== Main ===== */
+main{
+  padding: 20px;
+  text-align: left;
+  flex: 1;
+}
+
+h1{ text-align:center; margin-bottom:20px; }
+
+/* ===== Form ===== */
+form{
+  width: 100%;
+  max-width: 640px;           /* antes 60% fijo */
+  margin: 0 auto;
+  display: flex; flex-direction: column;
+  gap: 12px;
+}
+
+.form-group{
+  display: grid;
+  grid-template-columns: 180px 1fr; /* etiqueta | campo */
+  gap: 10px;
+  align-items: center;
+}
+
+label{
+  background-color: var(--primary);
+  padding: 8px;
+  border-radius: 5px;
+  color: #000;
+  text-align: center;
+  /* antes tenías width:150px + text-align:right; */
+}
+
+input[type="text"],
+select{
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  min-height: 40px;
+}
+
+/* ===== Buttons row ===== */
+.buttons{
+  display: flex;
+  justify-content: center;     /* centrado */
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+  /* quitamos el margin-left:-70% que hacía romper móvil */
+}
+
+/* Guardar */
+.guardar-button{
+  display:inline-block;
+  width:120px; height:70px;
+  padding:10px;
+  background: var(--accent);
+  color:#000; border:none; border-radius:5px;
+  cursor:pointer; text-align:center; text-decoration:none; vertical-align:middle;
+  box-shadow: 0 4px 6px rgba(0,0,0,.1);
+  transition: background-color .3s ease;
+}
+.guardar-button:hover{ background:#FF8C00; }
+.guardar-button img{ display:block; margin:0 auto; width:24px; height:24px; }
+.guardar-button span{ display:block; margin-top:5px; }
+
+/* Regresar */
+.regresar-button{
+  display:inline-block;
+  width:100px; height:50px;
+  padding:10px;
+  background-color: var(--primary);
+  color:#000; border:none; border-radius:5px;
+  cursor:pointer; text-align:center; text-decoration:none; vertical-align:middle;
+  box-shadow: 0 4px 6px rgba(0,0,0,.1);
+  transition: background-color .3s ease;
+}
+.regresar-button:hover{ background-color: var(--primary-dark); }
+.regresar-button img{ display:block; margin:0 auto; width:24px; height:24px; }
+.regresar-button span{ display:block; margin-top:5px; color:#000; }
+
+/* ===== Footer ===== */
+footer{
+  text-align:center; padding:10px;
+  background: linear-gradient(90deg, var(--primary-dark), var(--primary));
+  color:#000; width:100%; position:relative;
+}
+
+/* ===== Mensajes de validación (solo visual) ===== */
+.error-message{ color:red; display:none; font-size:12px; margin-top:5px; }
+.valid-message{ color:green; display:none; font-size:12px; margin-top:5px; }
+input.error{ border:2px solid red; }
+input.valid{ border:2px solid green; }
+
+/* ===== Responsive: header compacto en móvil ===== */
+@media (max-width: 480px){
+  .brand-name, .welcome-label{ display:none !important; } /* deja logo + username + cerrar sesión */
+  .header-left .logo{ width:36px; }
+  .username{ font-size:.95rem; font-weight:600; }
+  .logout-button{ padding:6px 10px; font-size:.9rem; }
+}
+
+/* ===== Responsive: formulario en móvil/tablet ===== */
+@media (max-width: 768px){
+  main{ padding: 16px 12px; }
+
+  /* Evita auto-zoom de iOS y mejora target táctil */
+  input[type="text"],
+  select{
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+
+  /* Etiqueta más compacta */
+  .form-group{
+    grid-template-columns: 140px 1fr;
+    gap: 10px;
+  }
+
+  /* Botonera apilable si no cabe */
+  .buttons{
+    flex-wrap: wrap;
+  }
+  .guardar-button{ height:64px; }
+  .regresar-button{ height:48px; }
+}
+
+/* Móvil estrecho: apilar etiqueta sobre campo */
+@media (max-width: 480px){
+  .form-group{
+    grid-template-columns: 1fr;
+  }
+  label{
+    width: 100%;
+  }
+  .buttons{
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .guardar-button, .regresar-button{
+    flex: 1 1 160px;
+    width: auto;                /* no tamaño fijo */
+  }
+}
+
+/* Paisaje con poca altura (móvil rotado) */
+@media (orientation: landscape) and (max-height: 480px){
+  .form-group{
+    grid-template-columns: 1fr 1fr; /* evita columnas altísimas */
+  }
+  input[type="text"], select{ min-height: 40px; }
+}
+
+/* Safe area (iPhone notch) */
+@supports (padding: max(0px)){
+  body{
+    padding-left:max(0px, env(safe-area-inset-left));
+    padding-right:max(0px, env(safe-area-inset-right));
+  }
+}
+
+/* Suavidad scroll y estabilidad de texto en iOS */
+html{ -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+/* === Regresar igual que Guardar (override específico) === */
+.regresar-button{
+  /* mismas dimensiones y layout que guardar */
+  min-width: 120px;
+  height: 60px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: 5px;
+  box-shadow: 0 4px 6px rgba(0,0,0,.1);
+  text-decoration: none;
+  vertical-align: middle;
+  font-weight: 500;
+  color: #000;                  /* texto como guardar */
+  background-color: #80CBC4;    /* su color propio */
+  transition: background-color .3s ease;
+}
+
+.regresar-button:hover{
+  background-color: #00695C;
+  color: #fff;
+}
+
+/* mismo tratamiento para icono y texto que en guardar */
+.regresar-button img{
+  width: 24px;
+  height: 24px;
+  display: block;
+  margin: 0 auto;
+}
+.regresar-button span{
+  display: block;
+  margin-top: 5px;
+}
+/* === Regresar igual que Guardar (sin tocar guardar) === */
+.regresar-button{
+  /* mismas dimensiones que Guardar */
+  width: 120px;
+  height: 70px;
+  padding: 10px;
+  box-sizing: border-box;
+
+  /* misma disposición: icono arriba / texto abajo */
+  display: flex;
+  flex-direction: column;      /* <- pila vertical */
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+
+  /* se mantienen colores propios de Regresar */
+  background-color: #80CBC4;
+  color: #000;
+  border: none;
+  border-radius: 5px;
+  box-shadow: 0 4px 6px rgba(0,0,0,.1);
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color .3s ease;
+}
+
+.regresar-button:hover{
+  background-color: #00695C;
+  color: #fff;
+}
+
+/* icono y texto igual que en Guardar */
+.regresar-button img{
+  width: 24px;
+  height: 24px;
+  display: block;
+  margin: 0 auto;
+}
+
+.regresar-button span{
+  display: block;
+  margin: 0;                  /* misma separación controlada por gap */
+  line-height: 1;
+}
+
+/* en móvil, respeta tus tamaños reducidos */
+@media (max-width: 480px){
+  .regresar-button{
+    height: 56px;             /* mismo alto que usas en móvil */
+    width: auto;              /* deja que respire si se reparte el espacio */
+    min-width: 160px;
+  }
+}

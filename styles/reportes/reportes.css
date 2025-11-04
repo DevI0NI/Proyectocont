@@ -1,0 +1,98 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f0f2f5;
+    opacity: 0; /* Inicialmente oculto */
+    transition: opacity 0.5s ease-in-out; /* Transición suave */
+}
+body.fade-in {
+    opacity: 1; /* Mostrar con desvanecimiento */
+}
+body.preload {
+    opacity: 0;
+}
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 40px; /* Aumentar el padding para hacer el header más grande */
+    background: linear-gradient(90deg, #00695C, #80CBC4); /* Degradado de verde oscuro a verde claro */
+    color: #000;
+}
+.header-left {
+    display: flex;
+    align-items: center;
+}
+.header-left .logo {
+    width: 80px; /* Aumentar el tamaño de la imagen */
+    margin-right: 20px; /* Aumentar el espacio entre la imagen y el texto */
+}
+.header-left .overlay-link {
+    text-decoration: none;
+    cursor: pointer; /* Mostrar el cursor de mano */
+}
+.header-right {
+    display: flex;
+    align-items: center;
+}
+.header-right span {
+    margin-right: 20px;
+    color: #000; 
+}
+.header-left a {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: #000; 
+}
+
+.logout-button {
+    background-color: #ff4d4d;
+    color: #000;    
+    padding: 5px 10px;
+    text-decoration: none;
+    border-radius: 5px;
+}
+.logout-button:hover {
+    background-color: #ff1a1a;
+}
+main {
+    padding: 20px;
+    text-align: center;
+}
+.menu {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.menu-item {
+    margin: 10px;
+    text-align: center;
+    width: 150px; /* Ajustar el ancho para centrar el texto debajo de la imagen */
+    transition: transform 0.3s ease; /* Transición suave para la animación */
+}
+.menu-item:hover {
+    transform: scale(1.1); /* Efecto de zoom al pasar el mouse */
+}
+.menu-item a {
+    text-decoration: none;
+    color: #333;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.menu-item img {
+    width: 100px;
+    height: 100px;
+    margin-bottom: 10px; /* Espacio entre la imagen y el texto */
+}
+footer {
+    text-align: center;
+    padding: 10px;
+    background: linear-gradient(90deg, #00695C, #80CBC4); /* Degradado de verde oscuro a verde claro */
+    color: #000;
+    position: fixed;
+    width: 100%;
+    bottom: 0;
+}

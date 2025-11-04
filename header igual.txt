@@ -1,0 +1,35 @@
+HTML
+
+<header>
+  <div class="header-left">
+    <a href="../../index.php">
+      <img src="../../imagenes/IPSA.png" alt="Logo" class="logo">
+      <span class="brand-name">IPROPORTSA</span>
+    </a>
+  </div>
+  <div class="header-right">
+    <span class="welcome-label">Bienvenido,</span>
+    <span class="username"><?php echo $_SESSION['username']; ?></span>
+    <a href="../../logout.php" class="logout-button">Cerrar sesión</a>
+  </div>
+</header>
+
+CSS
+
+
+/* Responsive: ocultar empresa y Bienvenido en móvil */
+@media (max-width: 480px){
+  .brand-name,        /* nombre empresa */
+  .welcome-label{     /* texto Bienvenido */
+    display: none !important;
+  }
+  .logo { height: 28px; }
+  .username {
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  .logout-button {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+}
