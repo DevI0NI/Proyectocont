@@ -5,20 +5,26 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Habilitar errores para desarrollo
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 require '../../config/database.php';
 
-$sqlPatios = 'SELECT id, nombre FROM patios';
+// 1. Cargar Patios Activos
+// Filtramos por estado_id = 1
+$sqlPatios = 'SELECT id, nombre FROM patios WHERE estado_id = 1 ORDER BY nombre ASC';
 $stmtPatios = $pdo->query($sqlPatios);
-$patios = $stmtPatios->fetchAll();
+$patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
 
-$sqlBloques = 'SELECT id, patio_id, numero, capacidad_maxima FROM bloques';
+// 2. Cargar Bloques Activos
+// Filtramos por estado_id = 1
+$sqlBloques = 'SELECT id, patio_id, numero, capacidad_maxima FROM bloques WHERE estado_id = 1 ORDER BY numero ASC';
 $stmtBloques = $pdo->query($sqlBloques);
-$bloques = $stmtBloques->fetchAll();
+$bloques = $stmtBloques->fetchAll(PDO::FETCH_ASSOC);
 
+// Organizar bloques por patio para la vista
 $bloquesPorPatio = [];
 foreach ($bloques as $bloque) {
     $bloquesPorPatio[$bloque['patio_id']][] = $bloque;
@@ -31,6 +37,15 @@ foreach ($bloques as $bloque) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Configuración de Bloques</title>
     <link rel="stylesheet" href="../../styles/parametros/bloques/configuracion.css" />
+    
+    <style>
+        /* Estilos para Toast (mismos que usamos en estados.php para consistencia) */
+        #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 400px; pointer-events: none; }
+        .toast { padding: 15px 20px; border-radius: 8px; color: #fff; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.15); opacity: 0; transform: translateY(-20px); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { background-color: #dc3545; border-left: 5px solid #bd2130; }
+        .toast.success { background-color: #28a745; border-left: 5px solid #1e7e34; }
+    </style>
 
     <script>
       // Mantener scroll después de guardar
@@ -55,13 +70,13 @@ foreach ($bloques as $bloque) {
   </div>
   <div class="header-right">
     <span class="welcome-label">Bienvenido,</span>
-    <span class="username"><?php echo $_SESSION['username']; ?></span>
+    <span class="username"><?php echo htmlspecialchars($_SESSION['username'] ?? ''); ?></span>
     <a href="../../logout.php" class="logout-button">Cerrar sesión</a>
   </div>
 </header>
 
-<!-- Toasts -->
-<div id="toast-container" class="toast-container"></div>
+<!-- Contenedor de Toasts -->
+<div id="toast-container"></div>
 
 <main>
     <h1>Configuración de Bloques</h1>
@@ -116,7 +131,7 @@ foreach ($bloques as $bloque) {
         Confirmar
       </button>
 
-      <!-- Modo eliminar (ahora solo activa/desactiva la selección por click) -->
+      <!-- Modo eliminar -->
       <button type="button" class="eliminar-button" id="eliminar-patio" disabled>
         Eliminar Patio
       </button>
@@ -152,7 +167,7 @@ foreach ($bloques as $bloque) {
                 disabled
               >
 
-              <!-- Checkbox clásico (se oculta en modo eliminar vía JS) -->
+              <!-- Checkbox clásico -->
               <input
                 type="checkbox"
                 name="bloques_eliminar[]"
@@ -187,7 +202,7 @@ foreach ($bloques as $bloque) {
             Confirmar
           </button>
 
-          <!-- Modo eliminar (activa selección por click) -->
+          <!-- Modo eliminar -->
           <button type="button" class="eliminar-button" id="eliminar-bloque-<?php echo $patio['id']; ?>" disabled>
             Eliminar Bloque
           </button>
@@ -206,18 +221,32 @@ foreach ($bloques as $bloque) {
     </div>
 
 <script>
-  // ===== Toasts =====
+  // ===== Toasts Logic =====
   function showToast(message, type = 'success') {
     const toastContainer = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
     toastContainer.appendChild(toast);
-    setTimeout(() => { toast.remove(); }, 4000);
+    
+    // Forzar reflow para la animación
+    void toast.offsetWidth; 
+    toast.classList.add('show');
+
+    // Eliminar después de 4s
+    setTimeout(() => { 
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
   }
+
+  // Inyectar mensaje de PHP si existe
   <?php if (isset($_SESSION['toast_message'])): ?>
   document.addEventListener('DOMContentLoaded', function () {
-    showToast('<?php echo $_SESSION['toast_message']; ?>', '<?php echo $_SESSION['toast_type']; ?>');
+    showToast(
+        '<?php echo addslashes($_SESSION['toast_message']); ?>', 
+        '<?php echo $_SESSION['toast_type'] ?? "success"; ?>'
+    );
   });
   <?php unset($_SESSION['toast_message'], $_SESSION['toast_type']); ?>
   <?php endif; ?>
@@ -265,20 +294,18 @@ foreach ($bloques as $bloque) {
     hide(btnEliminarPatio);
 
     if (patiosMode === 'idle'){
-      // Ver Editar, Agregar y Eliminar
       show(btnEditarPatio);
       show(btnAgregarPatio);
       show(btnEliminarPatio);
-      setPatiosReadonly(false); // inputs deshabilitados
+      setPatiosReadonly(false); 
       btnEliminarPatio.disabled = false;
       enable(btnEliminarPatio);
     }
 
     if (patiosMode === 'edit'){
-      // Solo Cancelar edición y Guardar
       show(btnCancelarEditarPatio);
       show(btnGuardarPatios);
-      setPatiosReadonly(true); // habilita inputs
+      setPatiosReadonly(true); 
       document.querySelectorAll('#patios-container input[type="text"]').forEach(i=>{
         i.dataset.original = i.value;
         i.disabled = false;
@@ -287,7 +314,6 @@ foreach ($bloques as $bloque) {
     }
 
     if (patiosMode === 'add'){
-      // Solo Agregar (puedes agregar más), Cancelar agregar y Guardar
       show(btnAgregarPatio);
       show(btnCancelarPatio);
       show(btnGuardarPatios);
@@ -313,26 +339,22 @@ foreach ($bloques as $bloque) {
     patiosDeleteMode = on;
     patiosContainer.classList.toggle('delete-mode-hint', on);
 
-    // Si aún existen checkboxes clásicos, ocultarlos (ya no se usan)
+    // Si aún existen checkboxes clásicos, ocultarlos
     document.querySelectorAll('#patios-container .checkbox-patio').forEach(cb=>{
       cb.style.display = on ? 'none' : '';
       cb.checked = false;
     });
 
-    // Botón Eliminar muta a "Cancelar selección"
     btnEliminarPatio.disabled = false;
     enable(btnEliminarPatio);
     btnEliminarPatio.textContent = on ? 'Cancelar selección' : 'Eliminar Patio';
 
     if (on){
-      // En modo eliminar NO deben verse Editar ni Agregar
       hide(btnEditarPatio);
       hide(btnAgregarPatio);
-      show(btnGuardarPatios);  // Guardar aplica la selección
+      show(btnGuardarPatios); 
     } else {
-      // Limpia marcas
       patiosContainer.querySelectorAll('.to-delete').forEach(r=>r.classList.remove('to-delete'));
-      // Si volvemos a idle, restituir botones base
       if (patiosMode === 'idle'){
         show(btnEditarPatio);
         show(btnAgregarPatio);
@@ -349,7 +371,6 @@ foreach ($bloques as $bloque) {
   });
 
   btnCancelarEditarPatio.addEventListener('click', () => {
-    // revertir valores originales
     document.querySelectorAll('#patios-container input[type="text"]').forEach(i=>{
       if ('original' in i.dataset){ i.value = i.dataset.original; delete i.dataset.original; }
       i.disabled = true;
@@ -361,7 +382,7 @@ foreach ($bloques as $bloque) {
   btnAgregarPatio.addEventListener('click', () => {
     setPatiosDeleteMode(false);
     if (patiosMode !== 'add') patiosMode = 'add';
-    crearFilaPatioTemporal();  // cada click agrega otro
+    crearFilaPatioTemporal(); 
     updatePatiosUI();
   });
 
@@ -374,18 +395,16 @@ foreach ($bloques as $bloque) {
     updatePatiosUI();
   });
 
-  // Activar/Cancelar modo eliminar (PATIOS)
   btnEliminarPatio.disabled = false;
   btnEliminarPatio.addEventListener('click', (e)=>{
     e.preventDefault();
-    if (patiosMode !== 'idle') { // no permitir mientras se edita/agrega
+    if (patiosMode !== 'idle') { 
       patiosMode = 'idle';
       updatePatiosUI();
     }
     setPatiosDeleteMode(!patiosDeleteMode);
   });
 
-  // Selección por click de filas (PATIOS) en modo eliminar
   patiosContainer.addEventListener('click', (ev)=>{
     if (!patiosDeleteMode) return;
     const row = ev.target.closest('.checkbox-container');
@@ -394,7 +413,6 @@ foreach ($bloques as $bloque) {
     show(btnGuardarPatios);
   });
 
-  // Antes de enviar, crear inputs ocultos patios_eliminar[] con selección (PATIOS)
   formPatios.addEventListener('submit', ()=>{
     formPatios.querySelectorAll('input[name="patios_eliminar[]"]').forEach(n=>n.remove());
     patiosContainer.querySelectorAll('.to-delete').forEach(row=>{
@@ -409,7 +427,6 @@ foreach ($bloques as $bloque) {
     setPatiosDeleteMode(false);
   });
 
-  // Guardar patios mantiene scroll (también lo tienes inline en el botón)
   document.getElementById('guardar-patios').onclick = () => submitAndKeepScroll(formPatios);
 
   /* =====================================================================
@@ -417,15 +434,13 @@ foreach ($bloques as $bloque) {
      ===================================================================== */
   const formBloques = document.getElementById('form-bloques');
 
-  // Insertar antes de la botonera
   function insertBeforeButtons(container, node) {
     const buttonsEl = container.querySelector('.bloques-buttons');
     if (buttonsEl) container.insertBefore(node, buttonsEl); else container.appendChild(node);
   }
 
-  // Estado por patio
-  const bloquesMode = {};        // { [patioId]: 'idle'|'edit'|'add' }
-  const bloquesDeleteMode = {};  // { [patioId]: boolean }
+  const bloquesMode = {};        
+  const bloquesDeleteMode = {};  
 
   function getMode(patioId){ return bloquesMode[patioId] || 'idle'; }
   function setMode(patioId, m){ bloquesMode[patioId] = m; updateBloquesUI(patioId); }
@@ -440,7 +455,6 @@ foreach ($bloques as $bloque) {
     const btnEliminar   = document.getElementById(`eliminar-bloque-${patioId}`);
     const inputs        = document.querySelectorAll(`#bloques-container-${patioId} input[type="number"]`);
 
-    // reset visibilidad (las acciones base dependen del modo)
     [btnEdit, btnCancelEdit, btnAdd, btnCancelAdd, btnGuardar, btnEliminar].forEach(b => b && hide(b));
 
     const mode = getMode(patioId);
@@ -450,7 +464,7 @@ foreach ($bloques as $bloque) {
       show(btnAdd);
       show(btnEliminar);
       inputs.forEach(i => i.disabled = true);
-      btnEliminar.disabled = false; // clickable para entrar a modo eliminar
+      btnEliminar.disabled = false; 
     }
     if (mode === 'edit'){
       show(btnCancelEdit);
@@ -459,7 +473,7 @@ foreach ($bloques as $bloque) {
       setBloquesDeleteMode(patioId, false);
     }
     if (mode === 'add'){
-      show(btnAdd);        // permitir agregar varios seguidos
+      show(btnAdd);        
       show(btnCancelAdd);
       show(btnGuardar);
       inputs.forEach(i => i.disabled = false);
@@ -467,7 +481,6 @@ foreach ($bloques as $bloque) {
     }
   }
 
-  // === MODO ELIMINAR (BLOQUES) por patio ===
   function setBloquesDeleteMode(patioId, on){
     bloquesDeleteMode[patioId] = on;
     const cont = document.getElementById(`bloques-container-${patioId}`);
@@ -492,12 +505,10 @@ foreach ($bloques as $bloque) {
     }
 
     if (on){
-      // En modo eliminar NO deben verse Editar ni Agregar
       hide(btnEdit);
       hide(btnAdd);
       show(btnGuardar);
     } else {
-      // Limpiar marcas
       cont.querySelectorAll('.to-delete').forEach(r=>r.classList.remove('to-delete'));
       if (getMode(patioId) === 'idle'){
         show(btnEdit);
@@ -508,8 +519,6 @@ foreach ($bloques as $bloque) {
     }
   }
 
-  // Eventos BLOQUES
-  // EDITAR
   document.querySelectorAll('.editar-bloque').forEach(btn => {
     btn.addEventListener('click', function () {
       const patioId = this.dataset.patioId;
@@ -517,7 +526,6 @@ foreach ($bloques as $bloque) {
     });
   });
 
-  // CANCELAR EDICIÓN
   document.querySelectorAll('[id^="cancelar-editar-bloque-"]').forEach(btn => {
     btn.addEventListener('click', function () {
       const patioId = this.dataset.patioId || this.id.split('-').pop();
@@ -530,9 +538,8 @@ foreach ($bloques as $bloque) {
     });
   });
 
-  // AGREGAR BLOQUE
   document.querySelectorAll('.agregar-bloque').forEach(btn => {
-    if (btn.classList.contains('btn-cancel')) return; // no tocar los "cancelar"
+    if (btn.classList.contains('btn-cancel')) return; 
     btn.addEventListener('click', function () {
       const patioId = this.dataset.patioId;
       if (getMode(patioId) !== 'add') setMode(patioId, 'add');
@@ -555,7 +562,6 @@ foreach ($bloques as $bloque) {
     });
   });
 
-  // CANCELAR AGREGAR
   document.querySelectorAll('[id^="cancelar-bloque-"]').forEach(btn => {
     btn.addEventListener('click', function () {
       const patioId   = this.dataset.patioId || this.id.split('-').pop();
@@ -567,7 +573,6 @@ foreach ($bloques as $bloque) {
     });
   });
 
-  // Activar/Cancelar modo eliminar (BLOQUES) por patio
   document.querySelectorAll('[id^="eliminar-bloque-"]').forEach(btn=>{
     btn.disabled = false;
     enable(btn);
@@ -580,7 +585,6 @@ foreach ($bloques as $bloque) {
     });
   });
 
-  // Selección por click de filas (BLOQUES) en modo eliminar
   document.querySelectorAll('[id^="bloques-container-"]').forEach(container=>{
     container.addEventListener('click', (ev)=>{
       const patioId = container.id.split('-').pop();
@@ -593,7 +597,6 @@ foreach ($bloques as $bloque) {
     });
   });
 
-  // Antes de enviar, crear inputs ocultos bloques_eliminar[] con selección (BLOQUES)
   formBloques.addEventListener('submit', ()=>{
     formBloques.querySelectorAll('input[name="bloques_eliminar[]"]').forEach(n=>n.remove());
     document.querySelectorAll('[id^="bloques-container-"]').forEach(cont=>{
@@ -611,13 +614,11 @@ foreach ($bloques as $bloque) {
     });
   });
 
-  // Inicializar vistas
   updatePatiosUI();
   document.querySelectorAll('[id^="eliminar-bloque-"]').forEach(btn=>{ btn.disabled = false; enable(btn); });
 </script>
 <script>
   (function(){
-    // Asegura que exista el meta viewport
     var vp = document.querySelector('meta[name="viewport"]');
     if (!vp) {
       vp = document.createElement('meta');
@@ -627,33 +628,26 @@ foreach ($bloques as $bloque) {
     var BASE = 'width=device-width, initial-scale=1, viewport-fit=cover';
 
     function setViewport(content){ vp.setAttribute('content', content); }
-    function lockZoom(){   setViewport(BASE + ', maximum-scale=1'); }   // sin zoom mientras escribes
-    function unlockZoom(){ setViewport(BASE + ', maximum-scale=5'); }   // re-habilita zoom al salir
+    function lockZoom(){   setViewport(BASE + ', maximum-scale=1'); } 
+    function unlockZoom(){ setViewport(BASE + ', maximum-scale=5'); } 
 
-    // Al cargar, normaliza
     unlockZoom();
 
-    // Activa/desactiva durante edición
     var focusSelector = 'input, select, textarea';
     document.addEventListener('focusin', function(e){
       if (e.target.matches(focusSelector)) lockZoom();
     }, {passive:true});
     document.addEventListener('focusout', function(e){
       if (e.target.matches(focusSelector)) {
-        // espera a que cierre el teclado y reajuste la viewport
         setTimeout(unlockZoom, 120);
       }
     }, {passive:true});
 
-    // Cambios de orientación: normaliza por si quedó alguna escala pegada
     window.addEventListener('orientationchange', function(){
-      // re-habilita zoom y re-aplica escala base
       unlockZoom();
-      // si Safari dejó una escala residual, fuerza reflow del meta
       setTimeout(function(){ unlockZoom(); }, 150);
     }, {passive:true});
 
-    // Por si el navegador mantiene una escala distinta de 1 tras cerrar teclado
     function normalizeIfScaled(){
       if (window.visualViewport && Math.abs(window.visualViewport.scale - 1) > 0.01) {
         unlockZoom();
