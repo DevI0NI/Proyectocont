@@ -15,7 +15,7 @@ require '../../config/database.php';
 $error_message = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $nombre = $_POST['nombre'];
+    $nombre = trim($_POST['nombre']); // Limpiamos espacios
     $observaciones = $_POST['observaciones'];
     $modelos = array_filter($_POST['modelos']); // Filtrar modelos vacíos
 
@@ -23,16 +23,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Iniciar una transacción
         $pdo->beginTransaction();
 
-        // Verificar si el nombre ya existe en la base de datos
-        $stmt = $pdo->prepare('SELECT COUNT(*) FROM tipos_unidad WHERE nombre = :nombre');
+        // --- CAMBIO AQUÍ: Verificar estado para dar el mensaje correcto ---
+        // En lugar de solo contar, obtenemos el estado para diferenciar el mensaje
+        $stmt = $pdo->prepare('SELECT id, estado_id FROM tipos_unidad WHERE nombre = :nombre');
         $stmt->execute(['nombre' => $nombre]);
-        $count = $stmt->fetchColumn();
+        $existente = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($count > 0) {
-            throw new Exception('Ese tipo de unidad ya existe.');
+        if ($existente) {
+            if ($existente['estado_id'] == 1) {
+                // Caso 1: Existe y está Activo
+                throw new Exception('Ese tipo de unidad ya existe.');
+            } else {
+                // Caso 2: Existe y está Deshabilitado (Estado 2)
+                throw new Exception('Ese tipo de unidad existe pero está deshabilitado. Contacte al administrador si desea reactivarlo.');
+            }
         }
 
-        // Insertar el nuevo tipo de unidad en la base de datos
+        // Insertar el nuevo tipo de unidad (estado_id será 1 por defecto en la BD)
         $stmt = $pdo->prepare('INSERT INTO tipos_unidad (nombre, descripcion) VALUES (:nombre, :descripcion)');
         $stmt->execute([
             'nombre' => $nombre,
@@ -43,10 +50,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $tipo_unidad_id = $pdo->lastInsertId();
 
         // Insertar los modelos asociados
+        // Nota: Como el tipo es nuevo, sus modelos no pueden duplicarse con los de este ID
         $stmtModelo = $pdo->prepare('INSERT INTO modelos (nombre, tipo_unidad_id) VALUES (:nombre, :tipo_unidad_id)');
         foreach ($modelos as $modelo) {
             $stmtModelo->execute([
-                'nombre' => $modelo,
+                'nombre' => trim($modelo),
                 'tipo_unidad_id' => $tipo_unidad_id
             ]);
         }
@@ -55,11 +63,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $pdo->commit();
 
         // Redirigir a tipos_unidad.php
+        // Añadimos un toast de éxito
+        $_SESSION['toast'] = ['type' => 'success', 'text' => 'Tipo de unidad creado correctamente.'];
         header('Location: tipos_unidad.php');
         exit;
+
     } catch (Exception $e) {
         // Revertir la transacción en caso de error
-        $pdo->rollBack();
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         $error_message = $e->getMessage();
     }
 }
@@ -72,25 +85,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <title>Nuevo Tipo de Unidad</title>
     <link rel="stylesheet" href="../../styles/parametros/tiposunidad/nuevaunidad.css">
     <style>
-        .error {
-            border: 2px solid red;
-        }
-        .valid {
-            border: 2px solid green;
-        }
-        .error-message {
-            color: red;
-            display: none;
-        }
-        .valid-message {
-            color: green;
-            display: none;
-            opacity: 1;
-            transition: opacity 1s ease-out;
-        }
-        .valid-message.fade-out {
-            opacity: 0;
-        }
+        .error { border: 2px solid red; }
+        .valid { border: 2px solid green; }
+        .error-message { color: red; display: none; }
+        .valid-message { color: green; display: none; opacity: 1; transition: opacity 1s ease-out; }
+        .valid-message.fade-out { opacity: 0; }
     </style>
 </head>
 <body>
@@ -103,30 +102,50 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
   </div>
   <div class="header-right">
     <span class="welcome-label">Bienvenido,</span>
-    <span class="username"><?php echo $_SESSION['username']; ?></span>
+    <span class="username"><?php echo htmlspecialchars($_SESSION['username'] ?? ''); ?></span>
     <a href="../../logout.php" class="logout-button">Cerrar sesión</a>
   </div>
 </header>
     <main>
         <h1>Nuevo Tipo de Unidad</h1>
         <?php if ($error_message): ?>
-            <p style="color: red;"><?php echo $error_message; ?></p>
+            <p style="color: red; text-align: center; font-weight: bold;"><?php echo htmlspecialchars($error_message); ?></p>
         <?php endif; ?>
+        
         <form id="tipoUnidadForm" action="nuevaunidad.php" method="post">
             <div class="form-group">
                 <label for="nombre">Nombre:</label>
-                <input type="text" id="nombre" name="nombre" required pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+" title="Solo se permiten letras y espacios.">
+                <!-- Value mantiene lo escrito si hay error -->
+                <input type="text" id="nombre" name="nombre" required 
+                       pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ0-9\s]+" 
+                       title="Solo se permiten letras, números y espacios." 
+                       value="<?php echo htmlspecialchars($_POST['nombre'] ?? ''); ?>"
+                       autocomplete="off">
+                
+                <!-- Estos mensajes los maneja el JS, idealmente verificar_nombre.php debería devolver también el estado -->
                 <span class="error-message" id="nombre-error">Ese tipo de unidad ya existe.</span>
                 <span class="valid-message" id="nombre-valid">Nombre disponible.</span>
             </div>
             <div class="form-group">
                 <label for="observaciones">Observaciones:</label>
-                <textarea id="observaciones" name="observaciones"></textarea>
+                <textarea id="observaciones" name="observaciones"><?php echo htmlspecialchars($_POST['observaciones'] ?? ''); ?></textarea>
             </div>
             <div class="form-group">
                 <label for="modelos">Modelos:</label>
                 <div id="modelos-container">
-                    <input type="text" name="modelos[]" placeholder="Modelo 1">
+                    <?php 
+                    // Repoblar modelos si hubo error
+                    if(isset($_POST['modelos']) && is_array($_POST['modelos'])) {
+                        foreach($_POST['modelos'] as $mod) {
+                            if(trim($mod) !== '') {
+                                echo '<input type="text" name="modelos[]" value="'.htmlspecialchars($mod).'" placeholder="Modelo">';
+                            }
+                        }
+                        echo '<input type="text" name="modelos[]" placeholder="Nuevo Modelo">';
+                    } else {
+                        echo '<input type="text" name="modelos[]" placeholder="Modelo 1">';
+                    }
+                    ?>
                 </div>
             </div>
             <div class="form-group">
@@ -159,12 +178,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <script>
         // Verificar en tiempo real si el nombre ya existe
         document.getElementById('nombre').addEventListener('input', function() {
-            var nombre = document.getElementById('nombre').value;
+            var nombre = this.value.trim();
+            if (nombre.length === 0) return;
+
             var xhr = new XMLHttpRequest();
             xhr.open('POST', 'verificar_nombre.php', true);
             xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4 && xhr.status === 200) {
+                    // Para que esto coincida exactamente con el PHP, 
+                    // verificar_nombre.php también debería distinguir estados, 
+                    // pero por ahora mantendrá la validación visual simple.
                     if (xhr.responseText === 'exists') {
                         document.getElementById('nombre').classList.add('error');
                         document.getElementById('nombre').classList.remove('valid');

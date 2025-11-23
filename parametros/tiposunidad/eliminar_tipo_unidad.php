@@ -6,7 +6,11 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-ini_set('display_errors', 0);
+// Configuración de errores
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 require '../../config/database.php';
 
 if (!isset($_GET['id'])) {
@@ -20,23 +24,26 @@ $id = (int)$_GET['id'];
 try {
     $pdo->beginTransaction();
 
-    // 1) Eliminar modelos del tipo
-    $stmtModelos = $pdo->prepare('DELETE FROM modelos WHERE tipo_unidad_id = :id');
-    $stmtModelos->execute([':id' => $id]);
+    // 1. VERIFICACIÓN DE INTEGRIDAD (USOS ACTIVOS)
+    // No permitimos "borrar" si hay contenedores activos en el patio usando este tipo.
+    // (Ignoramos los contenedores históricos/inactivos).
+    $stmtCheck = $pdo->prepare('SELECT COUNT(*) FROM contenedores WHERE tipo_unidad_id = :id AND estado_id = 1');
+    $stmtCheck->execute(['id' => $id]);
+    $usosActivos = $stmtCheck->fetchColumn();
 
-    // 2) Eliminar el tipo de unidad
-    $stmtUnidad = $pdo->prepare('DELETE FROM tipos_unidad WHERE id = :id');
-    $stmtUnidad->execute([':id' => $id]);
+    if ($usosActivos > 0) {
+        throw new Exception("No se puede eliminar: Hay $usosActivos contenedor(es) activo(s) usando este tipo de unidad.");
+    }
 
-    // 3) Reiniciar AUTO_INCREMENT si quedaron vacías
-    $countModelos = (int)$pdo->query('SELECT COUNT(*) FROM modelos')->fetchColumn();
-    if ($countModelos === 0) {
-        $pdo->exec('ALTER TABLE modelos AUTO_INCREMENT = 1');
-    }
-    $countTipos = (int)$pdo->query('SELECT COUNT(*) FROM tipos_unidad')->fetchColumn();
-    if ($countTipos === 0) {
-        $pdo->exec('ALTER TABLE tipos_unidad AUTO_INCREMENT = 1');
-    }
+    // 2. SOFT DELETE DE MODELOS (Cascada Lógica)
+    // Desactivamos los modelos asociados a este tipo para mantener la coherencia.
+    $stmtModelos = $pdo->prepare('UPDATE modelos SET estado_id = 2 WHERE tipo_unidad_id = :id');
+    $stmtModelos->execute(['id' => $id]);
+
+    // 3. SOFT DELETE DEL TIPO DE UNIDAD
+    // Marcamos el registro principal como inactivo.
+    $stmtUnidad = $pdo->prepare('UPDATE tipos_unidad SET estado_id = 2 WHERE id = :id');
+    $stmtUnidad->execute(['id' => $id]);
 
     $pdo->commit();
 
@@ -44,20 +51,14 @@ try {
     header('Location: tipos_unidad.php');
     exit;
 
-} catch (PDOException $e) {
+} catch (Exception $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
 
-    $sqlState   = $e->getCode();
-    $driverCode = $e->errorInfo[1] ?? null;
-
-    if ($sqlState === '23000' || $driverCode === 1451) {
-        $_SESSION['toast'] = ['type' => 'error', 'text' => 'No se puede eliminar el tipo: hay contenedores usando sus modelos.'];
-    } else {
-        $_SESSION['toast'] = ['type' => 'error', 'text' => 'Error al eliminar. Inténtalo de nuevo.'];
-    }
-
+    // Mostramos el mensaje de error específico (ej. "Hay contenedores activos...")
+    $_SESSION['toast'] = ['type' => 'error', 'text' => $e->getMessage()];
     header('Location: tipos_unidad.php');
     exit;
 }
+?>

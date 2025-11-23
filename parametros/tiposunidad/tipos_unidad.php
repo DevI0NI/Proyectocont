@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['user_id'])) {
-    header('Location: ../login.php');
+    header('Location: ../../login.php');
     exit;
 }
 
@@ -17,18 +17,21 @@ $tiposPorPagina = 10;
 $paginaActual   = isset($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
 $inicio         = ($paginaActual > 1) ? ($paginaActual * $tiposPorPagina) - $tiposPorPagina : 0;
 
-// Total de tipos
-$sqlTotal   = 'SELECT COUNT(*) FROM tipos_unidad';
+// Total de tipos (SOLO ACTIVOS)
+// CAMBIO: Filtramos por estado_id = 1
+$sqlTotal   = 'SELECT COUNT(*) FROM tipos_unidad WHERE estado_id = 1';
 $stmtTotal  = $pdo->prepare($sqlTotal);
 $stmtTotal->execute();
 $totalTipos   = $stmtTotal->fetchColumn();
 $totalPaginas = ceil($totalTipos / $tiposPorPagina);
 
-// Tipos con # de modelos
+// Tipos con # de modelos (SOLO ACTIVOS)
+// CAMBIO: Filtramos la tabla principal (tu) y la unión (m) por estado_id = 1
 $sql = '
   SELECT tu.id, tu.nombre, tu.descripcion, COUNT(m.id) AS cantidad_modelos
   FROM tipos_unidad tu
-  LEFT JOIN modelos m ON tu.id = m.tipo_unidad_id
+  LEFT JOIN modelos m ON tu.id = m.tipo_unidad_id AND m.estado_id = 1
+  WHERE tu.estado_id = 1
   GROUP BY tu.id
   LIMIT :inicio, :tiposPorPagina
 ';
@@ -62,7 +65,7 @@ $tipos = $stmt->fetchAll();
 </header>
 
 <?php if (!empty($_SESSION['toast'])): ?>
-  <!-- Notificación estilo ingresos -->
+  <!-- Notificación -->
   <div class="toast-container">
     <div class="toast <?php echo htmlspecialchars($_SESSION['toast']['type']); ?>">
       <?php echo htmlspecialchars($_SESSION['toast']['text']); ?>
@@ -101,6 +104,7 @@ $tipos = $stmt->fetchAll();
               <td data-label="Modelos"><?php echo (int)$tipo['cantidad_modelos']; ?></td>
               <td data-label="Acciones" class="acciones">
                 <a href="infounidad.php?id=<?php echo (int)$tipo['id']; ?>" class="modificar">Información</a> |
+                <!-- Nota: El archivo eliminar_tipo_unidad.php es el que hará el soft delete -->
                 <a href="eliminar_tipo_unidad.php?id=<?php echo (int)$tipo['id']; ?>" class="eliminar" onclick="return confirm('¿Está seguro de eliminar este tipo de unidad?')">Eliminar</a>
               </td>
             </tr>

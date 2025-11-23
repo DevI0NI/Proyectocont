@@ -65,11 +65,11 @@ main{
   display:flex; flex-wrap:wrap; justify-content:center; gap:10px;
 }
 .menu-item{
-  width:150px; text-align:center; transition:transform .3s ease;
+  width:150px; text-align:center; transition:transform .3s ease;  
 }
 .menu-item:hover{ transform:scale(1.1); }
 .menu-item a{ display:flex; flex-direction:column; align-items:center; text-decoration:none; color:var(--c-muted); }
-.menu-item img{ width:100px; height:100px; margin-bottom:10px; }
+.menu-item img{ width:100px; height:100px; margin-bottom:10px; object-fit: contain; }
 
 /* ========== Footer fijo ========== */
 footer{
