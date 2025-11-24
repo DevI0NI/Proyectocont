@@ -1,7 +1,20 @@
 <?php
 session_start();
+
+// 1. Seguridad Básica: Usuario logueado
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../../login.php');
+    exit;
+}
+
+// 2. BLINDAJE DE SEGURIDAD: SOLO SUPER ADMIN (Rol 1)
+// Si el usuario no es Super Admin, lo sacamos de aquí inmediatamente.
+if ($_SESSION['rol_id'] != 1) {
+    // Opcional: Mensaje de error en sesión para explicar por qué fue redirigido
+    $_SESSION['toast_message'] = 'Acceso denegado: Solo el Super Administrador puede gestionar sucursales.';
+    $_SESSION['toast_type'] = 'error';
+    
+    header('Location: ../../index.php');
     exit;
 }
 

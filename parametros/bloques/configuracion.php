@@ -1,27 +1,50 @@
 <?php
 session_start();
+
+// 1. Seguridad de Sesión
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../../login.php');
     exit;
 }
 
-// Habilitar errores para desarrollo
+// 2. Seguridad de Rol (Solo Super Admin y Admin)
+if (!in_array($_SESSION['rol_id'], [1, 2])) {
+    // Si no tiene permiso, lo mandamos al inicio
+    header('Location: ../../index.php');
+    exit;
+}
+
+// 3. Contexto de Sucursal
+// Si no hay sucursal activa (por error), redirigir al index para que se asigne
+if (!isset($_SESSION['sucursal_activa'])) {
+    header('Location: ../../index.php');
+    exit;
+}
+$sucursal_id = $_SESSION['sucursal_activa'];
+
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 require '../../config/database.php';
 
-// 1. Cargar Patios Activos
-// Filtramos por estado_id = 1
-$sqlPatios = 'SELECT id, nombre FROM patios WHERE estado_id = 1 ORDER BY nombre ASC';
-$stmtPatios = $pdo->query($sqlPatios);
+// 4. Cargar Patios Activos (FILTRADOS POR SUCURSAL)
+$sqlPatios = 'SELECT id, nombre FROM patios WHERE estado_id = 1 AND sucursal_id = :sucursal_id ORDER BY nombre ASC';
+$stmtPatios = $pdo->prepare($sqlPatios);
+$stmtPatios->execute(['sucursal_id' => $sucursal_id]);
 $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
 
-// 2. Cargar Bloques Activos
-// Filtramos por estado_id = 1
-$sqlBloques = 'SELECT id, patio_id, numero, capacidad_maxima FROM bloques WHERE estado_id = 1 ORDER BY numero ASC';
-$stmtBloques = $pdo->query($sqlBloques);
+// 5. Cargar Bloques Activos (De los patios de ESTA sucursal)
+// Usamos un JOIN para asegurar que los bloques pertenezcan a patios de la sucursal actual
+$sqlBloques = '
+    SELECT b.id, b.patio_id, b.numero, b.capacidad_maxima 
+    FROM bloques b
+    JOIN patios p ON b.patio_id = p.id
+    WHERE b.estado_id = 1 AND p.sucursal_id = :sucursal_id
+    ORDER BY b.numero ASC
+';
+$stmtBloques = $pdo->prepare($sqlBloques);
+$stmtBloques->execute(['sucursal_id' => $sucursal_id]);
 $bloques = $stmtBloques->fetchAll(PDO::FETCH_ASSOC);
 
 // Organizar bloques por patio para la vista
@@ -29,6 +52,11 @@ $bloquesPorPatio = [];
 foreach ($bloques as $bloque) {
     $bloquesPorPatio[$bloque['patio_id']][] = $bloque;
 }
+
+// Obtener nombre de la sucursal para mostrarlo
+$stmtNomSuc = $pdo->prepare("SELECT nombre FROM sucursales WHERE id = ?");
+$stmtNomSuc->execute([$sucursal_id]);
+$nombreSucursal = $stmtNomSuc->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -39,12 +67,24 @@ foreach ($bloques as $bloque) {
     <link rel="stylesheet" href="../../styles/parametros/bloques/configuracion.css" />
     
     <style>
-        /* Estilos para Toast (mismos que usamos en estados.php para consistencia) */
+        /* Estilos para Toast */
         #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 400px; pointer-events: none; }
         .toast { padding: 15px 20px; border-radius: 8px; color: #fff; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.15); opacity: 0; transform: translateY(-20px); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; }
         .toast.show { opacity: 1; transform: translateY(0); }
         .toast.error { background-color: #dc3545; border-left: 5px solid #bd2130; }
         .toast.success { background-color: #28a745; border-left: 5px solid #1e7e34; }
+        
+        /* Estilo para el subtítulo de sucursal */
+        .sucursal-info {
+            text-align: center;
+            color: #00695C;
+            background-color: #E0F2F1;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border: 1px solid #80CBC4;
+            display: inline-block;
+        }
     </style>
 
     <script>
@@ -80,6 +120,12 @@ foreach ($bloques as $bloque) {
 
 <main>
     <h1>Configuración de Bloques</h1>
+    
+    <div style="text-align: center;">
+        <div class="sucursal-info">
+            Editando inventario de: <strong><?php echo htmlspecialchars($nombreSucursal); ?></strong>
+        </div>
+    </div>
 
 <!-- ===== Patios ===== -->
 <section>
@@ -229,7 +275,7 @@ foreach ($bloques as $bloque) {
     toast.textContent = message;
     toastContainer.appendChild(toast);
     
-    // Forzar reflow para la animación
+    // Forzar reflow
     void toast.offsetWidth; 
     toast.classList.add('show');
 

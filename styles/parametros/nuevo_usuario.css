@@ -1,0 +1,209 @@
+/* =========================================================
+   NUEVO USUARIO – CSS Alineado y Simétrico
+   ========================================================= */
+:root{
+  --c1:#00695C; --c2:#80CBC4; --clink:#007bff; --cwarn:#ff4d4d;
+  --bg:#f0f2f5; --txt:#000;
+}
+
+/* ===== Base / Layout ===== */
+*, *::before, *::after{ box-sizing: border-box; }
+
+body{
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ===== Header (INTACTO) ===== */
+header{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 20px; width:100%;
+  background: linear-gradient(90deg, var(--c1), var(--c2));
+  color:#000;
+}
+.header-left{ display:flex; align-items:center; }
+.header-left a{ display:flex; align-items:center; text-decoration:none; color:#000; }
+.header-left .logo{ width:50px; margin-right:10px; }
+.header-right{ display:flex; align-items:center; }
+.header-right span{ margin-right:10px; }
+.logout-button{ background:var(--cwarn); color:#000; padding:5px 10px; text-decoration:none; border-radius:5px; }
+.logout-button:hover{ background:#ff1a1a; }
+
+/* ===== Main ===== */
+main{ 
+  padding: 40px 20px; 
+  flex: 1; 
+  display: flex; 
+  flex-direction: column;
+  align-items: center; /* Esto es clave: centra a los hijos (h1 y form) */
+}
+
+/* TÍTULO CORREGIDO: Sin ancho raro, centrado total */
+h1{ 
+  margin: 0 0 30px 0; 
+  width: 100%; 
+  text-align: center; 
+  color: #333;
+}
+
+/* ===== Formulario (PC) ===== */
+form{
+  width: 100%;
+  max-width: 600px; /* Usamos max-width para controlar el ancho en PC */
+  /* margin: 0 auto;  <- Ya no es estrictamente necesario con flex column center en main, pero no estorba */
+  display: flex;
+  flex-direction: column;
+  gap: 15px; /* Espacio vertical uniforme entre filas */
+}
+
+.form-group{ 
+  display: flex; 
+  align-items: center; 
+  gap: 15px; /* Espacio controlado entre Label e Input */
+}
+
+/* ETIQUETAS CORREGIDAS */
+label{
+  flex: 0 0 130px; /* Ancho fijo suficiente para "Contraseña" */
+  background: var(--c2); 
+  padding: 10px; 
+  border-radius: 5px; 
+  color: #000;
+  text-align: center;
+  font-weight: bold;
+  /* Centrar texto verticalmente dentro del label si tiene altura */
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+}
+
+/* INPUTS UNIFORMES */
+input[type="text"], 
+input[type="email"], 
+input[type="password"],
+select, 
+textarea {
+  flex: 1; /* Ocupa todo el espacio restante */
+  padding: 10px; 
+  border: 1px solid #ccc; 
+  border-radius: 4px; 
+  background: #fff;
+  font-size: 15px;
+  height: 42px; /* Altura fija para inputs y selects para que se vean iguales */
+}
+
+/* Ajuste para textarea (altura automática) */
+textarea { 
+  height: auto !important; 
+  resize: vertical; 
+}
+textarea#observaciones{ text-align:justify; line-height:1.5; }
+
+/* Checkbox (si se usa) */
+input[type="checkbox"]{ margin-left:25px; width:20px; height:20px; flex: none; }
+
+
+/* ===== Botones (PC) ===== */
+.buttons{
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 25px;
+  padding-top: 10px;
+  border-top: 1px solid #e0e0e0; /* Línea sutil separadora */
+  width: 100%;
+}
+
+.guardar-button,
+.regresar-button{
+  display: inline-flex; 
+  align-items: center; 
+  justify-content: center;
+  min-width: 140px; 
+  padding: 12px 20px;
+  border: none; 
+  border-radius: 5px; 
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 16px; 
+  font-weight: bold;
+  gap: 8px;
+}
+
+.guardar-button{ background:#FFA500; color:#000; }
+.guardar-button:hover{ background:#FF8C00; }
+.regresar-button{ background:var(--c2); color:#000; }
+.regresar-button:hover{ background:var(--c1); color:#fff; }
+.guardar-button img, .regresar-button img{ width:24px; height:24px; }
+
+
+/* ===== Footer (INTACTO) ===== */
+footer{
+  text-align:center; padding:10px; background:linear-gradient(90deg,var(--c1),var(--c2));
+  color:#000; width:100%; position:relative; margin-top: auto;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+/* iOS anti-zoom + altura estable */
+html{ -webkit-text-size-adjust:100%; }
+@media (max-width:480px){
+  input, textarea, select, button{ font-size:16px; }
+}
+body{ min-height:100dvh; }
+@supports (min-height:100svh){ body{ min-height:100svh; } }
+
+/* Tablet ≤ 992px */
+@media (max-width: 992px){
+  form{ max-width: 80%; }
+}
+
+/* Móvil ≤ 768px */
+@media (max-width: 768px){
+  main { padding: 20px 15px; }
+  
+  form{ width: 100%; max-width: 100%; }
+  
+  .form-group{ 
+    flex-direction: column; /* Elementos apilados */
+    align-items: stretch; 
+    gap: 8px; 
+  }
+  
+  label{ 
+    width: 100%; /* Label ancho completo */
+    text-align: left; 
+    padding: 8px 12px;
+    justify-content: flex-start;
+    flex: none;
+  }
+  
+  input, select, textarea{ width: 100%; }
+
+  .buttons{
+    flex-direction: column-reverse; /* Botones apilados */
+    gap: 15px;
+  }
+  
+  .guardar-button, .regresar-button{
+    width: 100%; 
+    height: 50px;
+  }
+}
+
+/* Header compacto */
+@media (max-width: 480px){
+  .brand-name, .welcome-label{ display:none !important; }
+  .logo { height:28px; }
+  .username { font-size:0.9rem; font-weight:500; }
+  .logout-button { padding:6px 10px; font-size:0.85rem; }
+}

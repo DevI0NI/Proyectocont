@@ -4,6 +4,14 @@ if (!isset($_SESSION['user_id'])) {
     header('Location: ../login.php');
     exit;
 }
+
+// --- SEGURIDAD: CONTROL DE ACCESO POR ROL ---
+// Solo Super Admin (1) y Admin (2) pueden ver esta página.
+// Si el rol no es 1 ni 2, lo redirigimos al menú principal.
+if (!in_array($_SESSION['rol_id'], [1, 2])) {
+    header('Location: ../index.php');
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -35,12 +43,23 @@ if (!isset($_SESSION['user_id'])) {
     <main>
         <h1>Parámetros del Sistema</h1>
         <div class="menu">
-            <!-- Nuevo Botón de Sucursales (Solo visible para Super Admin si lo deseas, aquí abierto a todos) -->
+            
+            <!-- Gestión de Sucursales (SOLO SUPER ADMIN - ROL 1) -->
+            <?php if ($_SESSION['rol_id'] == 1): ?>
             <div class="menu-item">
                 <a href="sucursales/sucursales.php">
-                    <!-- Asegúrate de tener una imagen 'sucursales.png' o usa una genérica -->
-                    <img src="../imagenes/sucursales.png" alt="Sucursales">
+                    <!-- Usa una imagen genérica si no tienes sucursales.png aún -->
+                    <img src="../imagenes/sucursales.png" alt="Sucursales" onerror="this.src='../imagenes/bloquesconfig.png'">
                     <span>Sucursales</span>
+                </a>
+            </div>
+            <?php endif; ?>
+
+            <!-- Gestión de Usuarios (Disponible para Admin y Super Admin) -->
+            <div class="menu-item">
+                <a href="usuarios/usuarios.php">
+                    <img src="../imagenes/usuarios.png" alt="Usuarios" onerror="this.src='../imagenes/tipos_unidad.png'">
+                    <span>Usuarios</span>
                 </a>
             </div>
 

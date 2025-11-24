@@ -1,7 +1,16 @@
 <?php
 session_start();
+
+// 1. Seguridad de Sesión
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../../login.php');
+    exit;
+}
+
+// 2. BLINDAJE: SOLO SUPER ADMIN (Rol 1)
+if ($_SESSION['rol_id'] != 1) {
+    $_SESSION['toast'] = ['type' => 'error', 'text' => 'Acceso denegado. Solo el Super Admin puede crear sucursales.'];
+    header('Location: ../../index.php');
     exit;
 }
 
@@ -21,8 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     try {
         $pdo->beginTransaction();
 
-        // 1. VALIDACIÓN ESTRICTA (Nombre único global)
-        // Buscamos si el nombre ya existe en el historial (estado 1 o 2)
+        // 3. VALIDACIÓN DE NEGOCIO: Nombre único global
         $stmtCheck = $pdo->prepare('SELECT id, estado_id FROM sucursales WHERE nombre = :nombre');
         $stmtCheck->execute(['nombre' => $nombre]);
         $existente = $stmtCheck->fetch(PDO::FETCH_ASSOC);
@@ -31,11 +39,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if ($existente['estado_id'] == 1) {
                 throw new Exception('Ya existe una sucursal activa con este nombre.');
             } else {
-                throw new Exception('Este nombre de sucursal existe en el historial pero está deshabilitado. Por integridad, use otro nombre o contacte al administrador.');
+                throw new Exception('Este nombre existe en el historial (inactivo). Use otro nombre o contacte a soporte.');
             }
         }
 
-        // 2. INSERTAR NUEVA SUCURSAL
+        // 4. INSERTAR
         $stmtIns = $pdo->prepare('INSERT INTO sucursales (nombre, ubicacion, estado_id) VALUES (:nombre, :ubicacion, 1)');
         $stmtIns->execute([
             'nombre' => $nombre,
@@ -60,23 +68,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nueva Sucursal</title>
-    <!-- Reutilizamos estilos existentes para mantener la línea gráfica -->
+    <!-- Enlazamos al CSS específico que arreglamos antes -->
     <link rel="stylesheet" href="../../styles/parametros/sucursales/nueva_sucursal.css">
     <style>
-        /* Estilos específicos para validación */
-        .error { border: 2px solid red !important; }
-        .valid { border: 2px solid green !important; }
+        /* Estilos para validación visual local */
+        .error { border: 2px solid #ff4d4d !important; }
+        .valid { border: 2px solid #4CAF50 !important; }
         
-        /* Estilo para la alerta PHP */
         .alert-error { 
             background-color: #f8d7da; color: #721c24; padding: 15px; 
             border-radius: 5px; margin-bottom: 20px; text-align: center; 
-            border: 1px solid #f5c6cb; font-weight: bold;
+            border: 1px solid #f5c6cb; font-weight: bold; width: 60%; margin: 0 auto 20px auto;
         }
 
-        /* Mensajes de validación JS */
-        .error-message { color: #dc3545; display: none; margin-top: 5px; font-size: 0.9em; font-weight: bold; }
-        .valid-message { color: #28a745; display: none; margin-top: 5px; font-size: 0.9em; font-weight: bold; }
+        .error-message { color: #ff4d4d; display: none; margin-top: 5px; font-size: 0.9em; font-weight: bold; text-align: right; }
+        .valid-message { color: #4CAF50; display: none; margin-top: 5px; font-size: 0.9em; font-weight: bold; text-align: right; }
         .valid-message.fade-out { opacity: 0; transition: opacity 1s ease-out; }
     </style>
 </head>
@@ -107,16 +113,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <form id="sucursalForm" action="nueva_sucursal.php" method="post">
         <div class="form-group">
             <label for="nombre">Nombre de la Sucursal:</label>
-            <input type="text" id="nombre" name="nombre" required 
-                   value="<?php echo htmlspecialchars($_POST['nombre'] ?? ''); ?>"
-                   autocomplete="off">
-            
-            <span class="error-message" id="nombre-error">Este nombre ya está registrado.</span>
-            <span class="valid-message" id="nombre-valid">Nombre disponible.</span>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+                <input type="text" id="nombre" name="nombre" required 
+                       value="<?php echo htmlspecialchars($_POST['nombre'] ?? ''); ?>"
+                       autocomplete="off">
+                
+                <span class="error-message" id="nombre-error">Este nombre ya está registrado.</span>
+                <span class="valid-message" id="nombre-valid">Nombre disponible.</span>
+            </div>
         </div>
 
         <div class="form-group">
-            <label for="ubicacion">Dirección:</label>
+            <label for="ubicacion">Ubicación / Dirección:</label>
             <textarea id="ubicacion" name="ubicacion" required rows="3"
                       ><?php echo htmlspecialchars($_POST['ubicacion'] ?? ''); ?></textarea>
         </div>
@@ -163,12 +171,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if (xhr.status === 200) {
                 if (xhr.responseText === 'exists') {
                     nombreInput.classList.add('error');
-                    errorSpan.style.display = 'inline';
+                    errorSpan.style.display = 'block';
                 } else {
                     nombreInput.classList.add('valid');
-                    validSpan.style.display = 'inline';
+                    validSpan.style.display = 'block';
                     
-                    // Efecto fade-out para el mensaje de éxito
                     validSpan.classList.remove('fade-out');
                     setTimeout(() => validSpan.classList.add('fade-out'), 2000);
                     setTimeout(() => validSpan.style.display = 'none', 3000);
