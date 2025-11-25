@@ -1,9 +1,16 @@
 <?php
 session_start();
 if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
+    header('Location: ../login.php');
     exit;
 }
+
+// 1. CONTEXTO DE SUCURSAL (Obligatorio)
+if (!isset($_SESSION['sucursal_activa'])) {
+    header('Location: ../index.php');
+    exit;
+}
+$sucursal_id = $_SESSION['sucursal_activa'];
 
 // Habilitar la visualización de errores
 ini_set('display_errors', 1);
@@ -12,14 +19,15 @@ error_reporting(E_ALL);
 
 require '../config/database.php';
 
-// Obtener todos los contenedores para búsqueda global
+// 2. OBTENER TODOS LOS CONTENEDORES (Búsqueda Global)
+// Esta consulta es compleja porque debe unir 6 tablas para tener la info completa y legible
 $sqlTodosContenedores = "
     SELECT 
         c.nombre,
         c.posicion,
-        c.estatus_unidad AS estatus,
-        c.estatus_box,
-        c.estatus_ipsa,
+        eu.nombre AS estatus,       -- Nombre del Estatus Unidad
+        eb.nombre AS estatus_box,   -- Nombre del Estatus Box
+        ei.nombre AS estatus_ipsa,  -- Nombre del Estatus IPSA
         c.fecha_ingreso,
         b.id as bloque_id,
         b.numero as bloque_numero,
@@ -28,35 +36,51 @@ $sqlTodosContenedores = "
     FROM contenedores c
     JOIN bloques b ON c.bloque_id = b.id
     JOIN patios p ON b.patio_id = p.id
+    -- Joins para obtener los nombres de los estatus
+    LEFT JOIN estatus_contenedores eu ON c.estatus_unidad_id = eu.id
+    LEFT JOIN estatus_contenedores eb ON c.estatus_box_id = eb.id
+    LEFT JOIN estatus_ipsa ei ON c.estatus_ipsa_id = ei.id
+    WHERE c.estado_id = 1 
+      AND p.sucursal_id = :sucursal -- Filtro de Sucursal
     ORDER BY p.id, b.numero, c.posicion
 ";
-$stmtTodosContenedores = $pdo->query($sqlTodosContenedores);
+$stmtTodosContenedores = $pdo->prepare($sqlTodosContenedores);
+$stmtTodosContenedores->execute(['sucursal' => $sucursal_id]);
 $todosContenedores = $stmtTodosContenedores->fetchAll(PDO::FETCH_ASSOC);
 
-// Obtener la lista de patios
-$sqlPatios = 'SELECT id, nombre FROM patios';
-$stmtPatios = $pdo->query($sqlPatios);
-$patios = $stmtPatios->fetchAll();
+// 3. OBTENER LISTA DE PATIOS (De esta sucursal)
+$sqlPatios = 'SELECT id, nombre FROM patios WHERE estado_id = 1 AND sucursal_id = :sucursal ORDER BY nombre ASC';
+$stmtPatios = $pdo->prepare($sqlPatios);
+$stmtPatios->execute(['sucursal' => $sucursal_id]);
+$patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
 
 // Verificar si se seleccionó un patio
 $patioSeleccionado = isset($_GET['patio_id']) ? (int)$_GET['patio_id'] : null;
 
-// Obtener los bloques del patio seleccionado
+// 4. OBTENER BLOQUES (Del patio seleccionado)
 $bloques = [];
 if ($patioSeleccionado) {
-    $sqlBloques = '
-        SELECT b.id, b.numero AS bloque, b.capacidad_actual, b.capacidad_maxima
-        FROM bloques b
-        WHERE b.patio_id = :patio_id
-        ORDER BY b.numero
-    ';
-    $stmtBloques = $pdo->prepare($sqlBloques);
-    $stmtBloques->execute(['patio_id' => $patioSeleccionado]);
-    $bloques = $stmtBloques->fetchAll();
+    // Verificación de seguridad: ¿El patio es de mi sucursal?
+    $stmtCheck = $pdo->prepare('SELECT id FROM patios WHERE id = :id AND sucursal_id = :sucursal');
+    $stmtCheck->execute(['id' => $patioSeleccionado, 'sucursal' => $sucursal_id]);
+    
+    if ($stmtCheck->fetch()) {
+        $sqlBloques = '
+            SELECT b.id, b.numero AS bloque, b.capacidad_actual, b.capacidad_maxima
+            FROM bloques b
+            WHERE b.patio_id = :patio_id AND b.estado_id = 1
+            ORDER BY b.numero
+        ';
+        $stmtBloques = $pdo->prepare($sqlBloques);
+        $stmtBloques->execute(['patio_id' => $patioSeleccionado]);
+        $bloques = $stmtBloques->fetchAll(PDO::FETCH_ASSOC);
 
-    if (!isset($_GET['bloque_id']) && count($bloques) > 0) {
-        header('Location: ?patio_id=' . $patioSeleccionado . '&bloque_id=' . $bloques[0]['id']);
-        exit;
+        if (!isset($_GET['bloque_id']) && count($bloques) > 0) {
+            header('Location: ?patio_id=' . $patioSeleccionado . '&bloque_id=' . $bloques[0]['id']);
+            exit;
+        }
+    } else {
+        $patioSeleccionado = null; // Patio inválido o de otra sucursal
     }
 }
 
@@ -74,18 +98,28 @@ if ($bloqueSeleccionado) {
     }
 }
 
-// Obtener los contenedores del bloque seleccionado
+// 5. OBTENER CONTENEDORES (Del bloque seleccionado)
 $contenedores = [];
 if ($bloqueSeleccionado) {
     $sqlContenedores = '
-    SELECT c.posicion, c.nombre, c.estatus_unidad AS estatus, c.estatus_box, c.estatus_ipsa, c.fecha_ingreso, c.observaciones_unidad
+    SELECT 
+        c.posicion, 
+        c.nombre, 
+        eu.nombre AS estatus,      -- Nombre tradudico
+        eb.nombre AS estatus_box,  -- Nombre traducido
+        ei.nombre AS estatus_ipsa, -- Nombre traducido
+        c.fecha_ingreso, 
+        c.observaciones_unidad
     FROM contenedores c
-    WHERE c.bloque_id = :bloque_id
-    ORDER BY c.posicion
-';
+    LEFT JOIN estatus_contenedores eu ON c.estatus_unidad_id = eu.id
+    LEFT JOIN estatus_contenedores eb ON c.estatus_box_id = eb.id
+    LEFT JOIN estatus_ipsa ei ON c.estatus_ipsa_id = ei.id
+    WHERE c.bloque_id = :bloque_id AND c.estado_id = 1
+    ORDER BY c.posicion DESC -- Orden descendente para simular apilado
+    ';
     $stmtContenedores = $pdo->prepare($sqlContenedores);
     $stmtContenedores->execute(['bloque_id' => $bloqueSeleccionado]);
-    $contenedores = $stmtContenedores->fetchAll();
+    $contenedores = $stmtContenedores->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // Configuración de paginación

@@ -1,11 +1,19 @@
 <?php
 session_start();
 if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
+    header('Location: ../login.php');
     exit;
 }
+
+// 1. CONTEXTO DE SUCURSAL (Obligatorio)
+if (!isset($_SESSION['sucursal_activa'])) {
+    header('Location: ../index.php');
+    exit;
+}
+$sucursal_id = $_SESSION['sucursal_activa'];
+$usuario_id  = $_SESSION['user_id'];
+
 date_default_timezone_set('America/Guatemala');
-// Habilitar la visualización de errores
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
@@ -14,95 +22,174 @@ require '../config/database.php';
 
 $error_message = '';
 
-// Obtener los datos necesarios para los campos desplegables
-$stmtTiposUnidad = $pdo->query('SELECT id, nombre FROM tipos_unidad');
-$tiposUnidad = $stmtTiposUnidad->fetchAll();
+// =======================================================
+// 1. CARGA DE DATOS MAESTROS (Filtrados por Contexto)
+// =======================================================
 
-$stmtEstadosUnidad = $pdo->query('SELECT id, nombre FROM estatus_contenedores WHERE tipo = "Unidad"');
-$estadosUnidad = $stmtEstadosUnidad->fetchAll();
+// Patios de la sucursal activa
+$stmtPatios = $pdo->prepare('SELECT id, nombre FROM patios WHERE estado_id = 1 AND sucursal_id = :sucursal ORDER BY nombre ASC');
+$stmtPatios->execute(['sucursal' => $sucursal_id]);
+$patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
 
-$stmtStatusBox = $pdo->query('SELECT id, nombre FROM estatus_contenedores WHERE tipo = "Estructura"');
-$statusBox = $stmtStatusBox->fetchAll();
+// Tipos de Unidad (Globales)
+$stmtTiposUnidad = $pdo->query('SELECT id, nombre FROM tipos_unidad WHERE estado_id = 1 ORDER BY nombre ASC');
+$tiposUnidad = $stmtTiposUnidad->fetchAll(PDO::FETCH_ASSOC);
 
-$stmtPatios = $pdo->query('SELECT id, nombre FROM patios');
-$patios = $stmtPatios->fetchAll();
+// Estatus de Unidad (Buscar ID de categoría 'Unidad')
+$stmtCat = $pdo->prepare('SELECT id FROM tipos_estatus WHERE nombre = :nombre');
+$stmtCat->execute(['nombre' => 'Unidad']);
+$idCatUnidad = $stmtCat->fetchColumn();
+$stmtEstUnidad = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = :id AND estado_id = 1 ORDER BY nombre ASC');
+$stmtEstUnidad->execute(['id' => $idCatUnidad]);
+$estadosUnidad = $stmtEstUnidad->fetchAll(PDO::FETCH_ASSOC);
+
+// Estatus de Box (Buscar ID de categoría 'Estructura')
+$stmtCat->execute(['nombre' => 'Estructura']);
+$idCatBox = $stmtCat->fetchColumn();
+$stmtEstBox = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = :id AND estado_id = 1 ORDER BY nombre ASC');
+$stmtEstBox->execute(['id' => $idCatBox]);
+$statusBox = $stmtEstBox->fetchAll(PDO::FETCH_ASSOC);
+
+// NUEVO: Cargar lista de Estatus IPSA para el selector manual
+$stmtIpsaList = $pdo->query("SELECT id, nombre FROM estatus_ipsa WHERE estado_id = 1 ORDER BY nombre ASC");
+$listaEstatusIpsa = $stmtIpsaList->fetchAll(PDO::FETCH_ASSOC);
+
+// =======================================================
+// 2. PROCESAMIENTO (POST)
+// =======================================================
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $fechaIngreso = $_POST['fecha_ingreso'] . ' ' . date('H:i:s');
-    $codigoContenedor = $_POST['codigo_contenedor'];
-    $tipoUnidad = $_POST['tipo_unidad'];
-    $modelo = $_POST['modelo'];
-    $estadoUnidad = $_POST['estado_unidad'];
-    $observacionesEstado = $_POST['observaciones_estado'];
-    $statusBoxId = $_POST['status_box'];
-    $observacionesBox = $_POST['observaciones_box'];
-    $bloque = $_POST['bloque'];
-    $posicion = $_POST['posicion'];
+    $fechaIngreso        = $_POST['fecha_ingreso'] . ' ' . date('H:i:s');
+    $codigoContenedor    = trim(strtoupper($_POST['codigo_contenedor']));
+    $tipoUnidad          = (int)$_POST['tipo_unidad'];
+    $modelo              = (int)$_POST['modelo'];
+    $estadoUnidadId      = (int)$_POST['estado_unidad'];
+    $observacionesEstado = trim($_POST['observaciones_estado']);
+    $statusBoxId         = (int)$_POST['status_box'];
+    $observacionesBox    = trim($_POST['observaciones_box']);
+    $estatusIpsaId       = (int)$_POST['estatus_ipsa']; 
+    $bloqueId            = (int)$_POST['bloque'];
+    $posicion            = (int)$_POST['posicion'];
 
     try {
-        // Verificar si el contenedor ya existe
-        $stmt = $pdo->prepare('SELECT COUNT(*) FROM contenedores WHERE nombre = :nombre');
-        $stmt->execute(['nombre' => $codigoContenedor]);
-        $count = $stmt->fetchColumn();
+        $pdo->beginTransaction();
 
-        if ($count > 0) {
-            $_SESSION['toast_message'] = 'El contenedor ya existe. Por favor, ingrese un nombre diferente.';
-            $_SESSION['toast_type'] = 'error';
-            header('Location: ingresos.php');
-            exit;
+        // A. Validar Sucursal del Bloque
+        $stmtCheckSuc = $pdo->prepare('SELECT p.sucursal_id FROM bloques b JOIN patios p ON b.patio_id = p.id WHERE b.id = :id');
+        $stmtCheckSuc->execute(['id' => $bloqueId]);
+        if ($stmtCheckSuc->fetchColumn() != $sucursal_id) {
+            throw new Exception('Error de seguridad: El bloque no pertenece a la sucursal activa.');
         }
 
-        // Obtener el nombre del Status de Box a partir de su ID
-        $stmt = $pdo->prepare('SELECT nombre FROM estatus_contenedores WHERE id = :id');
-        $stmt->execute(['id' => $statusBoxId]);
-        $nombreStatusBox = $stmt->fetchColumn();
+        // B. Validar Capacidad
+        $stmtCap = $pdo->prepare('SELECT capacidad_actual, capacidad_maxima FROM bloques WHERE id = :id');
+        $stmtCap->execute(['id' => $bloqueId]);
+        $cap = $stmtCap->fetch(PDO::FETCH_ASSOC);
+        if ($cap['capacidad_actual'] >= $cap['capacidad_maxima']) {
+            throw new Exception("El bloque seleccionado está lleno.");
+        }
+        
+        // C. Validar Posición Específica
+        $stmtPos = $pdo->prepare('SELECT COUNT(*) FROM contenedores WHERE bloque_id = :id AND posicion = :pos AND estado_id = 1');
+        $stmtPos->execute(['id' => $bloqueId, 'pos' => $posicion]);
+        if ($stmtPos->fetchColumn() > 0) {
+            throw new Exception("La posición $posicion ya está ocupada por otro contenedor activo.");
+        }
 
-        // Calcular el estatus_ipsa
-        if ($estadoUnidad === 'Pendiente PTI' || $nombreStatusBox === 'Pendiente Revisión') {
-            $estatusIpsa = 'Pendiente';
-        } elseif ($estadoUnidad === 'DMG' || $nombreStatusBox === 'DMG') {
-            $estatusIpsa = 'Dañado';
-        } elseif ($estadoUnidad === 'OK' && ($nombreStatusBox === 'OK' || $nombreStatusBox === 'OK - Reparación Mínima')) {
-            $estatusIpsa = 'Disponible';
+        // D. LÓGICA INTELIGENTE DE REINGRESO
+        // Verificamos si el contenedor existe (activo o inactivo)
+        $stmtExist = $pdo->prepare('SELECT id, estado_id FROM contenedores WHERE nombre = :nombre');
+        $stmtExist->execute(['nombre' => $codigoContenedor]);
+        $contenedorExistente = $stmtExist->fetch(PDO::FETCH_ASSOC);
+
+        $contenedorId = 0;
+        $esReingreso = false;
+
+        if ($contenedorExistente) {
+            // Si existe y está ACTIVO -> Error (Duplicado)
+            if ($contenedorExistente['estado_id'] == 1) {
+                throw new Exception('El número de equipo ya existe y está activo en el patio.');
+            } 
+            // Si existe y está INACTIVO -> REINGRESO (UPDATE)
+            else {
+                $esReingreso = true;
+                $contenedorId = $contenedorExistente['id'];
+                
+                // Reactivamos y actualizamos TODO
+                $sqlUpdate = '
+                    UPDATE contenedores SET 
+                        bloque_id = :blk, 
+                        posicion = :pos, 
+                        tipo_unidad_id = :tip, 
+                        modelo_id = :mod,
+                        estatus_unidad_id = :e_uni, 
+                        observaciones_unidad = :o_uni, 
+                        estatus_box_id = :e_box, 
+                        observaciones_box = :o_box,
+                        estatus_ipsa_id = :ipsa, 
+                        fecha_ingreso = :fec, 
+                        estado_id = 1 -- ¡Aquí lo revivimos!
+                    WHERE id = :id
+                ';
+                $stmtUpd = $pdo->prepare($sqlUpdate);
+                $stmtUpd->execute([
+                    'blk' => $bloqueId, 'pos' => $posicion, 'tip' => $tipoUnidad, 'mod' => $modelo,
+                    'e_uni' => $estadoUnidadId, 'o_uni' => $observacionesEstado,
+                    'e_box' => $statusBoxId, 'o_box' => $observacionesBox,
+                    'ipsa' => $estatusIpsaId, 'fec' => $fechaIngreso, 'id' => $contenedorId
+                ]);
+            }
         } else {
-            $estatusIpsa = 'Pendiente'; // Valor por defecto
+            // Si NO existe -> NUEVO (INSERT)
+            $sqlIns = '
+                INSERT INTO contenedores (
+                    nombre, bloque_id, posicion, tipo_unidad_id, modelo_id,
+                    estatus_unidad_id, observaciones_unidad, estatus_box_id, observaciones_box,
+                    estatus_ipsa_id, fecha_ingreso, estado_id
+                ) VALUES (
+                    :nom, :blk, :pos, :tip, :mod,
+                    :e_uni, :o_uni, :e_box, :o_box,
+                    :ipsa, :fec, 1
+                )
+            ';
+            $stmtIns = $pdo->prepare($sqlIns);
+            $stmtIns->execute([
+                'nom' => $codigoContenedor, 'blk' => $bloqueId, 'pos' => $posicion,
+                'tip' => $tipoUnidad, 'mod' => $modelo,
+                'e_uni' => $estadoUnidadId, 'o_uni' => $observacionesEstado,
+                'e_box' => $statusBoxId, 'o_box' => $observacionesBox,
+                'ipsa' => $estatusIpsaId, 'fec' => $fechaIngreso
+            ]);
+            $contenedorId = $pdo->lastInsertId();
         }
 
-        // Insertar los datos en la tabla 'contenedores'
-        $stmt = $pdo->prepare('
-            INSERT INTO contenedores (nombre, bloque_id, posicion, estatus_unidad, observaciones_unidad, estatus_box, observaciones_box, tipo_unidad_id, modelo_id, fecha_ingreso, estatus_ipsa)
-            VALUES (:nombre, :bloque_id, :posicion, :estatus_unidad, :observaciones_unidad, :estatus_box, :observaciones_box, :tipo_unidad_id, :modelo_id, :fecha_ingreso, :estatus_ipsa)
-        ');
-        $stmt->execute([
-            'nombre' => $codigoContenedor,
-            'bloque_id' => $bloque,
-            'posicion' => $posicion,
-            'estatus_unidad' => $estadoUnidad,
-            'observaciones_unidad' => $observacionesEstado,
-            'estatus_box' => $nombreStatusBox,
-            'observaciones_box' => $observacionesBox,
-            'tipo_unidad_id' => $tipoUnidad,
-            'modelo_id' => $modelo,
-            'fecha_ingreso' => $fechaIngreso,
-            'estatus_ipsa' => $estatusIpsa
-        ]);
+        // E. LOGS (Auditoría)
+        // Obtenemos el ID de operación "INGRESO"
+        $stmtOp = $pdo->prepare('SELECT id FROM tipos_operacion WHERE nombre = "INGRESO"');
+        $stmtOp->execute();
+        $opId = $stmtOp->fetchColumn() ?: 1; 
 
-        // Actualizar la capacidad actual del bloque
-        $stmt = $pdo->prepare('UPDATE bloques SET capacidad_actual = capacidad_actual + 1 WHERE id = :bloque_id');
-        $stmt->execute(['bloque_id' => $bloque]);
+        $logMensaje = $esReingreso ? "Reingreso de equipo (Historial recuperado)." : "Ingreso inicial (Equipo nuevo).";
 
-        // Guardar mensaje de éxito en la sesión
-        $_SESSION['toast_message'] = 'El contenedor se guardó exitosamente.';
+        // Log Maestro
+        $stmtLog = $pdo->prepare('INSERT INTO logs_eventos (contenedor_id, usuario_id, tipo_operacion_id, observaciones, estado_id) VALUES (?, ?, ?, ?, 1)');
+        $stmtLog->execute([$contenedorId, $usuario_id, $opId, $logMensaje]);
+        $eventoId = $pdo->lastInsertId();
+
+        // Log Detalle (Ubicación)
+        $stmtDetalle = $pdo->prepare('INSERT INTO logs_traslados (evento_id, bloque_nuevo_id, posicion_nueva) VALUES (?, ?, ?)');
+        $stmtDetalle->execute([$eventoId, $bloqueId, $posicion]);
+
+        $pdo->commit();
+
+        $_SESSION['toast_message'] = $esReingreso ? 'Contenedor reingresado correctamente.' : 'Contenedor ingresado correctamente.';
         $_SESSION['toast_type'] = 'success';
+        header('Location: ingresos.php');
+        exit;
 
-        header('Location: ingresos.php');
-        exit;
     } catch (Exception $e) {
-        // Guardar mensaje de error en la sesión
-        $_SESSION['toast_message'] = 'Error al guardar el contenedor: ' . $e->getMessage();
-        $_SESSION['toast_type'] = 'error';
-        header('Location: ingresos.php');
-        exit;
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        $error_message = $e->getMessage();
     }
 }
 ?>
@@ -113,10 +200,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nuevo Ingreso</title>
     <link rel="stylesheet" href="../styles/ingresos.css/ingresos.css">
+    <style>
+        #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 400px; pointer-events: none; }
+        .toast { padding: 15px 20px; border-radius: 8px; color: #fff; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.15); opacity: 0; transform: translateY(-20px); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { background-color: #dc3545; border-left: 5px solid #bd2130; }
+        .toast.success { background-color: #28a745; border-left: 5px solid #1e7e34; }
+        
+        /* Estilos para validación visual */
+        input.error { border-color: #ff4d4d !important; background-color: #fff5f5; }
+        input.valid { border-color: #28a745 !important; }
+        .error-message { color: #ff4d4d; display: none; font-size: 0.85em; font-weight: bold; }
+        .valid-message { color: #28a745; display: none; font-size: 0.85em; font-weight: bold; }
+    </style>
 </head>
 <body>
-<!-- Contenedor de toasts (si no existe, el JS lo creará igual) -->
-<div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+<div id="toast-container"></div>
 
 <header>
   <div class="header-left">
@@ -127,84 +226,120 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
   </div>
   <div class="header-right">
     <span class="welcome-label">Bienvenido,</span>
-    <span class="username"><?php echo $_SESSION['username']; ?></span>
+    <span class="username"><?php echo htmlspecialchars($_SESSION['username']); ?></span>
     <a href="../logout.php" class="logout-button">Cerrar sesión</a>
   </div>
 </header>
+
 <main>
     <h1>Nuevo Ingreso</h1>
+    
+    <?php
+        $stmtSuc = $pdo->prepare("SELECT nombre FROM sucursales WHERE id = ?");
+        $stmtSuc->execute([$sucursal_id]);
+        $nomSuc = $stmtSuc->fetchColumn();
+    ?>
+
     <?php if ($error_message): ?>
-        <p style="color: red;"><?php echo $error_message; ?></p>
+        <p style="color: red; text-align: center; font-weight: bold;"><?php echo htmlspecialchars($error_message); ?></p>
     <?php endif; ?>
+    
     <form action="ingresos.php" method="post">
         <div class="form-group">
             <label for="fecha_ingreso">Fecha de Ingreso:</label>
-            <input type="date" id="fecha_ingreso" name="fecha_ingreso" required>
+            <input type="date" id="fecha_ingreso" name="fecha_ingreso" required value="<?php echo isset($_POST['fecha_ingreso']) ? htmlspecialchars($_POST['fecha_ingreso']) : ''; ?>">
         </div>
         <div class="form-group">
             <label for="codigo_contenedor">Número de Equipo:</label>
-            <input type="text" id="codigo_contenedor" name="codigo_contenedor" required maxlength="11" pattern="^[A-Z0-9]{11}$" title="Debe tener exactamente 11 caracteres, solo mayúsculas y números">
+            <input type="text" id="codigo_contenedor" name="codigo_contenedor" required maxlength="11" pattern="^[A-Z0-9]{11}$" title="Debe tener exactamente 11 caracteres, solo mayúsculas y números" value="<?php echo isset($_POST['codigo_contenedor']) ? htmlspecialchars($_POST['codigo_contenedor']) : ''; ?>">
             <span class="error-message" id="contenedor-error">Este contenedor ya existe.</span>
             <span class="valid-message" id="contenedor-valid">Contenedor disponible.</span>
         </div>
+        
         <div class="form-group">
             <label for="tipo_unidad">Tipo de Unidad:</label>
             <select id="tipo_unidad" name="tipo_unidad" required>
                 <option value="">Seleccione un tipo</option>
                 <?php foreach ($tiposUnidad as $tipo): ?>
-                    <option value="<?php echo $tipo['id']; ?>"><?php echo htmlspecialchars($tipo['nombre']); ?></option>
+                    <option value="<?php echo $tipo['id']; ?>" <?php echo (isset($_POST['tipo_unidad']) && $_POST['tipo_unidad'] == $tipo['id']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($tipo['nombre']); ?>
+                    </option>
                 <?php endforeach; ?>
             </select>
         </div>
+        
         <div class="form-group">
             <label for="modelo">Modelo:</label>
             <select id="modelo" name="modelo" required>
                 <option value="">Seleccione un modelo</option>
             </select>
         </div>
+        
         <div class="form-group">
             <label for="estado_unidad">Estado de Unidad:</label>
-            <select id="estado_unidad" name="estado_unidad" required>
+            <select id="estado_unidad" name="estado_unidad" required onchange="calcularIpsa()">
                 <option value="">Seleccione un estado</option>
                 <?php foreach ($estadosUnidad as $estado): ?>
-                    <option value="<?php echo $estado['nombre']; ?>"><?php echo htmlspecialchars($estado['nombre']); ?></option>
+                    <option value="<?php echo $estado['id']; ?>" data-nombre="<?php echo htmlspecialchars($estado['nombre']); ?>">
+                        <?php echo htmlspecialchars($estado['nombre']); ?>
+                    </option>
                 <?php endforeach; ?>
             </select>
         </div>
         <div class="form-group">
             <label for="observaciones_estado">Observaciones (Unidad):</label>
-            <textarea id="observaciones_estado" name="observaciones_estado"></textarea>
+            <textarea id="observaciones_estado" name="observaciones_estado"><?php echo isset($_POST['observaciones_estado']) ? htmlspecialchars($_POST['observaciones_estado']) : ''; ?></textarea>
         </div>
+        
         <div class="form-group">
             <label for="status_box">Status de Box:</label>
-            <select id="status_box" name="status_box" required>
+            <select id="status_box" name="status_box" required onchange="calcularIpsa()">
                 <option value="">Seleccione un status</option>
                 <?php foreach ($statusBox as $status): ?>
-                    <option value="<?php echo $status['id']; ?>"><?php echo htmlspecialchars($status['nombre']); ?></option>
+                    <option value="<?php echo $status['id']; ?>" data-nombre="<?php echo htmlspecialchars($status['nombre']); ?>">
+                        <?php echo htmlspecialchars($status['nombre']); ?>
+                    </option>
                 <?php endforeach; ?>
             </select>
         </div>
         <div class="form-group">
             <label for="observaciones_box">Observaciones (Box):</label>
-            <textarea id="observaciones_box" name="observaciones_box"></textarea>
+            <textarea id="observaciones_box" name="observaciones_box"><?php echo isset($_POST['observaciones_box']) ? htmlspecialchars($_POST['observaciones_box']) : ''; ?></textarea>
         </div>
 
-        <!-- Sección de Ubicación -->
+        <!-- Selector IPSA Manual -->
+        <div class="form-group">
+            <label for="estatus_ipsa">Estatus IPSA:</label>
+            <select id="estatus_ipsa" name="estatus_ipsa" required style="border: 2px solid #00695C;">
+                <?php foreach ($listaEstatusIpsa as $ipsa): ?>
+                    <option value="<?php echo $ipsa['id']; ?>" data-nombre="<?php echo htmlspecialchars($ipsa['nombre']); ?>">
+                        <?php echo htmlspecialchars($ipsa['nombre']); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <small style="display:block; margin-top:5px; color:#666;">El sistema sugiere un estatus, pero puedes cambiarlo.</small>
+        </div>
+
         <div class="ubicacion-container">
             <h2>Ubicación</h2>
             <div class="ubicacion-fields">
                 <select id="patio" name="patio" required>
                     <option value="">Seleccione un patio</option>
                     <?php foreach ($patios as $patio): ?>
-                        <option value="<?php echo $patio['id']; ?>"><?php echo htmlspecialchars($patio['nombre']); ?></option>
+                        <option value="<?php echo $patio['id']; ?>" <?php echo (isset($_POST['patio']) && $_POST['patio'] == $patio['id']) ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($patio['nombre']); ?>
+                        </option>
                     <?php endforeach; ?>
                 </select>
+                
                 <select id="bloque" name="bloque" required disabled>
                     <option value="">Seleccione un bloque</option>
                 </select>
-                <input type="text" id="posicion" name="posicion" placeholder="Posición" readonly>
+                
+                <input type="text" id="posicion" name="posicion" placeholder="Posición" readonly required>
             </div>
         </div>
+
         <div class="buttons">
             <a href="../index.php" class="regresar-button">
                 <img src="../imagenes/regresar.png" alt="Regresar">
@@ -222,174 +357,180 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 </footer>
 
 <script>
-// Establecer la fecha actual en el campo de fecha al cargar la página
+// Cálculo sugerido IPSA
+function calcularIpsa() {
+    const unidadSelect = document.getElementById('estado_unidad');
+    const boxSelect = document.getElementById('status_box');
+    const ipsaSelect = document.getElementById('estatus_ipsa');
+
+    const nomUnidad = unidadSelect.options[unidadSelect.selectedIndex]?.dataset.nombre || '';
+    const nomBox = boxSelect.options[boxSelect.selectedIndex]?.dataset.nombre || '';
+
+    let sugerido = 'Pendiente';
+    if (nomUnidad === 'DMG' || nomBox === 'DMG') {
+        sugerido = 'OOS';
+    } else if (nomUnidad === 'OK' && (nomBox === 'OK' || nomBox.includes('Reparación Mínima'))) {
+        sugerido = 'Disponible';
+    } else if (nomUnidad.includes('Pendiente') || nomBox.includes('Pendiente')) {
+        sugerido = 'Pendiente';
+    }
+
+    for (let i = 0; i < ipsaSelect.options.length; i++) {
+        if (ipsaSelect.options[i].dataset.nombre === sugerido) {
+            ipsaSelect.selectedIndex = i;
+            break;
+        }
+    }
+}
+
+// Configuración inicial
 document.addEventListener('DOMContentLoaded', function () {
     const fechaInput = document.getElementById('fecha_ingreso');
-    if (fechaInput) {
+    if (fechaInput && !fechaInput.value) { 
         const hoy = new Date();
         const yyyy = hoy.getFullYear();
         const mm = String(hoy.getMonth() + 1).padStart(2, '0');
         const dd = String(hoy.getDate()).padStart(2, '0');
         fechaInput.value = `${yyyy}-${mm}-${dd}`;
     }
+    // Repoblar si hay error
+    <?php if(isset($_POST['tipo_unidad'])): ?> document.getElementById('tipo_unidad').dispatchEvent(new Event('change')); <?php endif; ?>
+    <?php if(isset($_POST['patio'])): ?> document.getElementById('patio').dispatchEvent(new Event('change')); <?php endif; ?>
 });
-</script>
 
-<script>
-// Carga de modelos por tipo
+// Cargar Modelos
 document.getElementById('tipo_unidad').addEventListener('change', function () {
-    const tipoUnidadId = this.value;
-    const modeloSelect = document.getElementById('modelo');
-
-    modeloSelect.innerHTML = '<option value="">Seleccione un modelo</option>';
-
-    if (tipoUnidadId) {
-        fetch(`obtener_modelos.php?tipo_unidad_id=${tipoUnidadId}`)
-            .then(response => response.json())
-            .then(data => {
-                data.forEach(modelo => {
-                    const option = document.createElement('option');
-                    option.value = modelo.id;
-                    option.textContent = modelo.nombre;
-                    modeloSelect.appendChild(option);
-                });
-            })
-            .catch(error => console.error('Error al cargar los modelos:', error));
+    const tipoId = this.value;
+    const select = document.getElementById('modelo');
+    const prev = "<?php echo $_POST['modelo'] ?? ''; ?>";
+    
+    select.innerHTML = '<option value="">Cargando...</option>';
+    if(tipoId){
+        fetch(`obtener_modelos.php?tipo_unidad_id=${tipoId}`)
+        .then(r => r.json())
+        .then(data => {
+            select.innerHTML = '<option value="">Seleccione un modelo</option>';
+            data.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.text = item.nombre;
+                if(item.id == prev) opt.selected = true;
+                select.appendChild(opt);
+            });
+        });
+    } else {
+        select.innerHTML = '<option value="">Seleccione un modelo</option>';
     }
 });
 
-// Cascada patio -> bloque -> posición
+// Cargar Bloques
 document.getElementById('patio').addEventListener('change', function () {
     const patioId = this.value;
-    const bloqueSelect = document.getElementById('bloque');
-    const posicionInput = document.getElementById('posicion');
+    const select = document.getElementById('bloque');
+    const prev = "<?php echo $_POST['bloque'] ?? ''; ?>";
+    
+    select.innerHTML = '<option value="">Cargando...</option>';
+    select.disabled = true;
+    document.getElementById('posicion').value = '';
 
-    bloqueSelect.innerHTML = '<option value="">Seleccione un bloque</option>';
-    bloqueSelect.disabled = true;
-    posicionInput.value = '';
-
-    if (patioId) {
+    if(patioId){
         fetch(`obtener_bloques.php?patio_id=${patioId}`)
-            .then(response => response.json())
-            .then(data => {
-                data.forEach(bloque => {
-                    const option = document.createElement('option');
-                    option.value = bloque.id;
-                    option.textContent = `Bloque ${bloque.numero}`;
-                    bloqueSelect.appendChild(option);
+        .then(r => r.json())
+        .then(data => {
+            select.innerHTML = '<option value="">Seleccione un bloque</option>';
+            if(data.length > 0){
+                select.disabled = false;
+                data.forEach(item => {
+                    const opt = document.createElement('option');
+                    opt.value = item.id;
+                    const libres = item.capacidad_maxima - item.capacidad_actual;
+                    opt.text = `Bloque ${item.numero} (Libres: ${libres})`;
+                    if(item.id == prev) opt.selected = true;
+                    select.appendChild(opt);
                 });
-                bloqueSelect.disabled = false;
-            })
-            .catch(error => console.error('Error al cargar los bloques:', error));
+                if(prev) select.dispatchEvent(new Event('change'));
+            } else {
+                select.innerHTML = '<option value="">Sin bloques disponibles</option>';
+            }
+        });
     }
 });
 
+// Cargar Posición
 document.getElementById('bloque').addEventListener('change', function () {
     const bloqueId = this.value;
-    const posicionInput = document.getElementById('posicion');
-
-    posicionInput.value = '';
-
-    if (bloqueId) {
+    const input = document.getElementById('posicion');
+    input.value = 'Calculando...';
+    if(bloqueId){
         fetch(`obtener_posicion.php?bloque_id=${bloqueId}`)
-            .then(response => response.json())
-            .then(data => {
-                posicionInput.value = data.posicion;
-            })
-            .catch(error => console.error('Error al cargar la posición:', error));
+        .then(r => r.json())
+        .then(data => {
+            if(data.posicion){
+                input.value = data.posicion;
+            } else if(data.error){
+                input.value = '';
+                alert(data.error);
+                this.value = '';
+            }
+        });
+    } else {
+        input.value = '';
     }
 });
 
-// ------- Notificaciones tipo "toast" (versión robusta) -------
-(function(){
-  function getToastContainer(){
-    let c = document.getElementById('toast-container');
-    if(!c){
-      c = document.createElement('div');
-      c.id = 'toast-container';
-      c.className = 'toast-container';
-      c.setAttribute('aria-live','polite');
-      c.setAttribute('aria-atomic','true');
-      document.body.appendChild(c);
-    }
-    return c;
-  }
+// Validación Contenedor
+document.getElementById('codigo_contenedor').addEventListener('input', function () {
+    this.value = this.value.toUpperCase();
+    const val = this.value;
+    const regex = /^[A-Z0-9]{11}$/;
+    const err = document.getElementById('contenedor-error');
+    const ok = document.getElementById('contenedor-valid');
+    
+    this.classList.remove('error', 'valid');
+    err.style.display = 'none';
+    ok.style.display = 'none';
 
-  window.showToast = function(message, type='success'){
-    const container = getToastContainer();
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(()=> toast.remove(), 4000);
-  };
-})();
-</script>
+    if(regex.test(val)){
+        fetch('verificar_contenedor.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'nombre=' + encodeURIComponent(val)
+        })
+        .then(r => r.text())
+        .then(res => {
+            if(res === 'exists'){
+                this.classList.add('error');
+                err.textContent = 'Este contenedor ya está activo en patio.';
+                err.style.display = 'inline';
+            } else {
+                this.classList.add('valid');
+                ok.textContent = (res === 'available') ? 'Nuevo ingreso (Disponible).' : 'Reingreso (Disponible).';
+                ok.style.display = 'inline';
+            }
+        });
+    }
+});
+
+// Toast
+function showToast(msg, type='success'){
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.textContent = msg;
+    c.appendChild(t);
+    void t.offsetWidth; t.classList.add('show');
+    setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); }, 4000);
+}
 
 <?php if (isset($_SESSION['toast_message'])): ?>
-<script>
-// Mostrar notificación si hay un mensaje en la sesión (con strings seguros)
 document.addEventListener('DOMContentLoaded', function () {
   showToast(
     <?php echo json_encode($_SESSION['toast_message']); ?>,
     <?php echo json_encode($_SESSION['toast_type'] ?? 'success'); ?>
   );
 });
-</script>
 <?php unset($_SESSION['toast_message'], $_SESSION['toast_type']); ?>
 <?php endif; ?>
-
-<script>
-// Verificación de existencia (AJAX) y formato del código de contenedor
-document.getElementById('codigo_contenedor').addEventListener('input', function () {
-    const nombre = this.value;
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'verificar_contenedor.php', true);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-    xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            if (xhr.responseText === 'exists') {
-                document.getElementById('codigo_contenedor').classList.add('error');
-                document.getElementById('codigo_contenedor').classList.remove('valid');
-                document.getElementById('contenedor-error').style.display = 'inline';
-                document.getElementById('contenedor-valid').style.display = 'none';
-            } else {
-                document.getElementById('codigo_contenedor').classList.add('valid');
-                document.getElementById('codigo_contenedor').classList.remove('error');
-                document.getElementById('contenedor-error').style.display = 'none';
-                document.getElementById('contenedor-valid').style.display = 'inline';
-                setTimeout(function () {
-                    document.getElementById('contenedor-valid').classList.add('fade-out');
-                }, 2000);
-                setTimeout(function () {
-                    document.getElementById('contenedor-valid').style.display = 'none';
-                    document.getElementById('contenedor-valid').classList.remove('fade-out');
-                }, 3000);
-            }
-        }
-    };
-    xhr.send('nombre=' + encodeURIComponent(nombre));
-});
-
-// Validación de formato: solo mayúsculas y números, máximo 11 caracteres
-document.getElementById('codigo_contenedor').addEventListener('input', function () {
-    // Forzar mayúsculas automáticamente
-    this.value = this.value.toUpperCase();
-
-    // Validar formato
-    const regex = /^[A-Z0-9]{0,11}$/;
-    if (!regex.test(this.value)) {
-        this.classList.add('error');
-        document.getElementById('contenedor-error').textContent = 'Solo letras mayúsculas y números, máximo 11 caracteres.';
-        document.getElementById('contenedor-error').style.display = 'inline';
-        document.getElementById('contenedor-valid').style.display = 'none';
-    } else if (this.value.length === 11) {
-        // Aquí puedes dejar tu validación AJAX para existencia
-    } else {
-        this.classList.remove('error');
-        document.getElementById('contenedor-error').style.display = 'none';
-    }
-});
 </script>
 
 </body>

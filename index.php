@@ -131,12 +131,14 @@ if (isset($_SESSION['sucursal_activa'])) {
 
         <div class="menu">
             <!-- 1. INGRESOS -->
+             <?php if ($rol_id == 1 || $rol_id == 2 || $rol_id == 3): ?>
             <div class="menu-item">
                 <a href="ingresos/ingresos.php">
                     <img src="imagenes/ingreso.png" alt="Ingresos">
                     <span>Ingresos</span>
                 </a>
             </div>
+            <?php endif; ?>
 
             <!-- 2. BLOQUES -->
             <div class="menu-item">
@@ -147,12 +149,14 @@ if (isset($_SESSION['sucursal_activa'])) {
             </div>
 
             <!-- 3. TRASLADOS -->
+            <?php if ($rol_id == 1 || $rol_id == 2 || $rol_id == 3): ?>
             <div class="menu-item">
                 <a href="traslados/traslados.php">
                     <img src="imagenes/traslados.png" alt="Traslados">
                     <span>Traslados</span>
                 </a>
             </div>
+            <?php endif; ?>
 
             <!-- 4. REPORTES (Rol 1 y 2) -->
             <?php if ($rol_id == 1 || $rol_id == 2): ?>

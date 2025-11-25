@@ -1,133 +1,157 @@
+/* 1. RESET GLOBAL: Para que el padding no rompa los anchos */
+* {
+    box-sizing: border-box;
+}
+
 body {
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
-    background: linear-gradient(90deg, #00695C, #80CBC4); /* Gradiente de fondo */
-    font-family: Arial, sans-serif;
+    background: linear-gradient(90deg, #00695C, #80CBC4);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Fuente más moderna */
     margin: 0;
 }
 
 .login-container {
     background-color: #fff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    padding: 30px; /* Un poco más de aire */
+    border-radius: 10px; /* Bordes más suaves */
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2); /* Sombra con más profundidad */
     text-align: center;
-    width: 450px;
-    margin: 0 20px; /* Añadir márgenes laterales */
-    box-sizing: border-box; /* Asegurar que el padding no afecte el ancho total */
+    width: 100%;
+    max-width: 450px; /* Responsive: no pasará de 450px */
+    margin: 0 20px;
 }
 
 .login-header {
-    margin-bottom: 20px;
+    margin-bottom: 25px;
 }
 
 .login-header .logo {
     width: 130px;
-    margin-bottom: -4px;
+    display: block;
+    margin: 0 auto; /* Asegura centrado perfecto */
 }
 
-.login-container h2 {
-    margin-bottom: 20px;
-    font-size: 24px;
-    color: #333;
-}
-
+/* Etiquetas */
 .login-container label {
     display: block;
     text-align: left;
-    margin-bottom: 5px;
-    font-weight: bold;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #444;
+    font-size: 14px;
+}
+
+/* Estilos generales para inputs */
+/* AQUÍ ESTABA EL ERROR: Agregamos input[type="text"] para que no se deforme al mostrar contraseña */
+.login-container input[type="email"],
+.login-container input[type="password"],
+.login-container input[type="text"] { 
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 15px;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    outline: none; /* Quitamos el borde azul feo por defecto */
+}
+
+/* Efecto al hacer clic en el input */
+.login-container input:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+/* --- AQUÍ ESTÁ LA MAGIA DEL OJO --- */
+/* Contenedor relativo para el password */
+.password-container {
+    position: relative;
+    width: 100%;
+    margin-bottom: 20px; /* El margen lo maneja el contenedor, no el input */
+}
+
+/* Ajuste específico para el input de password dentro del contenedor */
+.password-container input[type="password"],
+.password-container input[type="text"] { /* Agregado type="text" para cuando se revela */
+    padding-right: 45px; /* Espacio para que el texto no toque el ojo */
+    margin-bottom: 0; /* Quitamos margen del input porque lo tiene el contenedor */
+}
+
+/* Posición del icono del ojo */
+#togglePassword {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #888;
+    font-size: 16px;
+    transition: color 0.3s;
+}
+
+#togglePassword:hover {
     color: #333;
 }
 
-.login-container input[type="email"],
-.login-container input[type="password"] {
-    width: 100%;
-    padding: 10px;
-    margin-bottom: 15px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 14px;
-    box-sizing: border-box; /* Asegurar que el padding no afecte el ancho total */
+/* Separación para el input de email que no está en contenedor especial */
+#email {
+    margin-bottom: 20px;
 }
 
+/* --- BOTONES Y ENLACES --- */
 .login-container button {
     width: 100%;
-    padding: 10px;
+    padding: 12px;
     background-color: #007bff;
     border: none;
-    border-radius: 4px;
+    border-radius: 5px;
     color: #fff;
     font-size: 16px;
+    font-weight: bold;
     cursor: pointer;
-    box-sizing: border-box; /* Asegurar que el padding no afecte el ancho total */
+    transition: background-color 0.3s;
 }
 
 .login-container button:hover {
     background-color: #0056b3;
 }
 
-.login-container .remember-me {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    margin-bottom: 15px;
-}
-
-.login-container .remember-me input {
-    margin-right: 5px;
-    width: auto; /* Ajustar el tamaño del checkbox */
-}
-
 .login-container .forgot-password {
-    text-align: center; /* Centrar el texto */
-    margin-top: 10px; /* Añadir margen superior */
+    text-align: center;
+    margin-top: 15px;
 }
 
 .login-container .forgot-password a {
     color: #007bff;
     text-decoration: none;
+    font-size: 14px;
 }
 
 .login-container .forgot-password a:hover {
     text-decoration: underline;
 }
 
+/* Mensajes de error */
 .error-message {
     color: #fff;
     background-color: #ff4d4d;
-    padding: 10px;
-    border-radius: 4px;
-    margin-bottom: 15px;
-    animation: fadeIn 0.5s ease-in-out;
-}
-
-.error-message.fade-out {
-    animation: fadeOut 0.5s ease-in-out forwards;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
-@keyframes fadeOut {
-    from {
-        opacity: 1;
-    }
-    to {
-        opacity: 0;
-    }
+    padding: 12px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    animation: fadeIn 0.4s ease-out;
 }
 
 footer {
-    margin-top: 20px;
+    margin-top: 25px;
     font-size: 12px;
-    color: #888;
+    color: #999;
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
