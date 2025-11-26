@@ -1,15 +1,23 @@
 <?php
 session_start();
 if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
+    header('Location: ../login.php');
     exit;
 }
 
+// 1. CONTEXTO DE SUCURSAL (Obligatorio)
+if (!isset($_SESSION['sucursal_activa'])) {
+    header('Location: ../index.php');
+    exit;
+}
+$sucursal_id = $_SESSION['sucursal_activa'];
+
 require '../config/database.php';
 
-// Obtener todos los patios
-$sqlPatios = 'SELECT id, nombre FROM patios';
-$stmtPatios = $pdo->query($sqlPatios);
+// 2. OBTENER PATIOS (Filtrados por Sucursal Activa y Estado)
+$sqlPatios = 'SELECT id, nombre FROM patios WHERE estado_id = 1 AND sucursal_id = :sucursal ORDER BY nombre ASC';
+$stmtPatios = $pdo->prepare($sqlPatios);
+$stmtPatios->execute(['sucursal' => $sucursal_id]);
 $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
@@ -31,11 +39,11 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
                 return;
             }
 
-            fetch(`obtener_contenedores.php?query=${query}`)
+            fetch(`obtener_contenedores.php?query=${encodeURIComponent(query)}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
-                        alert(data.error);
+                        console.error(data.error);
                     } else {
                         resultados.style.display = 'block';
                         data.forEach(contenedor => {
@@ -99,11 +107,14 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
         function cargarBloques(patioId) {
             const bloqueSelect = document.getElementById('nuevo_bloque_id');
             const posicionInput = document.getElementById('nueva_posicion');
+            const btnTrasladar = document.querySelector('.trasladar-button');
 
             bloqueSelect.innerHTML = '<option value="">Seleccione un bloque</option>';
             bloqueSelect.disabled = true;
             posicionInput.value = '';
             posicionInput.disabled = true;
+            // Deshabilitar botón al cambiar de patio para evitar errores
+            if(btnTrasladar) btnTrasladar.disabled = true;
 
             if (!patioId) return;
 
@@ -116,7 +127,16 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
                         data.forEach(bloque => {
                             const option = document.createElement('option');
                             option.value = bloque.id;
-                            option.textContent = `Bloque ${bloque.numero}`;
+                            
+                            // LÓGICA DE PREVISUALIZACIÓN DE ESPACIO
+                            // Calculamos espacios libres para mostrarlos al lado del nombre
+                            const max = parseInt(bloque.capacidad_maxima);
+                            const actual = parseInt(bloque.capacidad_actual);
+                            const libres = max - actual;
+                            
+                            // Formato: "Bloque 1 (Libres: 5)"
+                            option.textContent = `Bloque ${bloque.numero} (Libre: ${libres})`;
+                            
                             bloqueSelect.appendChild(option);
                         });
                         bloqueSelect.disabled = false;
@@ -130,23 +150,29 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
         function cargarPosiciones(bloqueId) {
             const posicionInput = document.getElementById('nueva_posicion');
             const trasladarButton = document.querySelector('.trasladar-button');
-            posicionInput.value = '';
+            
+            posicionInput.value = 'Calculando...';
             posicionInput.disabled = true;
             trasladarButton.disabled = true;
 
-            if (!bloqueId) return;
+            if (!bloqueId) {
+                posicionInput.value = '';
+                return;
+            }
 
             fetch(`obtener_posiciones_disponibles.php?bloque_id=${bloqueId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
                         alert(data.error);
+                        posicionInput.value = '';
                     } else if (data.posicion) {
                         posicionInput.value = data.posicion; // Asignar la posición disponible
                         posicionInput.disabled = false; // Habilitar el campo
                         trasladarButton.disabled = false; // Habilitar el botón
                     } else {
                         alert('No hay posiciones disponibles en este bloque.');
+                        posicionInput.value = '';
                     }
                 })
                 .catch(error => console.error('Error al cargar posiciones:', error));
@@ -163,7 +189,7 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
   </div>
   <div class="header-right">
     <span class="welcome-label">Bienvenido,</span>
-    <span class="username"><?php echo $_SESSION['username']; ?></span>
+    <span class="username"><?php echo htmlspecialchars($_SESSION['username']); ?></span>
     <a href="../logout.php" class="logout-button">Cerrar sesión</a>
   </div>
 </header>
@@ -174,7 +200,7 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
             <div class="ubicacion-container">
                 <h2>Buscar Contenedor</h2>
                 <div class="ubicacion-fields" style="position: relative;">
-                    <input type="text" id="buscar-contenedor" placeholder="Buscar contenedor..." onkeyup="buscarContenedor(this.value)">
+                    <input type="text" id="buscar-contenedor" placeholder="Buscar contenedor..." onkeyup="buscarContenedor(this.value)" autocomplete="off">
                     <input type="hidden" id="contenedor_id" name="contenedor_id" required>
                     <div id="resultados-contenedores" class="resultados-container" style="display: none;"></div>
                 </div>
@@ -200,9 +226,11 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
                             <option value="<?php echo $patio['id']; ?>"><?php echo htmlspecialchars($patio['nombre']); ?></option>
                         <?php endforeach; ?>
                     </select>
+                    
                     <select id="nuevo_bloque_id" name="nuevo_bloque_id" onchange="cargarPosiciones(this.value)" required disabled>
                         <option value="">Seleccione un bloque</option>
                     </select>
+                    
                     <input type="text" id="nueva_posicion" name="nueva_posicion" placeholder="Posición" readonly required>
                 </div>
             </div>
@@ -225,3 +253,4 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
     </footer>
 </body>
 </html>
+

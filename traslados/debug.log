@@ -29,3 +29,16 @@ Datos recibidos: Contenedor ID: 10, Nuevo Bloque ID: 49, Nueva Posición: 25
 Información del contenedor: {"bloque_id":48,"posicion":24}
 Contenedores debajo encontrados: 1
 Error: Hay contenedores debajo, no se puede trasladar
+Inicio del proceso de traslado
+Datos recibidos: Contenedor ID: 3, Nuevo Bloque ID: 1, Nueva Posición: 24
+Información del contenedor: {"bloque_id":3,"posicion":25}
+Contenedores debajo encontrados: 1
+Error: Hay contenedores debajo, no se puede trasladar
+Inicio del proceso de traslado
+Datos recibidos: Contenedor ID: 2, Nuevo Bloque ID: 1, Nueva Posición: 24
+Información del contenedor: {"bloque_id":3,"posicion":24}
+Contenedores debajo encontrados: 0
+Posición ocupada encontrada: 0
+Ubicación actualizada: Nuevo Bloque ID: 1, Nueva Posición: 24
+Capacidad ajustada: Nuevo Bloque ID: 1, Bloque Actual ID: 3
+Proceso de traslado completado exitosamente
