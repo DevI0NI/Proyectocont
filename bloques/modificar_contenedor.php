@@ -5,15 +5,15 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Contexto de Sucursal (Seguridad)
+// Contexto de Sucursal
 if (!isset($_SESSION['sucursal_activa'])) {
     header('Location: ../../index.php');
     exit;
 }
 $sucursal_id = $_SESSION['sucursal_activa'];
+$usuario_id = $_SESSION['user_id'];
 
 date_default_timezone_set('America/Guatemala');
-
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
@@ -21,7 +21,7 @@ error_reporting(E_ALL);
 require '../config/database.php';
 
 // =======================================================
-// 1. CARGAR DATOS DEL CONTENEDOR
+// 1. CARGAR DATOS ACTUALES (GET)
 // =======================================================
 $contenedor = null;
 $modelos = [];
@@ -29,20 +29,18 @@ $modelos = [];
 if (isset($_GET['nombre'])) {
     $nombreContenedor = $_GET['nombre'];
     
-    // Seleccionamos los IDs de los estatus actuales para pre-seleccionarlos en el HTML
+    // Traemos los datos actuales y sus nombres para poder comparar en el log
     $stmt = $pdo->prepare('
-        SELECT 
-            c.*,
-            t.nombre as tipo_unidad_nombre,
-            m.nombre as modelo_nombre,
-            b.numero as bloque_numero
+        SELECT c.*, 
+               t.nombre as tipo_nombre, 
+               m.nombre as modelo_nombre
         FROM contenedores c
         LEFT JOIN tipos_unidad t ON c.tipo_unidad_id = t.id
         LEFT JOIN modelos m ON c.modelo_id = m.id
-        LEFT JOIN bloques b ON c.bloque_id = b.id
-        LEFT JOIN patios p ON b.patio_id = p.id
+        JOIN patios p ON c.bloque_id = (SELECT id FROM bloques WHERE id = c.bloque_id) 
+                      AND p.id = (SELECT patio_id FROM bloques WHERE id = c.bloque_id)
         WHERE c.nombre = :nombre 
-          AND p.sucursal_id = :sucursal -- Seguridad: Solo de esta sucursal
+          AND p.sucursal_id = :sucursal
           AND c.estado_id = 1
     ');
     $stmt->execute(['nombre' => $nombreContenedor, 'sucursal' => $sucursal_id]);
@@ -55,103 +53,176 @@ if (isset($_GET['nombre'])) {
         exit;
     }
 
-    // Cargar modelos del tipo actual
+    // Cargar modelos para el select inicial
     if (!empty($contenedor['tipo_unidad_id'])) {
-        $stmtModelos = $pdo->prepare('SELECT id, nombre FROM modelos WHERE tipo_unidad_id = :id AND estado_id = 1');
-        $stmtModelos->execute(['id' => $contenedor['tipo_unidad_id']]);
-        $modelos = $stmtModelos->fetchAll();
+        $stmtMod = $pdo->prepare('SELECT id, nombre FROM modelos WHERE tipo_unidad_id = ? AND estado_id = 1');
+        $stmtMod->execute([$contenedor['tipo_unidad_id']]);
+        $modelos = $stmtMod->fetchAll();
     }
+} else {
+    header('Location: bloques.php');
+    exit;
 }
 
 // =======================================================
-// 2. CARGAR CATALOGOS (Para los Selects)
+// 2. CARGAR CATÁLOGOS
 // =======================================================
+$stmtTipos = $pdo->query('SELECT id, nombre FROM tipos_unidad WHERE estado_id = 1 ORDER BY nombre');
+$tiposUnidad = $stmtTipos->fetchAll(PDO::FETCH_KEY_PAIR); // Array [ID => Nombre] para logs rápidos
 
-// Tipos de Unidad
-$stmtTiposUnidad = $pdo->query('SELECT id, nombre FROM tipos_unidad WHERE estado_id = 1 ORDER BY nombre');
-$tiposUnidad = $stmtTiposUnidad->fetchAll();
-
-// Buscar IDs de tipos de estatus (Unidad vs Estructura)
+// IDs de Tipos de Estatus (Para logs_estatus)
 $stmtCat = $pdo->prepare('SELECT id FROM tipos_estatus WHERE nombre = :nombre');
-
-// Estatus Unidad
 $stmtCat->execute(['nombre' => 'Unidad']);
 $idCatUnidad = $stmtCat->fetchColumn();
-$stmtEstadosUnidad = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = :id AND estado_id = 1 ORDER BY nombre');
-$stmtEstadosUnidad->execute(['id' => $idCatUnidad]);
-$estadosUnidad = $stmtEstadosUnidad->fetchAll();
 
-// Estatus Box (Estructura)
 $stmtCat->execute(['nombre' => 'Estructura']);
 $idCatBox = $stmtCat->fetchColumn();
-$stmtStatusBox = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = :id AND estado_id = 1 ORDER BY nombre');
-$stmtStatusBox->execute(['id' => $idCatBox]);
-$statusBox = $stmtStatusBox->fetchAll();
 
-// NUEVO: Estatus IPSA (Manual)
+// Listas para Selects
+$stmtEstU = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = ? AND estado_id = 1 ORDER BY nombre');
+$stmtEstU->execute([$idCatUnidad]);
+$estadosUnidad = $stmtEstU->fetchAll(PDO::FETCH_ASSOC);
+
+$stmtEstB = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = ? AND estado_id = 1 ORDER BY nombre');
+$stmtEstB->execute([$idCatBox]);
+$statusBox = $stmtEstB->fetchAll(PDO::FETCH_ASSOC);
+
+// Estatus IPSA
 $stmtIpsa = $pdo->query('SELECT id, nombre FROM estatus_ipsa WHERE estado_id = 1 ORDER BY nombre');
-$estatusIpsaList = $stmtIpsa->fetchAll();
+$listaIpsa = $stmtIpsa->fetchAll(PDO::FETCH_KEY_PAIR);
 
 // =======================================================
-// 3. PROCESAR FORMULARIO
+// 3. PROCESAR FORMULARIO (POST)
 // =======================================================
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $nuevoNombre         = trim(strtoupper($_POST['codigo_contenedor']));
-    $tipoUnidad          = (int)$_POST['tipo_unidad'];
-    $modelo              = (int)$_POST['modelo'];
-    $estadoUnidadId      = (int)$_POST['estado_unidad']; 
-    $observacionesEstado = $_POST['observaciones_estado'];
-    $statusBoxId         = (int)$_POST['status_box'];
-    $observacionesBox    = $_POST['observaciones_box'];
-    $estatusIpsaId       = (int)$_POST['estatus_ipsa']; // Valor manual
+    // Datos Nuevos del Formulario
+    $nuevoNombre   = trim(strtoupper($_POST['codigo_contenedor']));
+    $nuevoTipo     = (int)$_POST['tipo_unidad'];
+    $nuevoModelo   = (int)$_POST['modelo'];
+    $nuevoEstUni   = (int)$_POST['estado_unidad'];
+    $nuevaObsUni   = trim($_POST['observaciones_estado']);
+    $nuevoEstBox   = (int)$_POST['status_box'];
+    $nuevaObsBox   = trim($_POST['observaciones_box']);
+    $nuevoIpsa     = (int)$_POST['estatus_ipsa'];
     
-    // Mantenemos ubicación actual
-    $bloqueId            = (int)$_POST['bloque'];
-    $posicion            = (int)$_POST['posicion'];
-
-    $idContenedor = $contenedor['id'];
+    $idContenedor  = $contenedor['id'];
 
     try {
         $pdo->beginTransaction();
 
-        // Verificar duplicidad (si cambió el nombre)
-        if ($nuevoNombre !== $nombreContenedor) {
-            $stmt = $pdo->prepare('SELECT COUNT(*) FROM contenedores WHERE nombre = :nombre AND id != :id');
-            $stmt->execute(['nombre' => $nuevoNombre, 'id' => $idContenedor]);
-            if ($stmt->fetchColumn() > 0) {
-                throw new Exception('Ya existe otro contenedor con ese número.');
-            }
+        // 3.1. Validación de Duplicado (si cambió el nombre)
+        if ($nuevoNombre !== $contenedor['nombre']) {
+            $stmtDup = $pdo->prepare('SELECT COUNT(*) FROM contenedores WHERE nombre = :nombre AND id != :id');
+            $stmtDup->execute(['nombre' => $nuevoNombre, 'id' => $idContenedor]);
+            if ($stmtDup->fetchColumn() > 0) throw new Exception('Ya existe otro contenedor con ese nombre.');
         }
 
-        // Actualizar (Usando los nombres de columna CORRECTOS de la nueva BD: _id)
-        $stmt = $pdo->prepare('
+        // 3.2. Actualizar Contenedor
+        $sqlUpd = '
             UPDATE contenedores SET 
-                nombre = :nombre,
-                tipo_unidad_id = :tipo_id,
-                modelo_id = :modelo_id,
-                estatus_unidad_id = :e_unidad,
-                observaciones_unidad = :obs_unidad,
-                estatus_box_id = :e_box,
-                observaciones_box = :obs_box,
-                estatus_ipsa_id = :e_ipsa
+                nombre = :nom, tipo_unidad_id = :tip, modelo_id = :mod,
+                estatus_unidad_id = :e_uni, observaciones_unidad = :o_uni,
+                estatus_box_id = :e_box, observaciones_box = :o_box,
+                estatus_ipsa_id = :ipsa
             WHERE id = :id
-        ');
-
-        $stmt->execute([
-            'nombre'      => $nuevoNombre,
-            'tipo_id'     => $tipoUnidad,
-            'modelo_id'   => $modelo,
-            'e_unidad'    => $estadoUnidadId,
-            'obs_unidad'  => $observacionesEstado,
-            'e_box'       => $statusBoxId,
-            'obs_box'     => $observacionesBox,
-            'e_ipsa'      => $estatusIpsaId, // Se guarda lo que el usuario eligió
-            'id'          => $idContenedor
+        ';
+        $stmtUpd = $pdo->prepare($sqlUpd);
+        $stmtUpd->execute([
+            'nom' => $nuevoNombre, 'tip' => $nuevoTipo, 'mod' => $nuevoModelo,
+            'e_uni' => $nuevoEstUni, 'o_uni' => $nuevaObsUni,
+            'e_box' => $nuevoEstBox, 'o_box' => $nuevaObsBox,
+            'ipsa' => $nuevoIpsa, 'id' => $idContenedor
         ]);
+
+        // =======================================================
+        // 4. AUDITORÍA INTELIGENTE (LOGS SEPARADOS)
+        // =======================================================
+        
+        // IDs de Operación
+        $opModDatos = 4;   // MODIFICACION_DATOS
+        $opModEstatus = 3; // MODIFICACION_ESTATUS
+
+        // Helper para insertar evento
+        function registrarEvento($pdo, $cid, $uid, $op, $obs) {
+            $stmt = $pdo->prepare('INSERT INTO logs_eventos (contenedor_id, usuario_id, tipo_operacion_id, observaciones, estado_id) VALUES (?, ?, ?, ?, 1)');
+            $stmt->execute([$cid, $uid, $op, $obs]);
+            return $pdo->lastInsertId();
+        }
+
+        // --- A. CAMBIOS DE DATOS (Texto, Tipo, Modelo, Obs) ---
+        // Se registran en logs_modificaciones
+        
+        // 1. Nombre
+        if ($contenedor['nombre'] !== $nuevoNombre) {
+            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de código de equipo");
+            $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
+            $stmtDet->execute([$eid, 'Nombre', $contenedor['nombre'], $nuevoNombre]);
+        }
+
+        // 2. Tipo Unidad
+        if ($contenedor['tipo_unidad_id'] != $nuevoTipo) {
+            $nombreNuevoTipo = $tiposUnidad[$nuevoTipo] ?? 'ID:'.$nuevoTipo;
+            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de Tipo de Unidad");
+            $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
+            $stmtDet->execute([$eid, 'Tipo Unidad', $contenedor['tipo_nombre'], $nombreNuevoTipo]);
+        }
+
+        // 3. Modelo
+        if ($contenedor['modelo_id'] != $nuevoModelo) {
+            // Buscar nombre del nuevo modelo para el log
+            $stmtM = $pdo->prepare("SELECT nombre FROM modelos WHERE id = ?");
+            $stmtM->execute([$nuevoModelo]);
+            $nombreNuevoModelo = $stmtM->fetchColumn();
+
+            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de Modelo");
+            $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
+            $stmtDet->execute([$eid, 'Modelo', $contenedor['modelo_nombre'], $nombreNuevoModelo]);
+        }
+
+        // 4. Observaciones (Unidad)
+        if ($contenedor['observaciones_unidad'] !== $nuevaObsUni) {
+            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModDatos, "Actualización Obs. Unidad");
+            $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
+            $stmtDet->execute([$eid, 'Obs. Unidad', $contenedor['observaciones_unidad'], $nuevaObsUni]);
+        }
+
+        // 5. Observaciones (Box)
+        if ($contenedor['observaciones_box'] !== $nuevaObsBox) {
+            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModDatos, "Actualización Obs. Box");
+            $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
+            $stmtDet->execute([$eid, 'Obs. Box', $contenedor['observaciones_box'], $nuevaObsBox]);
+        }
+
+        // --- B. CAMBIO DE ESTATUS IPSA ---
+        // Se registra en logs_ipsa
+        if ($contenedor['estatus_ipsa_id'] != $nuevoIpsa) {
+            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModEstatus, "Cambio de Estatus IPSA");
+            $stmtDet = $pdo->prepare('INSERT INTO logs_ipsa (evento_id, estatus_anterior_id, estatus_nuevo_id) VALUES (?, ?, ?)');
+            $stmtDet->execute([$eid, $contenedor['estatus_ipsa_id'], $nuevoIpsa]);
+        }
+
+        // --- C. CAMBIOS DE ESTATUS OPERATIVOS (Unidad/Box) ---
+        // Se registran en logs_estatus (Usando los IDs de tipos_estatus: 1=Unidad, 2=Estructura)
+
+        // 1. Estatus Unidad
+        if ($contenedor['estatus_unidad_id'] != $nuevoEstUni) {
+            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModEstatus, "Cambio Estatus de Unidad");
+            // Nota: Aquí usamos los IDs normalizados (tipo_estatus_id = 1 para Unidad)
+            $stmtDet = $pdo->prepare('INSERT INTO logs_estatus (evento_id, tipo_estatus_id, valor_anterior_id, valor_nuevo_id) VALUES (?, ?, ?, ?)');
+            $stmtDet->execute([$eid, $idCatUnidad, $contenedor['estatus_unidad_id'], $nuevoEstUni]);
+        }
+
+        // 2. Estatus Box
+        if ($contenedor['estatus_box_id'] != $nuevoEstBox) {
+            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModEstatus, "Cambio Estatus de Estructura");
+            // Nota: Aquí usamos los IDs normalizados (tipo_estatus_id = 2 para Estructura)
+            $stmtDet = $pdo->prepare('INSERT INTO logs_estatus (evento_id, tipo_estatus_id, valor_anterior_id, valor_nuevo_id) VALUES (?, ?, ?, ?)');
+            $stmtDet->execute([$eid, $idCatBox, $contenedor['estatus_box_id'], $nuevoEstBox]);
+        }
 
         $pdo->commit();
 
-        $_SESSION['toast_message'] = 'Contenedor actualizado exitosamente';
+        $_SESSION['toast_message'] = 'Contenedor actualizado correctamente.';
         $_SESSION['toast_type'] = 'success';
         header('Location: bloques.php');
         exit;
@@ -191,24 +262,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     <main>
     <h1>Modificar Contenedor</h1>
-    
+
     <form action="" method="post">
         <div class="form-group">
             <label for="codigo_contenedor">Código del Contenedor:</label>
             <input type="text" id="codigo_contenedor" name="codigo_contenedor" 
                    value="<?php echo htmlspecialchars($contenedor['nombre']); ?>" required>
-            <span class="error-message" id="contenedor-error">Este contenedor ya existe.</span>
-            <span class="valid-message" id="contenedor-valid">Nombre disponible.</span>
+            <span class="error-message" id="contenedor-error">Ya existe.</span>
+            <span class="valid-message" id="contenedor-valid">Disponible.</span>
         </div>
 
         <div class="form-group">
             <label for="tipo_unidad">Tipo de Unidad:</label>
             <select id="tipo_unidad" name="tipo_unidad" required>
-                <option value="">Seleccione un tipo</option>
-                <?php foreach ($tiposUnidad as $tipo): ?>
-                    <option value="<?php echo $tipo['id']; ?>" 
-                        <?php echo ($tipo['id'] == $contenedor['tipo_unidad_id']) ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($tipo['nombre']); ?>
+                <?php foreach ($tiposUnidad as $id => $nombre): ?>
+                    <option value="<?php echo $id; ?>" <?php echo ($id == $contenedor['tipo_unidad_id']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($nombre); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -217,11 +286,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <div class="form-group">
             <label for="modelo">Modelo:</label>
             <select id="modelo" name="modelo" required>
-                <option value="">Seleccione un modelo</option>
-                <?php foreach ($modelos as $modelo): ?>
-                    <option value="<?php echo $modelo['id']; ?>"
-                        <?php echo ($modelo['id'] == $contenedor['modelo_id']) ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($modelo['nombre']); ?>
+                <?php foreach ($modelos as $mod): ?>
+                    <option value="<?php echo $mod['id']; ?>" <?php echo ($mod['id'] == $contenedor['modelo_id']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($mod['nombre']); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -230,29 +297,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <div class="form-group">
             <label for="estado_unidad">Estado de la Unidad:</label>
             <select id="estado_unidad" name="estado_unidad" required>
-                <option value="">Seleccione un estado</option>
-                <?php foreach ($estadosUnidad as $estado): ?>
-                    <option value="<?php echo $estado['id']; ?>"
-                        <?php echo ($estado['id'] == $contenedor['estatus_unidad_id']) ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($estado['nombre']); ?>
+                <?php foreach ($estadosUnidad as $est): ?>
+                    <option value="<?php echo $est['id']; ?>" <?php echo ($est['id'] == $contenedor['estatus_unidad_id']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($est['nombre']); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
         </div>
 
         <div class="form-group">
-            <label for="observaciones_estado">Observaciones del Estado:</label>
+            <label for="observaciones_estado">Observaciones Unidad:</label>
             <textarea id="observaciones_estado" name="observaciones_estado"><?php echo htmlspecialchars($contenedor['observaciones_unidad']); ?></textarea>
         </div>
 
         <div class="form-group">
             <label for="status_box">Status Box:</label>
             <select id="status_box" name="status_box" required>
-                <option value="">Seleccione un estado</option>
-                <?php foreach ($statusBox as $status): ?>
-                    <option value="<?php echo $status['id']; ?>"
-                        <?php echo ($status['id'] == $contenedor['estatus_box_id']) ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($status['nombre']); ?>
+                <?php foreach ($statusBox as $est): ?>
+                    <option value="<?php echo $est['id']; ?>" <?php echo ($est['id'] == $contenedor['estatus_box_id']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($est['nombre']); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -263,21 +326,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <textarea id="observaciones_box" name="observaciones_box"><?php echo htmlspecialchars($contenedor['observaciones_box']); ?></textarea>
         </div>
         
-        <!-- NUEVO: Campo Manual Estatus IPSA -->
-        <div class="form-group" style="border: 2px solid #00695C; padding: 10px; border-radius: 5px; background-color: #f9f9f9;">
-            <label for="estatus_ipsa" style="color: #00695C;"><strong>Estatus IPSA (Manual):</strong></label>
+        <!-- Estatus IPSA (Manual) -->
+        <div class="form-group" style="background-color:#e8f5e9; border:1px solid #81c784; padding:10px; border-radius:5px;">
+            <label for="estatus_ipsa" style="color:#2e7d32;">Estatus IPSA:</label>
             <select id="estatus_ipsa" name="estatus_ipsa" required>
-                <option value="">Seleccione estatus final</option>
-                <?php foreach ($estatusIpsaList as $ipsa): ?>
-                    <option value="<?php echo $ipsa['id']; ?>"
-                        <?php echo ($ipsa['id'] == $contenedor['estatus_ipsa_id']) ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($ipsa['nombre']); ?>
+                <?php foreach ($listaIpsa as $id => $nombre): ?>
+                    <option value="<?php echo $id; ?>" <?php echo ($id == $contenedor['estatus_ipsa_id']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($nombre); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
         </div>
 
-        <!-- Campos ocultos -->
+        <!-- Hidden -->
         <input type="hidden" name="bloque" value="<?php echo $contenedor['bloque_id']; ?>">
         <input type="hidden" name="posicion" value="<?php echo $contenedor['posicion']; ?>">
 
@@ -292,79 +353,79 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </button>
         </div>
     </form>
-</main>
+    </main>
     <footer>
         <p>&copy; IPSA Web - 2025</p>
     </footer>
 
     <script>
-    // Validación AJAX de nombre
+    // Validación nombre (AJAX)
     document.getElementById('codigo_contenedor').addEventListener('input', function() {
         const nombre = this.value.toUpperCase();
         const nombreOriginal = '<?php echo $nombreContenedor; ?>';
         
-        if (nombre === nombreOriginal) {
-            document.getElementById('codigo_contenedor').classList.remove('error', 'valid');
-            document.getElementById('contenedor-error').style.display = 'none';
-            document.getElementById('contenedor-valid').style.display = 'none';
-            return;
-        }
+        const err = document.getElementById('contenedor-error');
+        const ok = document.getElementById('contenedor-valid');
+        const input = this;
+
+        input.classList.remove('error', 'valid');
+        err.style.display = 'none';
+        ok.style.display = 'none';
+        
+        if (nombre === nombreOriginal || nombre === '') return;
 
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', '../ingresos/verificar_contenedor.php', true); // Reusa el verificador de ingresos
+        xhr.open('POST', '../ingresos/verificar_contenedor.php', true);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === 4 && xhr.status === 200) {
+        xhr.onload = function() {
+            if (xhr.status === 200) {
                 if (xhr.responseText === 'exists') {
-                    document.getElementById('codigo_contenedor').classList.add('error');
-                    document.getElementById('contenedor-error').style.display = 'inline';
+                    input.classList.add('error');
+                    err.style.display = 'inline';
                 } else {
-                    document.getElementById('codigo_contenedor').classList.add('valid');
-                    const validMsg = document.getElementById('contenedor-valid');
-                    validMsg.style.display = 'inline';
-                    
-                    // Efecto fade
-                    validMsg.classList.remove('fade-out');
-                    setTimeout(() => validMsg.classList.add('fade-out'), 2000);
-                    setTimeout(() => validMsg.style.display = 'none', 3000);
+                    input.classList.add('valid');
+                    ok.style.display = 'inline';
                 }
             }
         };
         xhr.send('nombre=' + encodeURIComponent(nombre));
     });
 
-    // Carga dinámica de modelos
+    // Carga Modelos
     document.getElementById('tipo_unidad').addEventListener('change', function() {
-        const tipoUnidadId = this.value;
-        const modeloSelect = document.getElementById('modelo');
+        const id = this.value;
+        const select = document.getElementById('modelo');
+        if(!id) return;
         
-        // Intentamos mantener el modelo seleccionado si es compatible
-        const modeloActual = <?php echo $contenedor['modelo_id'] ?? '0'; ?>;
-
-        if (!tipoUnidadId) {
-            modeloSelect.innerHTML = '<option value="">Seleccione un modelo</option>';
-            return;
-        }
-
-        // Ruta a la API de modelos (asumiendo que está en ../ingresos/)
-        const xhr = new XMLHttpRequest();
-        xhr.open('GET', `../ingresos/obtener_modelos.php?tipo_unidad_id=${tipoUnidadId}`, true);
-        xhr.onload = function() {
-            if (xhr.status === 200) {
-                const modelos = JSON.parse(xhr.responseText);
-                let options = '<option value="">Seleccione un modelo</option>';
-                modelos.forEach(modelo => {
-                    const selected = (modelo.id == modeloActual) ? 'selected' : '';
-                    options += `<option value="${modelo.id}" ${selected}>${modelo.nombre}</option>`;
-                });
-                modeloSelect.innerHTML = options;
-            }
-        };
-        xhr.send();
+        fetch(`../ingresos/obtener_modelos.php?tipo_unidad_id=${id}`)
+            .then(r => r.json())
+            .then(data => {
+                let opts = '';
+                data.forEach(m => opts += `<option value="${m.id}">${m.nombre}</option>`);
+                select.innerHTML = opts;
+            });
     });
+    
+    // Toast
+    function showToast(msg, type='success'){
+        const c = document.getElementById('toast-container');
+        const t = document.createElement('div');
+        t.className = `toast ${type}`;
+        t.textContent = msg;
+        c.appendChild(t);
+        void t.offsetWidth; t.classList.add('show');
+        setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); }, 4000);
+    }
 
-    // Disparar evento inicial si no hay modelo cargado en HTML (fallback)
-    // Pero como PHP ya pre-cargó el select de modelos, esto es solo por seguridad si cambia el tipo.
+    <?php if (isset($_SESSION['toast_message'])): ?>
+    document.addEventListener('DOMContentLoaded', function () {
+      showToast(
+        <?php echo json_encode($_SESSION['toast_message']); ?>,
+        <?php echo json_encode($_SESSION['toast_type'] ?? 'success'); ?>
+      );
+    });
+    <?php unset($_SESSION['toast_message'], $_SESSION['toast_type']); ?>
+    <?php endif; ?>
     </script>
 </body>
 </html>

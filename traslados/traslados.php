@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['user_id'])) {
-    header('Location: ../login.php');
+    header('Location: ../../login.php');
     exit;
 }
 
@@ -28,6 +28,16 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Traslados de Contenedores</title>
     <link rel="stylesheet" href="../styles/traslados/traslados.css">
+    
+    <!-- Estilos para las notificaciones flotantes -->
+    <style>
+        #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 400px; pointer-events: none; }
+        .toast { padding: 15px 20px; border-radius: 8px; color: #fff; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.15); opacity: 0; transform: translateY(-20px); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { background-color: #dc3545; border-left: 5px solid #bd2130; }
+        .toast.success { background-color: #28a745; border-left: 5px solid #1e7e34; }
+    </style>
+
     <script>
         // Función para buscar contenedores en tiempo real
         function buscarContenedor(query) {
@@ -39,7 +49,7 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
                 return;
             }
 
-            fetch(`obtener_contenedores.php?query=${encodeURIComponent(query)}`)
+            fetch(`obtener_contenedores.php?query=${query}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
@@ -128,15 +138,14 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
                             const option = document.createElement('option');
                             option.value = bloque.id;
                             
-                            // LÓGICA DE PREVISUALIZACIÓN DE ESPACIO
-                            // Calculamos espacios libres para mostrarlos al lado del nombre
-                            const max = parseInt(bloque.capacidad_maxima);
-                            const actual = parseInt(bloque.capacidad_actual);
-                            const libres = max - actual;
+                            // Lógica de previsualización de espacio (opcional, si el API lo envía)
+                            let label = `Bloque ${bloque.numero}`;
+                            if(bloque.capacidad_maxima) {
+                                const libres = bloque.capacidad_maxima - bloque.capacidad_actual;
+                                label += ` (Libres: ${libres})`;
+                            }
                             
-                            // Formato: "Bloque 1 (Libres: 5)"
-                            option.textContent = `Bloque ${bloque.numero} (Libre: ${libres})`;
-                            
+                            option.textContent = label;
                             bloqueSelect.appendChild(option);
                         });
                         bloqueSelect.disabled = false;
@@ -177,9 +186,32 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
                 })
                 .catch(error => console.error('Error al cargar posiciones:', error));
         }
+
+        // Función para mostrar notificaciones (Toast)
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            
+            // Animación de entrada
+            void toast.offsetWidth; 
+            toast.classList.add('show');
+
+            // Eliminar
+            setTimeout(() => { 
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
     </script>
 </head>
 <body>
+
+<!-- Contenedor de Toasts -->
+<div id="toast-container"></div>
+
 <header>
   <div class="header-left">
     <a href="../index.php">
@@ -251,6 +283,18 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
     <footer>
         <p>&copy; IPSA Web - 2025</p>
     </footer>
+
+    <!-- Script PHP al final para inyectar mensajes de sesión -->
+    <script>
+    <?php if (isset($_SESSION['toast_message'])): ?>
+        document.addEventListener('DOMContentLoaded', function () {
+            showToast(
+                '<?php echo addslashes($_SESSION['toast_message']); ?>', 
+                '<?php echo $_SESSION['toast_type'] ?? "success"; ?>'
+            );
+        });
+        <?php unset($_SESSION['toast_message'], $_SESSION['toast_type']); ?>
+    <?php endif; ?>
+    </script>
 </body>
 </html>
-
