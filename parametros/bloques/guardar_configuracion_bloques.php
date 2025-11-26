@@ -7,62 +7,92 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// 1. OBTENER LA SUCURSAL ACTIVA (Contexto de Seguridad)
+// Si no está definida, usamos la del usuario o 1 por defecto (para evitar fallos fatales)
+$sucursal_activa = $_SESSION['sucursal_activa'] ?? ($_SESSION['sucursal_usuario'] ?? 1);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $bloques = $_POST['bloques'] ?? [];
     $bloquesNuevos = $_POST['bloques_nuevos'] ?? [];
-    $bloquesEliminar = $_POST['bloques_eliminar'] ?? []; // Bloques seleccionados para eliminar
+    $bloquesEliminar = $_POST['bloques_eliminar'] ?? [];
 
     try {
         $pdo->beginTransaction();
 
-        // 1. ELIMINAR BLOQUES (Soft Delete)
+        // --- A. ELIMINAR BLOQUES (Soft Delete) ---
         foreach ($bloquesEliminar as $id) {
-            // Verificar si el bloque tiene contenedores ACTIVOS
-            // Importante: Solo nos importa si tiene contenedores "vivos" en el patio.
-            $stmt = $pdo->prepare('SELECT COUNT(*) FROM contenedores WHERE bloque_id = :bloque_id AND estado_id = 1');
-            $stmt->execute(['bloque_id' => $id]);
-            $contenedoresCount = $stmt->fetchColumn();
+            // Validar integridad: ¿Tiene contenedores activos?
+            $stmtCheck = $pdo->prepare('SELECT COUNT(*) FROM contenedores WHERE bloque_id = :bloque_id AND estado_id = 1');
+            $stmtCheck->execute(['bloque_id' => $id]);
+            $contenedoresCount = $stmtCheck->fetchColumn();
 
             if ($contenedoresCount > 0) {
+                // Si hay contenedores, cancelamos todo
+                $pdo->rollBack();
                 $_SESSION['toast_message'] = "No se puede eliminar el bloque porque tiene $contenedoresCount contenedores activos. Por favor, muévalos antes de continuar.";
                 $_SESSION['toast_type'] = 'error';
-                $pdo->rollBack();
                 header('Location: configuracion.php');
                 exit;
             }
 
-            // "Eliminar" el bloque (Soft Delete: estado_id = 2)
-            $stmt = $pdo->prepare('UPDATE bloques SET estado_id = 2 WHERE id = :id');
-            $stmt->execute(['id' => $id]);
+            // Validar pertenencia a la sucursal (Seguridad)
+            // Solo permitimos borrar si el bloque pertenece a un patio de MI sucursal
+            $stmtSuc = $pdo->prepare('
+                SELECT p.sucursal_id 
+                FROM bloques b 
+                JOIN patios p ON b.patio_id = p.id 
+                WHERE b.id = :id
+            ');
+            $stmtSuc->execute(['id' => $id]);
+            $sucursalBloque = $stmtSuc->fetchColumn();
+
+            if ($sucursalBloque == $sucursal_activa) {
+                // Soft Delete
+                $stmtDel = $pdo->prepare('UPDATE bloques SET estado_id = 2 WHERE id = :id');
+                $stmtDel->execute(['id' => $id]);
+            }
         }
 
-        // 2. ACTUALIZAR BLOQUES EXISTENTES (Capacidad Máxima)
+        // --- B. ACTUALIZAR BLOQUES EXISTENTES ---
+        $stmtUpd = $pdo->prepare('UPDATE bloques SET capacidad_maxima = :capacidad_maxima WHERE id = :id');
+        
         foreach ($bloques as $id => $capacidadMaxima) {
-            // Intentamos actualizar. Si la nueva capacidad máxima es menor que la actual,
-            // el TRIGGER de la base de datos lanzará un error que atraparemos abajo.
-            $stmt = $pdo->prepare('UPDATE bloques SET capacidad_maxima = :capacidad_maxima WHERE id = :id');
-            $stmt->execute(['capacidad_maxima' => $capacidadMaxima, 'id' => $id]);
+            // Validar pertenencia a la sucursal antes de actualizar
+            $stmtCheckSuc = $pdo->prepare('SELECT p.sucursal_id FROM bloques b JOIN patios p ON b.patio_id = p.id WHERE b.id = :id');
+            $stmtCheckSuc->execute(['id' => $id]);
+            
+            if ($stmtCheckSuc->fetchColumn() == $sucursal_activa) {
+                $stmtUpd->execute(['capacidad_maxima' => $capacidadMaxima, 'id' => $id]);
+            }
         }
 
-        // 3. INSERTAR NUEVOS BLOQUES
+        // --- C. INSERTAR NUEVOS BLOQUES ---
         // La estructura de $bloquesNuevos es: [patio_id => [capacidad1, capacidad2...]]
-        foreach ($bloquesNuevos as $patioId => $nuevos) {
-            // Obtener el último número de bloque en el patio (incluyendo inactivos para no repetir números si no se desea)
-            // OJO: Si prefieres reciclar números de bloques borrados, la lógica sería más compleja.
-            // Aquí simplemente buscamos el máximo y sumamos 1.
-            $stmt = $pdo->prepare('SELECT COALESCE(MAX(numero), 0) FROM bloques WHERE patio_id = :patio_id');
-            $stmt->execute(['patio_id' => $patioId]);
-            $maxNumero = (int)$stmt->fetchColumn();
+        if (!empty($bloquesNuevos)) {
+            $stmtCheckPatio = $pdo->prepare('SELECT sucursal_id FROM patios WHERE id = :pid');
+            // Buscamos el último número usado en ese patio (incluso si está borrado, para no repetir y mantener orden)
+            $stmtMaxNum = $pdo->prepare('SELECT COALESCE(MAX(numero), 0) FROM bloques WHERE patio_id = :pid');
+            $stmtIns = $pdo->prepare('INSERT INTO bloques (patio_id, numero, capacidad_maxima, capacidad_actual, estado_id) VALUES (:pid, :num, :cap, 0, 1)');
 
-            $stmtInsert = $pdo->prepare('INSERT INTO bloques (patio_id, numero, capacidad_maxima, capacidad_actual, estado_id) VALUES (:patio_id, :numero, :capacidad_maxima, 0, 1)');
+            foreach ($bloquesNuevos as $patioId => $nuevos) {
+                // Seguridad: Validar que el patio destino pertenece a mi sucursal
+                $stmtCheckPatio->execute(['pid' => $patioId]);
+                $sucursalPatio = $stmtCheckPatio->fetchColumn();
 
-            foreach ($nuevos as $capacidadMaxima) {
-                $maxNumero++; // Incrementar el número del bloque
-                $stmtInsert->execute([
-                    'patio_id' => $patioId,
-                    'numero' => $maxNumero,
-                    'capacidad_maxima' => $capacidadMaxima
-                ]);
+                if ($sucursalPatio == $sucursal_activa) {
+                    // Obtener el siguiente número
+                    $stmtMaxNum->execute(['pid' => $patioId]);
+                    $maxNumero = (int)$stmtMaxNum->fetchColumn();
+
+                    foreach ($nuevos as $capacidadMaxima) {
+                        $maxNumero++; // Siguiente número disponible
+                        $stmtIns->execute([
+                            'pid' => $patioId,
+                            'num' => $maxNumero,
+                            'cap' => $capacidadMaxima
+                        ]);
+                    }
+                }
             }
         }
 
@@ -73,9 +103,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
 
     } catch (Exception $e) {
-        $pdo->rollBack();
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         
-        // Mensaje amigable si el error viene del trigger de capacidad
+        // Capturar mensaje del Trigger de MySQL para hacerlo amigable
         $msg = $e->getMessage();
         if (strpos($msg, 'La capacidad actual no puede exceder') !== false) {
             $msg = 'Error: No puedes reducir la capacidad máxima por debajo de la cantidad de contenedores que ya existen en el bloque.';

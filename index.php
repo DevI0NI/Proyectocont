@@ -148,6 +148,14 @@ if (isset($_SESSION['sucursal_activa'])) {
                 </a>
             </div>
 
+                        <!-- 2. BLOQUES -->
+            <div class="menu-item">
+                <a href="bloques/bloques.php">
+                    <img src="imagenes/bloques.png" alt="Bloques">
+                    <span>Contenedores</span>
+                </a>
+            </div>
+
             <!-- 3. TRASLADOS -->
             <?php if ($rol_id == 1 || $rol_id == 2 || $rol_id == 3): ?>
             <div class="menu-item">
