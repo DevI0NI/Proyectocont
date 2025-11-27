@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -19,6 +19,32 @@ $sqlPatios = 'SELECT id, nombre FROM patios WHERE estado_id = 1 AND sucursal_id 
 $stmtPatios = $pdo->prepare($sqlPatios);
 $stmtPatios->execute(['sucursal' => $sucursal_id]);
 $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
+
+// --- NUEVO: LÓGICA DE AUTO-SELECCIÓN DESDE URL ---
+$autoSelectId = 0;
+$autoSelectName = "";
+
+if (isset($_GET['nombre'])) {
+    $nombreGet = $_GET['nombre'];
+    // Buscamos el ID del contenedor por nombre, asegurando que sea de esta sucursal y esté activo
+    // Hacemos JOIN para validar la sucursal del contenedor
+    $stmtPre = $pdo->prepare('
+        SELECT c.id, c.nombre 
+        FROM contenedores c
+        JOIN bloques b ON c.bloque_id = b.id
+        JOIN patios p ON b.patio_id = p.id
+        WHERE c.nombre = :nombre 
+          AND c.estado_id = 1 
+          AND p.sucursal_id = :sucursal
+    ');
+    $stmtPre->execute(['nombre' => $nombreGet, 'sucursal' => $sucursal_id]);
+    $contenedorPre = $stmtPre->fetch(PDO::FETCH_ASSOC);
+    
+    if ($contenedorPre) {
+        $autoSelectId = $contenedorPre['id'];
+        $autoSelectName = $contenedorPre['nombre'];
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -49,7 +75,7 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
                 return;
             }
 
-            fetch(`obtener_contenedores.php?query=${query}`)
+            fetch(`obtener_contenedores.php?query=${encodeURIComponent(query)}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
@@ -137,15 +163,7 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
                         data.forEach(bloque => {
                             const option = document.createElement('option');
                             option.value = bloque.id;
-                            
-                            // Lógica de previsualización de espacio (opcional, si el API lo envía)
-                            let label = `Bloque ${bloque.numero}`;
-                            if(bloque.capacidad_maxima) {
-                                const libres = bloque.capacidad_maxima - bloque.capacidad_actual;
-                                label += ` (Libres: ${libres})`;
-                            }
-                            
-                            option.textContent = label;
+                            option.textContent = `Bloque ${bloque.numero}`;
                             bloqueSelect.appendChild(option);
                         });
                         bloqueSelect.disabled = false;
@@ -205,6 +223,15 @@ $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
                 setTimeout(() => toast.remove(), 300);
             }, 4000);
         }
+
+        // --- NUEVO: AUTO-SELECCIÓN SI VIENE DE URL ---
+        <?php if ($autoSelectId > 0): ?>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Llamamos a la función de selección con los datos pre-cargados
+            seleccionarContenedor(<?php echo $autoSelectId; ?>, "<?php echo $autoSelectName; ?>");
+        });
+        <?php endif; ?>
+
     </script>
 </head>
 <body>

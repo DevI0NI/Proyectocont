@@ -249,9 +249,8 @@ if ($rangoFin - $rangoInicio < $numBotonesMostrados && $totalBloques >= $numBoto
                         <td data-label="Estatus IPSA"><?php echo htmlspecialchars($contenedor['estatus_ipsa']); ?></td>
                         <td data-label="Fecha Ingreso"><?php echo htmlspecialchars($contenedor['fecha_ingreso']); ?></td>
                         <td data-label="Acciones">
-                            <a href="modificar_contenedor.php?nombre=<?php echo htmlspecialchars($contenedor['nombre']); ?>" class="modificar">Modificar</a> |
-                            <a href="informacion_contenedor.php?nombre=<?php echo htmlspecialchars($contenedor['nombre']); ?>" class="informacion">Información</a>
-                        </td>
+                            <a href="informacion_contenedor.php?nombre=<?php echo htmlspecialchars($contenedor['nombre']); ?>" class="informacion">Información</a> |
+<a href="../traslados/traslados.php?nombre=<?php echo urlencode($contenedor['nombre']); ?>" class="modificar">Trasladar</a>                        </td>
                     </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
