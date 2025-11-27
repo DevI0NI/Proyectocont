@@ -249,8 +249,15 @@ if ($rangoFin - $rangoInicio < $numBotonesMostrados && $totalBloques >= $numBoto
                         <td data-label="Estatus IPSA"><?php echo htmlspecialchars($contenedor['estatus_ipsa']); ?></td>
                         <td data-label="Fecha Ingreso"><?php echo htmlspecialchars($contenedor['fecha_ingreso']); ?></td>
                         <td data-label="Acciones">
-                            <a href="informacion_contenedor.php?nombre=<?php echo htmlspecialchars($contenedor['nombre']); ?>" class="informacion">Información</a> |
-<a href="../traslados/traslados.php?nombre=<?php echo urlencode($contenedor['nombre']); ?>" class="modificar">Trasladar</a>                        </td>
+                            <?php 
+                                $params = "nombre=" . urlencode($contenedor['nombre']);
+                                if ($patioSeleccionado && $bloqueSeleccionado) {
+                                    $params .= "&ref_patio=$patioSeleccionado&ref_bloque=$bloqueSeleccionado";
+                                }
+                            ?>
+                            <a href="informacion_contenedor.php?<?php echo $params; ?>" class="informacion">Información</a> |
+                            <a href="../traslados/traslados.php?<?php echo $params; ?>" class="modificar">Trasladar</a>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
