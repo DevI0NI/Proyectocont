@@ -29,14 +29,19 @@ $modelos = [];
 if (isset($_GET['nombre'])) {
     $nombreContenedor = $_GET['nombre'];
     
-    // Traemos los datos actuales y sus nombres para poder comparar en el log
     $stmt = $pdo->prepare('
         SELECT c.*, 
                t.nombre as tipo_nombre, 
-               m.nombre as modelo_nombre
+               m.nombre as modelo_nombre,
+               eu.nombre as estatus_unidad_nombre,
+               eb.nombre as estatus_box_nombre,
+               ei.nombre as estatus_ipsa_nombre
         FROM contenedores c
         LEFT JOIN tipos_unidad t ON c.tipo_unidad_id = t.id
         LEFT JOIN modelos m ON c.modelo_id = m.id
+        LEFT JOIN estatus_contenedores eu ON c.estatus_unidad_id = eu.id
+        LEFT JOIN estatus_contenedores eb ON c.estatus_box_id = eb.id
+        LEFT JOIN estatus_ipsa ei ON c.estatus_ipsa_id = ei.id
         JOIN patios p ON c.bloque_id = (SELECT id FROM bloques WHERE id = c.bloque_id) 
                       AND p.id = (SELECT patio_id FROM bloques WHERE id = c.bloque_id)
         WHERE c.nombre = :nombre 
@@ -65,12 +70,14 @@ if (isset($_GET['nombre'])) {
 }
 
 // =======================================================
-// 2. CARGAR CATÁLOGOS
+// 2. CARGAR CATÁLOGOS (Key-Pair para logs rápidos)
 // =======================================================
-$stmtTipos = $pdo->query('SELECT id, nombre FROM tipos_unidad WHERE estado_id = 1 ORDER BY nombre');
-$tiposUnidad = $stmtTipos->fetchAll(PDO::FETCH_KEY_PAIR); // Array [ID => Nombre] para logs rápidos
 
-// IDs de Tipos de Estatus (Para logs_estatus)
+// Tipos Unidad
+$stmtTipos = $pdo->query('SELECT id, nombre FROM tipos_unidad WHERE estado_id = 1 ORDER BY nombre');
+$tiposMap = $stmtTipos->fetchAll(PDO::FETCH_KEY_PAIR); 
+
+// IDs de Categorías
 $stmtCat = $pdo->prepare('SELECT id FROM tipos_estatus WHERE nombre = :nombre');
 $stmtCat->execute(['nombre' => 'Unidad']);
 $idCatUnidad = $stmtCat->fetchColumn();
@@ -82,21 +89,27 @@ $idCatBox = $stmtCat->fetchColumn();
 $stmtEstU = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = ? AND estado_id = 1 ORDER BY nombre');
 $stmtEstU->execute([$idCatUnidad]);
 $estadosUnidad = $stmtEstU->fetchAll(PDO::FETCH_ASSOC);
+// Mapas para logs
+$estUnitMap = []; foreach($estadosUnidad as $e) $estUnitMap[$e['id']] = $e['nombre'];
 
 $stmtEstB = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = ? AND estado_id = 1 ORDER BY nombre');
 $stmtEstB->execute([$idCatBox]);
 $statusBox = $stmtEstB->fetchAll(PDO::FETCH_ASSOC);
+// Mapas para logs
+$estBoxMap = []; foreach($statusBox as $e) $estBoxMap[$e['id']] = $e['nombre'];
 
 // Estatus IPSA
 $stmtIpsa = $pdo->query('SELECT id, nombre FROM estatus_ipsa WHERE estado_id = 1 ORDER BY nombre');
-$listaIpsa = $stmtIpsa->fetchAll(PDO::FETCH_KEY_PAIR);
+$listaIpsa = $stmtIpsa->fetchAll(PDO::FETCH_ASSOC); 
+$ipsaMap = []; foreach($listaIpsa as $i) $ipsaMap[$i['id']] = $i['nombre'];
+
 
 // =======================================================
 // 3. PROCESAR FORMULARIO (POST)
 // =======================================================
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Datos Nuevos del Formulario
-    $nuevoNombre   = trim(strtoupper($_POST['codigo_contenedor']));
+    // Datos Nuevos - Validación estricta de longitud
+    $nuevoNombre   = substr(trim(strtoupper($_POST['codigo_contenedor'])), 0, 11);
     $nuevoTipo     = (int)$_POST['tipo_unidad'];
     $nuevoModelo   = (int)$_POST['modelo'];
     $nuevoEstUni   = (int)$_POST['estado_unidad'];
@@ -110,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     try {
         $pdo->beginTransaction();
 
-        // 3.1. Validación de Duplicado (si cambió el nombre)
+        // 3.1. Validación de Duplicado
         if ($nuevoNombre !== $contenedor['nombre']) {
             $stmtDup = $pdo->prepare('SELECT COUNT(*) FROM contenedores WHERE nombre = :nombre AND id != :id');
             $stmtDup->execute(['nombre' => $nuevoNombre, 'id' => $idContenedor]);
@@ -135,89 +148,79 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         ]);
 
         // =======================================================
-        // 4. AUDITORÍA INTELIGENTE (LOGS SEPARADOS)
+        // 4. LÓGICA DE LOGS (1 EVENTO POR CAMBIO PARA EVITAR ERROR PK)
         // =======================================================
         
-        // IDs de Operación
         $opModDatos = 4;   // MODIFICACION_DATOS
-        $opModEstatus = 3; // MODIFICACION_ESTATUS
+        $opModEstatus = 3; // MODIFICACION_ESTATUS (IPSA, Unidad, Box)
 
-        // Helper para insertar evento
-        function registrarEvento($pdo, $cid, $uid, $op, $obs) {
+        // Helper único para todo el script
+        function registrarEventoLog($pdo, $cid, $uid, $op, $obs) {
             $stmt = $pdo->prepare('INSERT INTO logs_eventos (contenedor_id, usuario_id, tipo_operacion_id, observaciones, estado_id) VALUES (?, ?, ?, ?, 1)');
             $stmt->execute([$cid, $uid, $op, $obs]);
             return $pdo->lastInsertId();
         }
 
-        // --- A. CAMBIOS DE DATOS (Texto, Tipo, Modelo, Obs) ---
-        // Se registran en logs_modificaciones
+        // --- A. CAMBIOS DE DATOS GENERALES -> logs_modificaciones ---
         
         // 1. Nombre
         if ($contenedor['nombre'] !== $nuevoNombre) {
-            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de código de equipo");
+            $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de Nombre");
             $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
             $stmtDet->execute([$eid, 'Nombre', $contenedor['nombre'], $nuevoNombre]);
         }
-
+        
         // 2. Tipo Unidad
         if ($contenedor['tipo_unidad_id'] != $nuevoTipo) {
-            $nombreNuevoTipo = $tiposUnidad[$nuevoTipo] ?? 'ID:'.$nuevoTipo;
-            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de Tipo de Unidad");
+            $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de Tipo de Unidad");
             $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
-            $stmtDet->execute([$eid, 'Tipo Unidad', $contenedor['tipo_nombre'], $nombreNuevoTipo]);
+            $stmtDet->execute([$eid, 'Tipo Unidad', $contenedor['tipo_nombre'], $tiposMap[$nuevoTipo]??$nuevoTipo]);
         }
-
+        
         // 3. Modelo
         if ($contenedor['modelo_id'] != $nuevoModelo) {
-            // Buscar nombre del nuevo modelo para el log
             $stmtM = $pdo->prepare("SELECT nombre FROM modelos WHERE id = ?");
             $stmtM->execute([$nuevoModelo]);
-            $nombreNuevoModelo = $stmtM->fetchColumn();
-
-            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de Modelo");
+            $nomModNew = $stmtM->fetchColumn();
+            
+            $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de Modelo");
             $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
-            $stmtDet->execute([$eid, 'Modelo', $contenedor['modelo_nombre'], $nombreNuevoModelo]);
+            $stmtDet->execute([$eid, 'Modelo', $contenedor['modelo_nombre'], $nomModNew]);
         }
-
-        // 4. Observaciones (Unidad)
+        
+        // 4. Observaciones Unidad
         if ($contenedor['observaciones_unidad'] !== $nuevaObsUni) {
-            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModDatos, "Actualización Obs. Unidad");
+            $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModDatos, "Actualización Obs. Unidad");
             $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
             $stmtDet->execute([$eid, 'Obs. Unidad', $contenedor['observaciones_unidad'], $nuevaObsUni]);
         }
-
-        // 5. Observaciones (Box)
+        
+        // 5. Observaciones Box
         if ($contenedor['observaciones_box'] !== $nuevaObsBox) {
-            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModDatos, "Actualización Obs. Box");
+            $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModDatos, "Actualización Obs. Box");
             $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
             $stmtDet->execute([$eid, 'Obs. Box', $contenedor['observaciones_box'], $nuevaObsBox]);
         }
 
-        // --- B. CAMBIO DE ESTATUS IPSA ---
-        // Se registra en logs_ipsa
+        // --- B. CAMBIOS DE ESTATUS OPERATIVOS (logs_estatus) ---
+        // Aquí está la clave: Creamos un evento DIFERENTE para cada cambio
+        $stmtEstLog = $pdo->prepare('INSERT INTO logs_estatus (evento_id, tipo_estatus_id, valor_anterior_id, valor_nuevo_id) VALUES (?, ?, ?, ?)');
+
+        if ($contenedor['estatus_unidad_id'] != $nuevoEstUni) {
+            $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModEstatus, "Cambio Estatus Unidad");
+            $stmtEstLog->execute([$eid, $idCatUnidad, $contenedor['estatus_unidad_id'], $nuevoEstUni]);
+        }
+
+        if ($contenedor['estatus_box_id'] != $nuevoEstBox) {
+            $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModEstatus, "Cambio Estatus Estructura");
+            $stmtEstLog->execute([$eid, $idCatBox, $contenedor['estatus_box_id'], $nuevoEstBox]);
+        }
+
+        // --- C. CAMBIO DE ESTATUS IPSA (logs_ipsa) ---
         if ($contenedor['estatus_ipsa_id'] != $nuevoIpsa) {
-            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModEstatus, "Cambio de Estatus IPSA");
+            $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModEstatus, "Cambio Estatus IPSA");
             $stmtDet = $pdo->prepare('INSERT INTO logs_ipsa (evento_id, estatus_anterior_id, estatus_nuevo_id) VALUES (?, ?, ?)');
             $stmtDet->execute([$eid, $contenedor['estatus_ipsa_id'], $nuevoIpsa]);
-        }
-
-        // --- C. CAMBIOS DE ESTATUS OPERATIVOS (Unidad/Box) ---
-        // Se registran en logs_estatus (Usando los IDs de tipos_estatus: 1=Unidad, 2=Estructura)
-
-        // 1. Estatus Unidad
-        if ($contenedor['estatus_unidad_id'] != $nuevoEstUni) {
-            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModEstatus, "Cambio Estatus de Unidad");
-            // Nota: Aquí usamos los IDs normalizados (tipo_estatus_id = 1 para Unidad)
-            $stmtDet = $pdo->prepare('INSERT INTO logs_estatus (evento_id, tipo_estatus_id, valor_anterior_id, valor_nuevo_id) VALUES (?, ?, ?, ?)');
-            $stmtDet->execute([$eid, $idCatUnidad, $contenedor['estatus_unidad_id'], $nuevoEstUni]);
-        }
-
-        // 2. Estatus Box
-        if ($contenedor['estatus_box_id'] != $nuevoEstBox) {
-            $eid = registrarEvento($pdo, $idContenedor, $usuario_id, $opModEstatus, "Cambio Estatus de Estructura");
-            // Nota: Aquí usamos los IDs normalizados (tipo_estatus_id = 2 para Estructura)
-            $stmtDet = $pdo->prepare('INSERT INTO logs_estatus (evento_id, tipo_estatus_id, valor_anterior_id, valor_nuevo_id) VALUES (?, ?, ?, ?)');
-            $stmtDet->execute([$eid, $idCatBox, $contenedor['estatus_box_id'], $nuevoEstBox]);
         }
 
         $pdo->commit();
@@ -246,28 +249,36 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <link rel="stylesheet" href="../styles/parametros/bloques/modificar_contenedor.css">
 </head>
 <body>
-    <header>
-        <div id="toast-container" class="toast-container"></div>
-        <div class="header-left">
-            <a href="../index.php">
-                <img src="../imagenes/IPSA.png" alt="Logo" class="logo">
-                <span>IPROPORTSA</span>
-            </a>
-        </div>
-        <div class="header-right">
-            <span>Bienvenido, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
-            <a href="../logout.php" class="logout-button">Cerrar sesión</a>
-        </div>
-    </header>
+<header>
+  <div class="header-left">
+    <a href="../index.php">
+      <img src="../imagenes/IPSA.png" alt="Logo" class="logo">
+      <span class="brand-name">IPROPORTSA</span>
+    </a>
+  </div>
+  <div class="header-right">
+    <span class="welcome-label">Bienvenido,</span>
+    <span class="username"><?php echo $_SESSION['username']; ?></span>
+    <a href="../../logout.php" class="logout-button">Cerrar sesión</a>
+  </div>
+</header>
     
     <main>
     <h1>Modificar Contenedor</h1>
+
+    <?php if (isset($_SESSION['toast_message']) && $_SESSION['toast_type'] == 'error'): ?>
+        <div style="color: white; background: #dc3545; padding: 10px; border-radius: 5px; text-align:center; margin-bottom:15px;">
+            <?php echo htmlspecialchars($_SESSION['toast_message']); unset($_SESSION['toast_message']); ?>
+        </div>
+    <?php endif; ?>
 
     <form action="" method="post">
         <div class="form-group">
             <label for="codigo_contenedor">Código del Contenedor:</label>
             <input type="text" id="codigo_contenedor" name="codigo_contenedor" 
-                   value="<?php echo htmlspecialchars($contenedor['nombre']); ?>" required>
+                   value="<?php echo htmlspecialchars($contenedor['nombre']); ?>" 
+                   required maxlength="11" pattern="^[A-Z0-9]{11}$" 
+                   title="Debe tener 11 caracteres alfanuméricos">
             <span class="error-message" id="contenedor-error">Ya existe.</span>
             <span class="valid-message" id="contenedor-valid">Disponible.</span>
         </div>
@@ -275,7 +286,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <div class="form-group">
             <label for="tipo_unidad">Tipo de Unidad:</label>
             <select id="tipo_unidad" name="tipo_unidad" required>
-                <?php foreach ($tiposUnidad as $id => $nombre): ?>
+                <?php foreach ($tiposMap as $id => $nombre): ?>
                     <option value="<?php echo $id; ?>" <?php echo ($id == $contenedor['tipo_unidad_id']) ? 'selected' : ''; ?>>
                         <?php echo htmlspecialchars($nombre); ?>
                     </option>
@@ -297,9 +308,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <div class="form-group">
             <label for="estado_unidad">Estado de la Unidad:</label>
             <select id="estado_unidad" name="estado_unidad" required>
-                <?php foreach ($estadosUnidad as $est): ?>
-                    <option value="<?php echo $est['id']; ?>" <?php echo ($est['id'] == $contenedor['estatus_unidad_id']) ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($est['nombre']); ?>
+                <?php foreach ($estUnitMap as $id => $nombre): ?>
+                    <option value="<?php echo $id; ?>" <?php echo ($id == $contenedor['estatus_unidad_id']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($nombre); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -313,9 +324,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <div class="form-group">
             <label for="status_box">Status Box:</label>
             <select id="status_box" name="status_box" required>
-                <?php foreach ($statusBox as $est): ?>
-                    <option value="<?php echo $est['id']; ?>" <?php echo ($est['id'] == $contenedor['estatus_box_id']) ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($est['nombre']); ?>
+                <?php foreach ($estBoxMap as $id => $nombre): ?>
+                    <option value="<?php echo $id; ?>" <?php echo ($id == $contenedor['estatus_box_id']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($nombre); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -328,9 +339,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         
         <!-- Estatus IPSA (Manual) -->
         <div class="form-group" style="background-color:#e8f5e9; border:1px solid #81c784; padding:10px; border-radius:5px;">
-            <label for="estatus_ipsa" style="color:#2e7d32;">Estatus IPSA:</label>
+            <label for="estatus_ipsa" style="color:#000000ff;">Estatus IPSA:</label>
             <select id="estatus_ipsa" name="estatus_ipsa" required>
-                <?php foreach ($listaIpsa as $id => $nombre): ?>
+                <?php foreach ($ipsaMap as $id => $nombre): ?>
                     <option value="<?php echo $id; ?>" <?php echo ($id == $contenedor['estatus_ipsa_id']) ? 'selected' : ''; ?>>
                         <?php echo htmlspecialchars($nombre); ?>
                     </option>
@@ -361,7 +372,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <script>
     // Validación nombre (AJAX)
     document.getElementById('codigo_contenedor').addEventListener('input', function() {
-        const nombre = this.value.toUpperCase();
+        this.value = this.value.toUpperCase();
+        const nombre = this.value;
         const nombreOriginal = '<?php echo $nombreContenedor; ?>';
         
         const err = document.getElementById('contenedor-error');
@@ -372,7 +384,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         err.style.display = 'none';
         ok.style.display = 'none';
         
-        if (nombre === nombreOriginal || nombre === '') return;
+        if (nombre === nombreOriginal || nombre.length !== 11) return;
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '../ingresos/verificar_contenedor.php', true);
