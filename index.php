@@ -141,17 +141,19 @@ if (isset($_SESSION['sucursal_activa'])) {
             <?php endif; ?>
 
             <!-- 2. BLOQUES -->
+            <?php if ($rol_id == 1 || $rol_id == 2 || $rol_id == 3): ?>
             <div class="menu-item">
                 <a href="bloques/bloques.php">
                     <img src="imagenes/bloques.png" alt="Bloques">
                     <span>Bloques</span>
                 </a>
             </div>
+            <?php endif; ?>
 
                         <!-- 2. BLOQUES -->
             <div class="menu-item">
                 <a href="bloques/contenedor.php">
-                    <img src="imagenes/bloques.png" alt="Bloques">
+                    <img src="imagenes/cont.png" alt="Bloques">
                     <span>Contenedores</span>
                 </a>
             </div>

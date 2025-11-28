@@ -21,6 +21,13 @@ error_reporting(E_ALL);
 require '../config/database.php';
 
 // =======================================================
+// 0. CAPTURAR REFERENCIAS (Para mantener navegación)
+// =======================================================
+// Intentamos tomarlas del GET primero, para usarlas en el HTML
+$ref_patio = isset($_GET['ref_patio']) ? $_GET['ref_patio'] : '';
+$ref_bloque = isset($_GET['ref_bloque']) ? $_GET['ref_bloque'] : '';
+
+// =======================================================
 // 1. CARGAR DATOS ACTUALES (GET)
 // =======================================================
 $contenedor = null;
@@ -70,7 +77,7 @@ if (isset($_GET['nombre'])) {
 }
 
 // =======================================================
-// 2. CARGAR CATÁLOGOS (Key-Pair para logs rápidos)
+// 2. CARGAR CATÁLOGOS
 // =======================================================
 
 // Tipos Unidad
@@ -89,13 +96,11 @@ $idCatBox = $stmtCat->fetchColumn();
 $stmtEstU = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = ? AND estado_id = 1 ORDER BY nombre');
 $stmtEstU->execute([$idCatUnidad]);
 $estadosUnidad = $stmtEstU->fetchAll(PDO::FETCH_ASSOC);
-// Mapas para logs
 $estUnitMap = []; foreach($estadosUnidad as $e) $estUnitMap[$e['id']] = $e['nombre'];
 
 $stmtEstB = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = ? AND estado_id = 1 ORDER BY nombre');
 $stmtEstB->execute([$idCatBox]);
 $statusBox = $stmtEstB->fetchAll(PDO::FETCH_ASSOC);
-// Mapas para logs
 $estBoxMap = []; foreach($statusBox as $e) $estBoxMap[$e['id']] = $e['nombre'];
 
 // Estatus IPSA
@@ -108,7 +113,7 @@ $ipsaMap = []; foreach($listaIpsa as $i) $ipsaMap[$i['id']] = $i['nombre'];
 // 3. PROCESAR FORMULARIO (POST)
 // =======================================================
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Datos Nuevos - Validación estricta de longitud
+    // Datos Nuevos
     $nuevoNombre   = substr(trim(strtoupper($_POST['codigo_contenedor'])), 0, 11);
     $nuevoTipo     = (int)$_POST['tipo_unidad'];
     $nuevoModelo   = (int)$_POST['modelo'];
@@ -118,6 +123,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $nuevaObsBox   = trim($_POST['observaciones_box']);
     $nuevoIpsa     = (int)$_POST['estatus_ipsa'];
     
+    // Recuperar refs del POST para el redirect
+    $postRefPatio  = $_POST['ref_patio'] ?? '';
+    $postRefBloque = $_POST['ref_bloque'] ?? '';
+
     $idContenedor  = $contenedor['id'];
 
     try {
@@ -148,36 +157,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         ]);
 
         // =======================================================
-        // 4. LÓGICA DE LOGS (1 EVENTO POR CAMBIO PARA EVITAR ERROR PK)
+        // 4. LÓGICA DE LOGS 
         // =======================================================
         
         $opModDatos = 4;   // MODIFICACION_DATOS
-        $opModEstatus = 3; // MODIFICACION_ESTATUS (IPSA, Unidad, Box)
+        $opModEstatus = 3; // MODIFICACION_ESTATUS
 
-        // Helper único para todo el script
         function registrarEventoLog($pdo, $cid, $uid, $op, $obs) {
             $stmt = $pdo->prepare('INSERT INTO logs_eventos (contenedor_id, usuario_id, tipo_operacion_id, observaciones, estado_id) VALUES (?, ?, ?, ?, 1)');
             $stmt->execute([$cid, $uid, $op, $obs]);
             return $pdo->lastInsertId();
         }
 
-        // --- A. CAMBIOS DE DATOS GENERALES -> logs_modificaciones ---
-        
-        // 1. Nombre
+        // --- Logs Cambios Generales ---
         if ($contenedor['nombre'] !== $nuevoNombre) {
             $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de Nombre");
             $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
             $stmtDet->execute([$eid, 'Nombre', $contenedor['nombre'], $nuevoNombre]);
         }
         
-        // 2. Tipo Unidad
         if ($contenedor['tipo_unidad_id'] != $nuevoTipo) {
             $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModDatos, "Cambio de Tipo de Unidad");
             $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
             $stmtDet->execute([$eid, 'Tipo Unidad', $contenedor['tipo_nombre'], $tiposMap[$nuevoTipo]??$nuevoTipo]);
         }
         
-        // 3. Modelo
         if ($contenedor['modelo_id'] != $nuevoModelo) {
             $stmtM = $pdo->prepare("SELECT nombre FROM modelos WHERE id = ?");
             $stmtM->execute([$nuevoModelo]);
@@ -188,22 +192,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmtDet->execute([$eid, 'Modelo', $contenedor['modelo_nombre'], $nomModNew]);
         }
         
-        // 4. Observaciones Unidad
         if ($contenedor['observaciones_unidad'] !== $nuevaObsUni) {
             $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModDatos, "Actualización Obs. Unidad");
             $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
             $stmtDet->execute([$eid, 'Obs. Unidad', $contenedor['observaciones_unidad'], $nuevaObsUni]);
         }
         
-        // 5. Observaciones Box
         if ($contenedor['observaciones_box'] !== $nuevaObsBox) {
             $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModDatos, "Actualización Obs. Box");
             $stmtDet = $pdo->prepare('INSERT INTO logs_modificaciones (evento_id, campo_modificado, valor_anterior, valor_nuevo) VALUES (?, ?, ?, ?)');
             $stmtDet->execute([$eid, 'Obs. Box', $contenedor['observaciones_box'], $nuevaObsBox]);
         }
 
-        // --- B. CAMBIOS DE ESTATUS OPERATIVOS (logs_estatus) ---
-        // Aquí está la clave: Creamos un evento DIFERENTE para cada cambio
+        // --- Logs Estatus ---
         $stmtEstLog = $pdo->prepare('INSERT INTO logs_estatus (evento_id, tipo_estatus_id, valor_anterior_id, valor_nuevo_id) VALUES (?, ?, ?, ?)');
 
         if ($contenedor['estatus_unidad_id'] != $nuevoEstUni) {
@@ -216,7 +217,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmtEstLog->execute([$eid, $idCatBox, $contenedor['estatus_box_id'], $nuevoEstBox]);
         }
 
-        // --- C. CAMBIO DE ESTATUS IPSA (logs_ipsa) ---
         if ($contenedor['estatus_ipsa_id'] != $nuevoIpsa) {
             $eid = registrarEventoLog($pdo, $idContenedor, $usuario_id, $opModEstatus, "Cambio Estatus IPSA");
             $stmtDet = $pdo->prepare('INSERT INTO logs_ipsa (evento_id, estatus_anterior_id, estatus_nuevo_id) VALUES (?, ?, ?)');
@@ -227,14 +227,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         $_SESSION['toast_message'] = 'Contenedor actualizado correctamente.';
         $_SESSION['toast_type'] = 'success';
-        header('Location: bloques.php');
+
+        // === CAMBIO CLAVE: REDIRECCIÓN A LA MISMA PÁGINA ===
+        // Construimos la URL con el NUEVO nombre y las mismas refs
+        $redirectUrl = "modificar_contenedor.php?nombre=" . urlencode($nuevoNombre);
+        if(!empty($postRefPatio))  $redirectUrl .= "&ref_patio=" . urlencode($postRefPatio);
+        if(!empty($postRefBloque)) $redirectUrl .= "&ref_bloque=" . urlencode($postRefBloque);
+
+        header("Location: " . $redirectUrl);
         exit;
 
     } catch (Exception $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         $_SESSION['toast_message'] = 'Error: ' . $e->getMessage();
         $_SESSION['toast_type'] = 'error';
-        header("Location: modificar_contenedor.php?nombre=" . urlencode($nombreContenedor));
+        
+        // Mantener refs en caso de error también
+        $redirectUrl = "modificar_contenedor.php?nombre=" . urlencode($nombreContenedor);
+        if(!empty($postRefPatio))  $redirectUrl .= "&ref_patio=" . urlencode($postRefPatio);
+        if(!empty($postRefBloque)) $redirectUrl .= "&ref_bloque=" . urlencode($postRefBloque);
+
+        header("Location: " . $redirectUrl);
         exit;
     }
 }
@@ -247,6 +260,29 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Modificar Contenedor</title>
     <link rel="stylesheet" href="../styles/parametros/bloques/modificar_contenedor.css">
+    
+    <style>
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+        .toast {
+            min-width: 250px;
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 4px;
+            color: #fff;
+            font-family: sans-serif;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .toast.success { background-color: #28a745; }
+        .toast.error { background-color: #dc3545; }
+        .toast.show { opacity: 1; }
+    </style>
 </head>
 <body>
 <header>
@@ -266,13 +302,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <main>
     <h1>Modificar Contenedor</h1>
 
-    <?php if (isset($_SESSION['toast_message']) && $_SESSION['toast_type'] == 'error'): ?>
+    <div id="toast-container"></div>
+
+    <?php if (isset($_SESSION['toast_message']) && $_SESSION['toast_type'] == 'error' && empty($_POST)): ?>
         <div style="color: white; background: #dc3545; padding: 10px; border-radius: 5px; text-align:center; margin-bottom:15px;">
-            <?php echo htmlspecialchars($_SESSION['toast_message']); unset($_SESSION['toast_message']); ?>
+             Error reportado.
         </div>
     <?php endif; ?>
 
     <form action="" method="post">
+        
+        <input type="hidden" name="ref_patio" value="<?php echo htmlspecialchars($ref_patio); ?>">
+        <input type="hidden" name="ref_bloque" value="<?php echo htmlspecialchars($ref_bloque); ?>">
+
         <div class="form-group">
             <label for="codigo_contenedor">Código del Contenedor:</label>
             <input type="text" id="codigo_contenedor" name="codigo_contenedor" 
@@ -337,7 +379,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <textarea id="observaciones_box" name="observaciones_box"><?php echo htmlspecialchars($contenedor['observaciones_box']); ?></textarea>
         </div>
         
-        <!-- Estatus IPSA (Manual) -->
         <div class="form-group" style="background-color:#e8f5e9; border:1px solid #81c784; padding:10px; border-radius:5px;">
             <label for="estatus_ipsa" style="color:#000000ff;">Estatus IPSA:</label>
             <select id="estatus_ipsa" name="estatus_ipsa" required>
@@ -349,15 +390,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </select>
         </div>
 
-        <!-- Hidden -->
         <input type="hidden" name="bloque" value="<?php echo $contenedor['bloque_id']; ?>">
         <input type="hidden" name="posicion" value="<?php echo $contenedor['posicion']; ?>">
 
         <div class="buttons">
-            <a href="bloques.php" class="regresar-button">
-                <img src="../imagenes/regresar.png" alt="Regresar">
-                <span>Regresar</span>
-            </a>
+                <?php
+                    // Lógica para construir el enlace de regreso
+                    // Usamos las variables $ref_patio y $ref_bloque capturadas al inicio
+                    $backLink = "bloques.php"; 
+                    if (!empty($ref_patio) && !empty($ref_bloque)) {
+                        $backLink = "bloques.php?patio_id=" . urlencode($ref_patio) . "&bloque_id=" . urlencode($ref_bloque);
+                    }
+                ?>
+
+                <a href="<?php echo htmlspecialchars($backLink); ?>" class="regresar-button">
+                    <img src="../imagenes/regresar.png" alt="Regresar">
+                    <span>Regresar</span>
+                </a>
             <button type="submit" class="guardar-button">
                 <img src="../imagenes/Save.png" alt="Guardar">
                 <span>Guardar</span>
@@ -421,12 +470,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Toast
     function showToast(msg, type='success'){
         const c = document.getElementById('toast-container');
+        if (!c) return; // Seguridad
         const t = document.createElement('div');
         t.className = `toast ${type}`;
         t.textContent = msg;
         c.appendChild(t);
-        void t.offsetWidth; t.classList.add('show');
-        setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); }, 4000);
+        // Pequeño delay para permitir que el DOM se actualice y la transición CSS funcione
+        setTimeout(() => { t.classList.add('show'); }, 10);
+        setTimeout(()=>{ 
+            t.classList.remove('show'); 
+            setTimeout(()=>t.remove(), 500); 
+        }, 4000);
     }
 
     <?php if (isset($_SESSION['toast_message'])): ?>

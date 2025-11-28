@@ -81,18 +81,20 @@ if (isset($_GET['nombre'])) {
     <!-- Contenedor de Toasts -->
     <div id="toast-container"></div>
 
-    <header>
-        <div class="header-left">
-            <a href="../index.php">
-                <img src="../imagenes/IPSA.png" alt="Logo" class="logo">
-                <span>IPROPORTSA</span>
-            </a>
-        </div>
-        <div class="header-right">
-            <span>Bienvenido, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
-            <a href="../logout.php" class="logout-button">Cerrar sesión</a>
-        </div>
-    </header>
+<header>
+  <div class="header-left">
+    <a href="../index.php">
+      <img src="../imagenes/IPSA.png" alt="Logo" class="logo">
+      <span class="brand-name">IPROPORTSA</span>
+    </a>
+  </div>
+  <div class="header-right">
+    <span class="welcome-label">Bienvenido,</span>
+    <span class="username"><?php echo $_SESSION['username']; ?></span>
+    <a href="../logout.php" class="logout-button">Cerrar sesión</a>
+  </div>
+</header>
+
     <main>
         <h1>Información del Contenedor</h1>
         <form>
@@ -168,32 +170,5 @@ if (isset($_GET['nombre'])) {
     <footer>
         <p>&copy; IPSA Web - 2025</p>
     </footer>
-
-    <!-- Script para Toasts -->
-    <script>
-    function showToast(message, type = 'success') {
-        const container = document.getElementById('toast-container');
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        container.appendChild(toast);
-        
-        // Animación
-        void toast.offsetWidth; 
-        toast.classList.add('show');
-
-        setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 300);
-        }, 4000);
-    }
-
-    <?php if (isset($_SESSION['toast_message'])): ?>
-        document.addEventListener('DOMContentLoaded', function() {
-            showToast('<?php echo addslashes($_SESSION['toast_message']); ?>', '<?php echo $_SESSION['toast_type'] ?? "success"; ?>');
-        });
-        <?php unset($_SESSION['toast_message'], $_SESSION['toast_type']); ?>
-    <?php endif; ?>
-    </script>
 </body>
 </html>

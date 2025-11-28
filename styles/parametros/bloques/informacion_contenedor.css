@@ -296,3 +296,60 @@ footer {
     display: block;
     margin-top: 5px;
 }
+
+/* Responsive: ocultar empresa y Bienvenido en móvil */
+@media (max-width: 480px){
+  .brand-name,        /* nombre empresa */
+  .welcome-label{     /* texto Bienvenido */
+    display: none !important;
+  }
+  .logo { height: 28px; }
+  .username {
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  .logout-button {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+}
+/* ============================
+   FIX FORMULARIO RESPONSIVE
+   ============================ */
+@media (max-width: 600px) {
+    form {
+        width: 95% !important; /* margen uniforme */
+    }
+
+    .form-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    label {
+        width: 100%;
+        margin-bottom: 5px;
+        text-align: left;
+    }
+
+    input, textarea, select {
+        width: 100%;
+    }
+}
+/* ============================
+   FIX TITULO + MÁRGENES FORMULARIO EN MOVIL
+   ============================ */
+@media (max-width: 600px) {
+
+    /* Arregla el título centrado */
+    h1 {
+        margin-right: 0 !important;
+        text-align: center !important;
+    }
+
+    /* Corrige el margen desigual del formulario */
+    form {
+        width: 95% !important;
+        margin: 0 auto !important;
+    }
+}
