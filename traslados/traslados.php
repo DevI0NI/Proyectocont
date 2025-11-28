@@ -295,11 +295,23 @@ if (isset($_GET['nombre'])) {
             </div>
 
             <!-- Botones -->
-            <div class="buttons">
-                <a href="../index.php" class="regresar-button">
+<div class="buttons">
+                <?php
+                    // Lógica para el botón regresar
+                    $backLink = "../index.php"; // Por defecto vuelve al menú principal
+                    
+                    // Si viene desde la vista de bloques con referencias
+                    if (isset($_GET['ref_patio']) && isset($_GET['ref_bloque'])) {
+                        // Ajustamos la ruta para volver a bloques.php con el patio y bloque seleccionados
+                        $backLink = "../bloques/bloques.php?patio_id=" . intval($_GET['ref_patio']) . "&bloque_id=" . intval($_GET['ref_bloque']);
+                    }
+                ?>
+                
+                <a href="<?php echo htmlspecialchars($backLink); ?>" class="regresar-button">
                     <img src="../imagenes/regresar.png" alt="Regresar">
                     <span>Regresar</span>
                 </a>
+                
                 <button type="submit" class="trasladar-button" disabled>
                     <img src="../imagenes/trasladar.png" alt="Trasladar">
                     <span>Trasladar</span>

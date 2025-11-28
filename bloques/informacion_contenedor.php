@@ -135,15 +135,30 @@ if (isset($_GET['nombre'])) {
 
             <div class="form-group">
                 <label for="ubicacion">Ubicación:</label>
-                <input type="text" id="ubicacion" value="Patio: <?php echo htmlspecialchars($contenedor['patio_nombre']); ?>, Bloque: <?php echo htmlspecialchars($contenedor['bloque_numero']); ?>, Posición: <?php echo htmlspecialchars($contenedor['posicion']); ?>" readonly>
+                <input type="text" id="ubicacion" value="<?php echo htmlspecialchars($contenedor['patio_nombre']); ?>, Bloque: <?php echo htmlspecialchars($contenedor['bloque_numero']); ?>, Posición: <?php echo htmlspecialchars($contenedor['posicion']); ?>" readonly>
             </div>
             
-            <div class="buttons">
-                <a href="bloques.php" class="regresar-button">
+<div class="buttons">
+                <?php
+                    // Lógica para construir el enlace de regreso
+                    $backLink = "bloques.php"; // Por defecto al inicio
+                    if (isset($_GET['ref_patio']) && isset($_GET['ref_bloque'])) {
+                        $backLink = "bloques.php?patio_id=" . $_GET['ref_patio'] . "&bloque_id=" . $_GET['ref_bloque'];
+                    }
+                    
+                    // También pasamos las referencias al botón de modificar para no perder el hilo
+                    $modLink = "modificar_contenedor.php?nombre=" . urlencode($contenedor['nombre']);
+                    if (isset($_GET['ref_patio'])) {
+                        $modLink .= "&ref_patio=" . $_GET['ref_patio'] . "&ref_bloque=" . $_GET['ref_bloque'];
+                    }
+                ?>
+
+                <a href="<?php echo htmlspecialchars($backLink); ?>" class="regresar-button">
                     <img src="../imagenes/regresar.png" alt="Regresar">
                     <span>Regresar</span>
                 </a>
-                <a href="modificar_contenedor.php?nombre=<?php echo urlencode($contenedor['nombre']); ?>" class="guardar-button">
+
+                <a href="<?php echo htmlspecialchars($modLink); ?>" class="guardar-button">
                     <img src="../imagenes/modificar.png" alt="Modificar">
                     <span>Modificar</span>
                 </a>

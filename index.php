@@ -150,7 +150,7 @@ if (isset($_SESSION['sucursal_activa'])) {
 
                         <!-- 2. BLOQUES -->
             <div class="menu-item">
-                <a href="bloques/bloques.php">
+                <a href="bloques/contenedor.php">
                     <img src="imagenes/bloques.png" alt="Bloques">
                     <span>Contenedores</span>
                 </a>
