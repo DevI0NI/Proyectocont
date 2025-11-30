@@ -168,6 +168,15 @@ if (isset($_SESSION['sucursal_activa'])) {
             </div>
             <?php endif; ?>
 
+            <?php if ($rol_id == 1 || $rol_id == 2 || $rol_id == 3): ?>
+            <div class="menu-item">
+                <a href="despachos/despachos.php">
+                    <img src="imagenes/egresos.png" alt="Bloques">
+                    <span>Despachos</span>
+                </a>
+            </div>
+            <?php endif; ?>
+
             <!-- 4. REPORTES (Rol 1 y 2) -->
             <?php if ($rol_id == 1 || $rol_id == 2): ?>
             <div class="menu-item">

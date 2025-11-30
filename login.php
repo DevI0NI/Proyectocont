@@ -37,9 +37,7 @@ unset($_SESSION['error']);
 
             <button type="submit">Iniciar sesión</button>
             
-            <div class="forgot-password">
-                <a href="#">¿Ha olvidado su contraseña?</a>
-            </div>
+
         </form>
 
         <footer>

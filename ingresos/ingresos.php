@@ -5,7 +5,7 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// 1. CONTEXTO DE SUCURSAL (Obligatorio)
+// 1. CONTEXTO DE SUCURSAL
 if (!isset($_SESSION['sucursal_activa'])) {
     header('Location: ../index.php');
     exit;
@@ -23,19 +23,16 @@ require '../config/database.php';
 $error_message = '';
 
 // =======================================================
-// 1. CARGA DE DATOS MAESTROS (Filtrados por Contexto)
+// 1. CARGA DE DATOS MAESTROS
 // =======================================================
 
-// Patios de la sucursal activa
 $stmtPatios = $pdo->prepare('SELECT id, nombre FROM patios WHERE estado_id = 1 AND sucursal_id = :sucursal ORDER BY nombre ASC');
 $stmtPatios->execute(['sucursal' => $sucursal_id]);
 $patios = $stmtPatios->fetchAll(PDO::FETCH_ASSOC);
 
-// Tipos de Unidad (Globales)
 $stmtTiposUnidad = $pdo->query('SELECT id, nombre FROM tipos_unidad WHERE estado_id = 1 ORDER BY nombre ASC');
 $tiposUnidad = $stmtTiposUnidad->fetchAll(PDO::FETCH_ASSOC);
 
-// Estatus de Unidad (Buscar ID de categoría 'Unidad')
 $stmtCat = $pdo->prepare('SELECT id FROM tipos_estatus WHERE nombre = :nombre');
 $stmtCat->execute(['nombre' => 'Unidad']);
 $idCatUnidad = $stmtCat->fetchColumn();
@@ -43,14 +40,12 @@ $stmtEstUnidad = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHER
 $stmtEstUnidad->execute(['id' => $idCatUnidad]);
 $estadosUnidad = $stmtEstUnidad->fetchAll(PDO::FETCH_ASSOC);
 
-// Estatus de Box (Buscar ID de categoría 'Estructura')
 $stmtCat->execute(['nombre' => 'Estructura']);
 $idCatBox = $stmtCat->fetchColumn();
 $stmtEstBox = $pdo->prepare('SELECT id, nombre FROM estatus_contenedores WHERE tipo_estatus_id = :id AND estado_id = 1 ORDER BY nombre ASC');
 $stmtEstBox->execute(['id' => $idCatBox]);
 $statusBox = $stmtEstBox->fetchAll(PDO::FETCH_ASSOC);
 
-// NUEVO: Cargar lista de Estatus IPSA para el selector manual
 $stmtIpsaList = $pdo->query("SELECT id, nombre FROM estatus_ipsa WHERE estado_id = 1 ORDER BY nombre ASC");
 $listaEstatusIpsa = $stmtIpsaList->fetchAll(PDO::FETCH_ASSOC);
 
@@ -96,8 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             throw new Exception("La posición $posicion ya está ocupada por otro contenedor activo.");
         }
 
-        // D. LÓGICA INTELIGENTE DE REINGRESO
-        // Verificamos si el contenedor existe (activo o inactivo)
+        // D. LÓGICA DE REINGRESO / NUEVO
         $stmtExist = $pdo->prepare('SELECT id, estado_id FROM contenedores WHERE nombre = :nombre');
         $stmtExist->execute(['nombre' => $codigoContenedor]);
         $contenedorExistente = $stmtExist->fetch(PDO::FETCH_ASSOC);
@@ -106,16 +100,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $esReingreso = false;
 
         if ($contenedorExistente) {
-            // Si existe y está ACTIVO -> Error (Duplicado)
+            // Si existe y está ACTIVO -> Error
             if ($contenedorExistente['estado_id'] == 1) {
                 throw new Exception('El número de equipo ya existe y está activo en el patio.');
             } 
-            // Si existe y está INACTIVO -> REINGRESO (UPDATE)
+            // Si existe y está INACTIVO -> REINGRESO
             else {
                 $esReingreso = true;
                 $contenedorId = $contenedorExistente['id'];
                 
-                // Reactivamos y actualizamos TODO
+                // 1. UPDATE del Contenedor (Reactivar)
                 $sqlUpdate = '
                     UPDATE contenedores SET 
                         bloque_id = :blk, 
@@ -128,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         observaciones_box = :o_box,
                         estatus_ipsa_id = :ipsa, 
                         fecha_ingreso = :fec, 
-                        estado_id = 1 -- ¡Aquí lo revivimos!
+                        estado_id = 1 
                     WHERE id = :id
                 ';
                 $stmtUpd = $pdo->prepare($sqlUpdate);
@@ -138,9 +132,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     'e_box' => $statusBoxId, 'o_box' => $observacionesBox,
                     'ipsa' => $estatusIpsaId, 'fec' => $fechaIngreso, 'id' => $contenedorId
                 ]);
+
+                // 2. LIMPIEZA CRÍTICA: BORRAR AUDITORÍA PYP ANTERIOR
+                // Al reingresar, el proceso de PYP debe empezar de cero.
+                $stmtDelPyp = $pdo->prepare('DELETE FROM pyp_auditoria WHERE contenedor_id = :cid');
+                $stmtDelPyp->execute(['cid' => $contenedorId]);
             }
         } else {
-            // Si NO existe -> NUEVO (INSERT)
+            // NUEVO (INSERT)
             $sqlIns = '
                 INSERT INTO contenedores (
                     nombre, bloque_id, posicion, tipo_unidad_id, modelo_id,
@@ -164,12 +163,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         // E. LOGS (Auditoría)
-        // Obtenemos el ID de operación "INGRESO"
         $stmtOp = $pdo->prepare('SELECT id FROM tipos_operacion WHERE nombre = "INGRESO"');
         $stmtOp->execute();
         $opId = $stmtOp->fetchColumn() ?: 1; 
 
-        $logMensaje = $esReingreso ? "Reingreso de equipo (Historial recuperado)." : "Ingreso inicial (Equipo nuevo).";
+        $logMensaje = $esReingreso ? "Reingreso de equipo (Historial previo archivado)." : "Ingreso inicial (Equipo nuevo).";
 
         // Log Maestro
         $stmtLog = $pdo->prepare('INSERT INTO logs_eventos (contenedor_id, usuario_id, tipo_operacion_id, observaciones, estado_id) VALUES (?, ?, ?, ?, 1)');
@@ -180,9 +178,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $stmtDetalle = $pdo->prepare('INSERT INTO logs_traslados (evento_id, bloque_nuevo_id, posicion_nueva) VALUES (?, ?, ?)');
         $stmtDetalle->execute([$eventoId, $bloqueId, $posicion]);
 
+        // F. ACTUALIZAR CAPACIDAD DEL BLOQUE
+        // El reingreso o ingreso nuevo OCUPA un espacio
+        $stmtInc = $pdo->prepare('UPDATE bloques SET capacidad_actual = capacidad_actual + 1 WHERE id = :bid');
+        $stmtInc->execute(['bid' => $bloqueId]);
+
         $pdo->commit();
 
-        $_SESSION['toast_message'] = $esReingreso ? 'Contenedor reingresado correctamente.' : 'Contenedor ingresado correctamente.';
+        $_SESSION['toast_message'] = $esReingreso ? 'Contenedor reingresado y reseteado correctamente.' : 'Contenedor ingresado correctamente.';
         $_SESSION['toast_type'] = 'success';
         header('Location: ingresos.php');
         exit;
@@ -207,7 +210,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .toast.error { background-color: #dc3545; border-left: 5px solid #bd2130; }
         .toast.success { background-color: #28a745; border-left: 5px solid #1e7e34; }
         
-        /* Estilos para validación visual */
         input.error { border-color: #ff4d4d !important; background-color: #fff5f5; }
         input.valid { border-color: #28a745 !important; }
         .error-message { color: #ff4d4d; display: none; font-size: 0.85em; font-weight: bold; }
@@ -234,12 +236,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <main>
     <h1>Nuevo Ingreso</h1>
     
-    <?php
-        $stmtSuc = $pdo->prepare("SELECT nombre FROM sucursales WHERE id = ?");
-        $stmtSuc->execute([$sucursal_id]);
-        $nomSuc = $stmtSuc->fetchColumn();
-    ?>
-
     <?php if ($error_message): ?>
         <p style="color: red; text-align: center; font-weight: bold;"><?php echo htmlspecialchars($error_message); ?></p>
     <?php endif; ?>
@@ -307,7 +303,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <textarea id="observaciones_box" name="observaciones_box"><?php echo isset($_POST['observaciones_box']) ? htmlspecialchars($_POST['observaciones_box']) : ''; ?></textarea>
         </div>
 
-        <!-- Selector IPSA Manual -->
         <div class="form-group">
             <label for="estatus_ipsa">Estatus IPSA:</label>
             <select id="estatus_ipsa" name="estatus_ipsa" required style="border: 2px solid #00695C;">
