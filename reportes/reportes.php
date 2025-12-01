@@ -178,6 +178,7 @@ $nombreSucursal = $stmtSuc->fetchColumn();
                         <option value="inventario">📦 Contenedores Activos</option>
                         <option value="movimientos">📋 Bitácora Movimientos</option>
                         <option value="auditorias">✅ Auditorías PYP</option>
+                        <option value="traslados">🚚 Reporte de Traslados</option>
                     </select>
                 </div>
 
@@ -253,6 +254,24 @@ $nombreSucursal = $stmtSuc->fetchColumn();
                     </div>
                 </div>
 
+                <div class="option-group" id="cols-traslados" style="display:none;">
+                    <h3>3. Columnas</h3>
+                    <div class="checkbox-grid">
+                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="patio" checked> Patio Destino</label>
+                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="bloque" checked> Bloque Destino</label>
+                        
+                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="contenedor" checked> Equipo</label>
+                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="tipo"> Tipo</label>
+                        
+                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="origen" checked> Desde (Origen)</label>
+                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="destino" checked> Hacia (Destino)</label>
+                        
+                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="usuario" checked> Operador</label>
+                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="detalle"> Observaciones</label>
+                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="fecha" checked> Fecha</label>
+                    </div>
+                </div>
+
                 <div class="actions">
                     <button type="button" class="btn-preview" onclick="cargarVistaPrevia()">👁️ Vista Previa</button>
                     <div style="border-top:1px solid #eee; margin:5px 0;"></div>
@@ -292,6 +311,8 @@ $nombreSucursal = $stmtSuc->fetchColumn();
         document.getElementById('cols-inventario').style.display = 'none';
         document.getElementById('cols-movimientos').style.display = 'none';
         document.getElementById('cols-auditorias').style.display = 'none';
+        document.getElementById('cols-traslados').style.display = 'none';
+        
         document.getElementById('filtro-patio').style.display = 'none';
         document.getElementById('filtro-bloque').style.display = 'none';
         document.getElementById('filtros-fecha').style.display = 'block';
@@ -302,12 +323,14 @@ $nombreSucursal = $stmtSuc->fetchColumn();
             document.getElementById('filtro-bloque').style.display = 'block';
         } else if (tipo === 'movimientos') {
             document.getElementById('cols-movimientos').style.display = 'block';
-            // AHORA SI: Habilitamos filtros para movimientos
             document.getElementById('filtro-patio').style.display = 'block';
             document.getElementById('filtro-bloque').style.display = 'block';
         } else if (tipo === 'auditorias') {
             document.getElementById('cols-auditorias').style.display = 'block';
-            // AHORA SI: Habilitamos filtros para auditorias
+            document.getElementById('filtro-patio').style.display = 'block';
+            document.getElementById('filtro-bloque').style.display = 'block';
+        } else if (tipo === 'traslados') {
+            document.getElementById('cols-traslados').style.display = 'block';
             document.getElementById('filtro-patio').style.display = 'block';
             document.getElementById('filtro-bloque').style.display = 'block';
         }
@@ -341,6 +364,7 @@ $nombreSucursal = $stmtSuc->fetchColumn();
         if (tipo === 'inventario') return 'generar_inventario.php';
         if (tipo === 'movimientos') return 'generar_movimientos.php';
         if (tipo === 'auditorias')  return 'generar_auditorias.php';
+        if (tipo === 'traslados')   return 'generar_traslados.php';
         return '';
     }
 
