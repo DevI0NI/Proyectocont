@@ -192,7 +192,15 @@ try {
                 }
                 echo "</tr>";
             }
-
+            // Calculamos cuántas columnas visibles hay para ajustar el colspan
+            $colsVisibles = 0;
+            foreach($headers as $h) { if($h !== 'Patio' && $h !== 'Bloque') $colsVisibles++; }
+            
+            echo "<tr class='total-row'>";
+            // Colspan - 1 para dejar espacio a la celda del número
+            echo "<td colspan='" . ($colsVisibles - 1) . "'>Total Contenedores:</td>";
+            echo "<td>" . count($items) . "</td>";
+            echo "</tr>";
             // Fila vacía para separar grupos visualmente en Excel
             echo "<tr><td colspan='10' style='border:none;'></td></tr>";
             echo "</table>";
