@@ -121,6 +121,25 @@ require '../../config/database.php';
             .clean-wrapper { margin: 10px; padding: 15px; }
             .stat-value { font-size: 1.2rem; }
         }
+
+        /* Botón Cancelar (Gris/Azulado para que combine pero sea secundario) */
+        .btn-cancel {
+            display: inline-block;
+            background-color: #607D8B; /* Gris azulado elegante */
+            color: white;
+            padding: 12px 30px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+            font-size: 1rem;
+        }
+        .btn-cancel:hover {
+            background-color: #455A64; /* Más oscuro al pasar el mouse */
+            transform: translateY(-2px); /* Pequeño efecto de elevación */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
     </style>
 </head>
 <body>
@@ -218,8 +237,10 @@ require '../../config/database.php';
             </button>
         </div>
 
-        <div style="text-align:center; margin-top:20px;">
-            <a href="../parametros.php" style="color:#666; text-decoration:none;">← Cancelar</a>
+       <div style="text-align:center; margin-top:25px;">
+            <a href="../parametros.php" class="btn-cancel">
+                ← Regresar al Menú
+            </a>
         </div>
     </div>
 </main>

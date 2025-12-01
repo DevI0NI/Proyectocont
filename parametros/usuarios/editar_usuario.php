@@ -158,123 +158,81 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <title>Editar Usuario</title>
     <!-- Usamos el mismo CSS que nuevo_usuario para mantener la simetría -->
     <link rel="stylesheet" href="../../styles/parametros/sucursales/nueva_sucursal.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ESTILOS DE ALINEACIÓN IDÉNTICOS A NUEVO_USUARIO */
-        
-        /* Centrar el título */
-        h1 {
-            text-align: center;
-            width: 100%;
-            margin-bottom: 30px;
-            color: #333;
-        }
+        /* ESTILOS GENERALES */
+        h1 { text-align: center; width: 100%; margin-bottom: 30px; color: #333; }
 
-        /* Contenedor del formulario centrado */
         form {
-            width: 100%;
-            max-width: 600px; /* Ancho máximo controlado */
-            margin: 0 auto;   /* Centrado horizontal */
-            display: flex;
-            flex-direction: column;
-            gap: 20px;        /* Espacio vertical uniforme */
+            width: 100%; max-width: 600px; margin: 0 auto; 
+            display: flex; flex-direction: column; gap: 20px;
         }
 
-        /* Filas del formulario */
         .form-group {
-            display: flex;
-            align-items: flex-start; /* Alinear arriba para manejar mensajes de error debajo */
-            gap: 15px;
+            display: flex; align-items: flex-start; gap: 15px;
         }
 
-        /* Etiquetas alineadas */
         label {
-            flex: 0 0 140px; /* Ancho fijo para todas las etiquetas */
-            text-align: center;
-            background-color: #80CBC4;
-            padding: 10px;
-            border-radius: 5px;
-            color: #000;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 42px; /* Altura fija igual al input */
-            margin: 0;
+            flex: 0 0 140px; text-align: center; background-color: #80CBC4;
+            padding: 10px; border-radius: 5px; color: #000; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            height: 42px; margin: 0;
         }
 
-        /* Contenedor de input + mensajes (Ocupa el resto) */
+        /* Contenedor relativo para posicionar el ícono dentro */
         .input-wrapper {
-            flex: 1;
-            display: flex;
+            flex: 1; 
+            display: flex; 
             flex-direction: column;
+            position: relative; /* CRÍTICO: Para que el absolute funcione respecto a esto */
         }
 
-        /* Inputs y Selects */
-        input[type="text"], 
-        input[type="email"], 
-        input[type="password"],
-        select {
-            width: 100%;
-            padding: 10px; 
-            border: 1px solid #ccc; 
-            border-radius: 4px; 
-            font-size: 15px;
-            height: 42px; /* Altura consistente */
-            box-sizing: border-box;
+        input[type="text"], input[type="email"], input[type="password"], select {
+            width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;
+            font-size: 15px; height: 42px; box-sizing: border-box;
         }
 
-        /* Estados de validación visual */
         input.error { border-color: #ff4d4d !important; background-color: #fff0f0; }
         input.valid { border-color: #4CAF50 !important; background-color: #f0fff4; }
 
-        /* Mensajes de validación */
-        .validation-msg {
-            font-size: 0.85rem;
-            margin-top: 4px;
-            display: none;
-            font-weight: bold;
-        }
+        .validation-msg { font-size: 0.85rem; margin-top: 4px; display: none; font-weight: bold; }
         .error-text { color: #ff4d4d; }
         .valid-text { color: #4CAF50; }
-        .info-pass { font-size: 0.8rem; color: #666; margin-top: 5px; display: block; }
 
-        /* Botones centrados */
         .buttons {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
+            display: flex; justify-content: center; gap: 20px; margin-top: 20px;
+            padding-top: 20px; border-top: 1px solid #eee;
         }
 
-        /* Alerta PHP */
         .alert-error { 
             background-color: #f8d7da; color: #721c24; padding: 15px; 
             border-radius: 5px; margin: 0 auto 20px auto; text-align: center; 
             border: 1px solid #f5c6cb; font-weight: bold; max-width: 600px;
         }
 
-        /* Estilo para inputs deshabilitados */
         .input-locked { background-color: #e9ecef !important; color: #495057; cursor: not-allowed; }
 
-        /* Responsive para móviles */
+        /* === ESTILO CORREGIDO DEL ÍCONO OJO === */
+        .toggle-password {
+            position: absolute;
+            right: 10px;   /* Pegado a la derecha */
+            top: 50%;      /* Centrado verticalmente */
+            transform: translateY(-50%); /* Ajuste fino del centro */
+            cursor: pointer;
+            color: #777;
+            font-size: 1.1rem;
+            z-index: 10;
+            height: auto; /* Evitar que herede alturas raras */
+            line-height: 1;
+        }
+        .toggle-password:hover { color: #333; }
+
         @media (max-width: 768px) {
-            .form-group {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 5px;
-            }
-            label {
-                width: 100%;
-                flex: none;
-                text-align: left;
-                justify-content: flex-start;
-                padding-left: 15px;
-            }
-            .buttons {
-                flex-direction: column-reverse;
-            }
+            .form-group { flex-direction: column; align-items: stretch; gap: 5px; }
+            label { width: 100%; flex: none; text-align: left; justify-content: flex-start; padding-left: 15px; }
+            .buttons { flex-direction: column-reverse; }
+            
+            /* El ícono se mantiene en su lugar relativo al input gracias al wrapper */
         }
     </style>
 </head>
@@ -335,7 +293,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                        minlength="6"
                        pattern="[A-Za-z0-9]+"
                        title="Debe tener al menos 6 caracteres y solo contener letras y números."
-                       autocomplete="new-password">
+                       autocomplete="new-password"
+                       style="padding-right: 40px;"> <i class="fa-solid fa-eye toggle-password" onclick="togglePassword()" id="togglePasswordIcon"></i>
             </div>
         </div>
 
@@ -412,6 +371,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // NOTA: verificar_usuario.php debe soportar ID para que esto funcione perfecto. 
     // Si no, solo validará duplicados nuevos.
     const currentId = <?php echo $id; ?>; 
+
+    // === FUNCIÓN TOGGLE PASSWORD ===
+    function togglePassword() {
+        const passwordInput = document.getElementById('password');
+        const icon = document.getElementById('togglePasswordIcon');
+        
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            passwordInput.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    }
 
     function checkDuplicidad(field, value, errorElement, inputElement, originalValue) {
         if (value.length === 0) return;

@@ -55,9 +55,23 @@ $nombreSucursal = $stmtSuc->fetchColumn();
         body { overflow-x: hidden; font-family: sans-serif; }
         main { max-width: 98vw !important; width: 98% !important; margin: 20px auto; padding: 0 10px; box-sizing: border-box; }
 
+        /* Diseño responsivo: En PC es grid, en móvil es bloque uno debajo de otro */
         .report-builder { display: grid; grid-template-columns: 350px 1fr; gap: 20px; margin-top: 20px; width: 100%; }
+        
         .sidebar-options { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: fit-content; }
-        .preview-area { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); min-height: 400px; overflow-x: auto; width: 100%; box-sizing: border-box; }
+        
+        /* CORRECCIÓN VISUALIZACIÓN VERTICAL */
+        .preview-area { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+            min-height: 400px; /* Altura mínima estética */
+            height: auto;      /* Crece según el contenido */
+            overflow-x: auto;  /* Scroll horizontal solo si la tabla es muy ancha */
+            width: 100%; 
+            box-sizing: border-box;
+        }
         
         .option-group { margin-bottom: 15px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; }
         .option-group h3 { font-size: 1rem; color: #00695C; margin-bottom: 8px; font-weight: bold; text-transform: uppercase; }
@@ -88,6 +102,21 @@ $nombreSucursal = $stmtSuc->fetchColumn();
         .group-header { background-color: #e0f2f1; color: #00695C; padding: 8px; margin-top: 15px; border-radius: 4px; font-weight: bold; border-left: 4px solid #00695C; }
 
         #print-header-content { display: none; }
+
+        /* === RESPONSIVE MÓVIL === */
+        @media (max-width: 768px) {
+            .report-builder { grid-template-columns: 1fr; } /* Pone la sidebar arriba y la tabla abajo */
+            .preview-area { 
+                overflow-x: auto; /* Permite deslizar la tabla horizontalmente */
+                padding: 10px;
+                /* Importante: Eliminar restricciones de altura fija que corten */
+                max-height: none; 
+            }
+            /* Ajuste para que la tabla no se vea diminuta */
+            .preview-table { min-width: 600px; } 
+        }
+
+        /* === ESTILOS IMPRESIÓN / PDF === */
         @media print {
             header, footer, .sidebar-options, .actions, h1, #loading, .preview-area h2 { display: none !important; }
             main { margin: 0; padding: 0; max-width: 100%; }
@@ -96,6 +125,24 @@ $nombreSucursal = $stmtSuc->fetchColumn();
             .preview-area { box-shadow: none; min-height: 0; overflow: visible; }
             .preview-table { font-size: 9pt; }
             @page { size: landscape; margin: 1cm; }
+        }
+        /* Botón Cancelar (Gris/Azulado para que combine pero sea secundario) */
+        .btn-cancel {
+            display: inline-block;
+            background-color: #607D8B; /* Gris azulado elegante */
+            color: white;
+            padding: 10px 28px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+            font-size: 1rem;
+        }
+        .btn-cancel:hover {
+            background-color: #455A64; /* Más oscuro al pasar el mouse */
+            transform: translateY(-2px); /* Pequeño efecto de elevación */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
     </style>
 </head>
@@ -290,7 +337,7 @@ $nombreSucursal = $stmtSuc->fetchColumn();
                     </div>
                 </div>
                 <div style="margin-top:15px; text-align:center;">
-                     <a href="../index.php" style="text-decoration:none; color:#00695C; font-size:0.9rem;">← Volver al Menú</a>
+                     <a href="../index.php" class="btn-cancel">← Volver al Menú</a>
                 </div>
             </div>
 

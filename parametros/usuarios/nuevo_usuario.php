@@ -115,8 +115,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nuevo Usuario</title>
-    <!-- Reutilizamos el CSS de nuevo_usuario.css (corregido para simetría) -->
     <link rel="stylesheet" href="../../styles/parametros/nuevo_usuario.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* Estilos de errores */
         .alert-error { 
@@ -136,6 +136,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         /* Estilos visuales de validación JS */
         input.error, select.error { border-color: #ff4d4d !important; }
         input.valid, select.valid { border-color: #4CAF50 !important; }
+
+        /* === NUEVO: ESTILO PARA EL OJO DE CONTRASEÑA === */
+        .input-container { position: relative; }
+        
+        .toggle-password {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            font-size: 1.2rem;
+            color: #777;
+            user-select: none; /* Evita que se seleccione al doble clic */
+        }
+        .toggle-password:hover { color: #333; }
     </style>
 </head>
 <body>
@@ -164,7 +179,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     <form action="nuevo_usuario.php" method="post" autocomplete="off">
         
-        <!-- USUARIO (Solo letras, con validación AJAX) -->
         <div class="form-group">
             <label for="username">Usuario:</label>
             <div class="input-container">
@@ -179,7 +193,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
         </div>
 
-        <!-- CORREO (Validación RegEx, con validación AJAX) -->
         <div class="form-group">
             <label for="email">Correo:</label>
             <div class="input-container">
@@ -194,18 +207,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
         </div>
 
-        <!-- CONTRASEÑA (Alfanumérica, Mínimo 6) -->
         <div class="form-group">
             <label for="password">Contraseña:</label>
-            <input type="password" id="password" name="password" required 
-                   placeholder="Mínimo 6 caracteres" 
-                   minlength="6"
-                   pattern="[A-Za-z0-9]+"
-                   title="Debe tener al menos 6 caracteres y solo contener letras y números."
-                   autocomplete="new-password">
+            <div class="input-container">
+                <input type="password" id="password" name="password" required 
+                       placeholder="Mínimo 6 caracteres" 
+                       minlength="6"
+                       pattern="[A-Za-z0-9]+"
+                       title="Debe tener al menos 6 caracteres y solo contener letras y números."
+                       autocomplete="new-password"
+                       style="padding-right: 40px;"> <i class="fa-solid fa-eye toggle-password" onclick="togglePassword()" id="togglePasswordIcon"></i>
+            </div>
         </div>
 
-        <!-- ROL -->
         <div class="form-group">
             <label for="rol_id">Rol:</label>
             <select id="rol_id" name="rol_id" required>
@@ -218,7 +232,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </select>
         </div>
 
-        <!-- SUCURSAL -->
         <div class="form-group">
             <label for="sucursal_id">Sucursal:</label>
             <select id="sucursal_id" name="sucursal_id" required>
@@ -257,6 +270,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 <script>
     const VALIDATOR_URL = 'verificar_usuario.php';
+
+    // === FUNCIÓN TOGGLE PASSWORD (NUEVO) ===
+function togglePassword() {
+        const passwordInput = document.getElementById('password');
+        const icon = document.getElementById('togglePasswordIcon');
+        
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            // Cambiar icono a "Ojo Tachado" (Slash)
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            passwordInput.type = 'password';
+            // Volver a "Ojo Normal"
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    }
 
     // Función principal para checkear duplicidad vía AJAX
     function checkDuplicidad(field, value, errorElement, validElement) {
