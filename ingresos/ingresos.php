@@ -439,7 +439,7 @@ document.getElementById('patio').addEventListener('change', function () {
                     const opt = document.createElement('option');
                     opt.value = item.id;
                     const libres = item.capacidad_maxima - item.capacidad_actual;
-                    opt.text = `Bloque ${item.numero} (Libres: ${libres})`;
+                    opt.text = `Bloque ${item.numero}`;
                     if(item.id == prev) opt.selected = true;
                     select.appendChild(opt);
                 });

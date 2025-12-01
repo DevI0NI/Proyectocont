@@ -81,6 +81,16 @@ if (!in_array($_SESSION['rol_id'], [1, 2])) {
                     <span>Configuración de Bloques</span>
                 </a>
             </div>
+                        <!-- Gestión de Sucursales (SOLO SUPER ADMIN - ROL 1) -->
+            <?php if ($_SESSION['rol_id'] == 1): ?>
+            <div class="menu-item">
+                <a href="limpieza/limpieza.php">
+                    <!-- Usa una imagen genérica si no tienes sucursales.png aún -->
+                    <img src="../imagenes/limpieza.png" alt="Sucursales" onerror="this.src='../imagenes/bloquesconfig.png'">
+                    <span>Limpieza de Datos</span>
+                </a>
+            </div>
+            <?php endif; ?>
             <div class="menu-item">
                 <a href="../index.php">
                     <img src="../imagenes/regresar.png" alt="Regresar">

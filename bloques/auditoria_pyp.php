@@ -157,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <form action="" method="post">
         
         <div class="form-group">
-            <label for="estatus_pyp">Estatus PYP (Corto):</label>
+            <label for="estatus_pyp">Estatus PYP:</label>
             <input type="text" id="estatus_pyp" name="estatus_pyp" 
                    value="<?php echo htmlspecialchars($data['estatus_pyp'] ?? ''); ?>" 
                    maxlength="25" 

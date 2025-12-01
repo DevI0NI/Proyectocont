@@ -4,65 +4,93 @@ require '../config/database.php';
 
 if (!isset($_SESSION['user_id'])) { exit('Acceso denegado'); }
 
-// 1. CONFIGURACIÓN DE ZONA HORARIA
 date_default_timezone_set('America/Guatemala');
 
 $sucursal_id = $_SESSION['sucursal_activa'];
-$modo = $_GET['modo'] ?? 'export'; // 'preview' o 'export'
-
-// Límite para vista previa
+$modo = $_GET['modo'] ?? 'export';
 $limit = ($modo === 'preview') ? " LIMIT 50" : "";
 
 try {
-    // 2. CAPTURA DE FECHAS (Por defecto HOY)
-    $fechaInicio = $_GET['f_inicio'] ?? date('Y-m-d');
-    $fechaFin    = $_GET['f_fin'] ?? date('Y-m-d');
+    // 1. Recibir Filtros (Mes actual por defecto)
+    $fechaInicio = $_GET['f_inicio'] ?? date('Y-m-01');
+    $fechaFin    = $_GET['f_fin'] ?? date('Y-m-t');
+    $patio_id    = !empty($_GET['patio_id']) ? (int)$_GET['patio_id'] : null;
+    $bloque_id   = !empty($_GET['bloque_id']) ? (int)$_GET['bloque_id'] : null;
 
-    // Construcción Dinámica de Columnas
+    // 2. Columnas Seleccionadas
     $colsSeleccionadas = $_GET['cols'] ?? [];
     
-    // 3. MAPA DE CAMPOS (Agregados Patio y Bloque)
+    // Mapa de campos (SQL completo)
     $mapaCampos = [
-        'patio'          => "p.nombre AS patio_nombre",          // <--- NUEVO
-        'bloque'         => "b.numero AS bloque_numero",         // <--- NUEVO
-        'posicion'       => "c.posicion",
-        'nombre'         => "c.nombre AS contenedor_nombre",
-        'tipo'           => "t.nombre AS tipo_nombre",
-        'modelo'         => "m.nombre AS modelo_nombre",
-        'estatus_unidad' => "eu.nombre AS estatus_uni_nombre",
-        'estatus_box'    => "eb.nombre AS estatus_box_nombre",
-        'estatus_ipsa'   => "ei.nombre AS estatus_ipsa_nombre",
-        'estatus_pyp'    => "IFNULL(pa.estatus_pyp, 'Sin Asignar') AS pyp_estado",
-        'fecha_ingreso'  => "c.fecha_ingreso"
+        'patio'                => "p.nombre AS patio_nombre",
+        'bloque'               => "b.numero AS bloque_numero",
+        'posicion'             => "c.posicion",
+        'nombre'               => "c.nombre AS contenedor_nombre",
+        'tipo'                 => "t.nombre AS tipo_nombre",
+        'modelo'               => "m.nombre AS modelo_nombre",
+        'estatus_unidad'       => "eu.nombre AS estatus_uni_nombre",
+        'estatus_box'          => "eb.nombre AS estatus_box_nombre",
+        'estatus_ipsa'         => "ei.nombre AS estatus_ipsa_nombre",
+        'estatus_pyp'          => "IFNULL(pa.estatus_pyp, 'Sin Asignar') AS pyp_estado",
+        'observaciones_unidad' => "c.observaciones_unidad",
+        'observaciones_box'    => "c.observaciones_box",
+        'fecha_ingreso'        => "c.fecha_ingreso"
     ];
 
     $titulos = [
-        'patio' => 'Patio', 'bloque' => 'Bloque', // <--- NUEVO
-        'posicion' => 'Posición', 'nombre' => 'Contenedor', 'tipo' => 'Tipo',
-        'modelo' => 'Modelo', 'estatus_unidad' => 'Est. Unidad',
-        'estatus_box' => 'Est. Box', 'estatus_ipsa' => 'Est. IPSA',
-        'estatus_pyp' => 'Est. PYP', 'fecha_ingreso' => 'Ingreso'
+        'patio'                => 'Patio', 
+        'bloque'               => 'Bloque',
+        'posicion'             => 'Posición', 
+        'nombre'               => 'Contenedor', 
+        'tipo'                 => 'Tipo',
+        'modelo'               => 'Modelo', 
+        'estatus_unidad'       => 'Est. Unidad',
+        'estatus_box'          => 'Est. Box', 
+        'estatus_ipsa'         => 'Est. IPSA',
+        'estatus_pyp'          => 'Est. PYP',
+        'observaciones_unidad' => 'Obs. Unidad',
+        'observaciones_box'    => 'Obs. Box',
+        'fecha_ingreso'        => 'Ingreso'
     ];
 
     $selectParts = [];
     $headers = []; 
-    
+    $dataKeys = []; // Para saber qué clave del array $row corresponde a cada columna
+
     if (empty($colsSeleccionadas)) {
-         // Default mínimo si no marcan nada
          $selectParts[] = "c.nombre AS contenedor_nombre"; 
          $headers[] = "Contenedor";
+         $dataKeys[] = "contenedor_nombre";
     } else {
         foreach ($colsSeleccionadas as $colKey) {
             if (isset($mapaCampos[$colKey])) {
                 $selectParts[] = $mapaCampos[$colKey];
                 $headers[] = $titulos[$colKey] ?? ucfirst($colKey);
+                
+                // Extraer el alias para saber cómo buscarlo en $row después
+                // Ejemplo: "p.nombre AS patio_nombre" -> "patio_nombre"
+                // Ejemplo: "c.posicion" -> "posicion"
+                $parts = explode(" AS ", $mapaCampos[$colKey]);
+                if (count($parts) > 1) {
+                    $dataKeys[] = trim(end($parts));
+                } else {
+                    // Si no tiene AS, tomamos lo que está después del punto
+                    $partsDot = explode(".", $mapaCampos[$colKey]);
+                    $dataKeys[] = trim(end($partsDot));
+                }
             }
         }
     }
 
     $sqlSelect = implode(", ", $selectParts);
 
-    // 4. CONSULTA SQL CON FILTRO DE FECHAS
+    // 3. Preparar SQL
+    $params = [
+        'suc' => $sucursal_id,
+        'ini' => $fechaInicio . ' 00:00:00',
+        'fin' => $fechaFin . ' 23:59:59'
+    ];
+
     $sql = "
         SELECT $sqlSelect
         FROM contenedores c
@@ -76,17 +104,23 @@ try {
         LEFT JOIN pyp_auditoria pa ON c.id = pa.contenedor_id
         WHERE c.estado_id = 1 
           AND p.sucursal_id = :suc
-          AND c.fecha_ingreso BETWEEN :inicio AND :fin  -- <--- FILTRO DE FECHAS
-        ORDER BY p.nombre, b.numero, c.posicion
-        $limit
+          AND c.fecha_ingreso BETWEEN :ini AND :fin
     ";
+
+    if ($patio_id) {
+        $sql .= " AND p.id = :pid ";
+        $params['pid'] = $patio_id;
+    }
+    if ($bloque_id) {
+        $sql .= " AND b.id = :bid ";
+        $params['bid'] = $bloque_id;
+    }
+
+    $sql .= " ORDER BY p.nombre, b.numero, c.posicion $limit";
     
+    // 4. Ejecutar
     $stmt = $pdo->prepare($sql);
-    $stmt->execute([
-        'suc' => $sucursal_id,
-        'inicio' => $fechaInicio . ' 00:00:00',
-        'fin' => $fechaFin . ' 23:59:59'
-    ]);
+    $stmt->execute($params); 
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // --- SALIDA ---
@@ -94,7 +128,7 @@ try {
         header('Content-Type: application/json');
         echo json_encode(['headers' => $headers, 'rows' => $rows]);
     } else {
-        // Exportar Excel
+        // === MODO EXPORTAR EXCEL CON AGRUPACIÓN ===
         $filename = "Inventario_" . date('Ymd_His') . ".xls";
         header("Content-Type: application/vnd.ms-excel; charset=utf-8");
         header("Content-Disposition: attachment; filename=$filename");
@@ -102,32 +136,71 @@ try {
         header("Expires: 0");
         
         echo "<meta charset='UTF-8'>";
-        echo "<table border='1'>";
-        
-        // Encabezados con estilo
-        echo "<thead><tr>";
-        foreach ($headers as $h) {
-            echo "<th style='background-color:#00695C; color:white; border:1px solid #000; padding:5px;'>" . htmlspecialchars($h) . "</th>";
-        }
-        echo "</tr></thead>";
-        
-        // Cuerpo de la tabla
-        echo "<tbody>";
+        echo "<style>
+                .group-header { background-color: #e0f2f1; color: #00695C; font-weight: bold; border: 1px solid #ccc; font-size: 14px; text-align: left; }
+                .table-header { background-color: #00695C; color: white; font-weight: bold; border: 1px solid #000; }
+                td { border: 1px solid #ccc; }
+              </style>";
+
+        // 1. Agrupar los datos (Igual que en JS)
+        $grupos = [];
         foreach ($rows as $row) {
+            // Verificamos si existen las columnas de agrupación en la selección del usuario
+            $p = $row['patio_nombre'] ?? '';
+            $b = $row['bloque_numero'] ?? '';
+            
+            $key = ($p && $b) ? "$p - Bloque $b" : "General";
+            $grupos[$key][] = $row;
+        }
+
+        // 2. Iterar Grupos e Imprimir Tablas
+        foreach ($grupos as $titulo => $items) {
+            
+            echo "<table>"; // Iniciamos tabla para este grupo
+
+            // Fila de Título del Grupo (ocupa todas las columnas)
+            // Solo si hay más de un grupo o no es "General"
+            if ($titulo !== 'General' || count($grupos) > 1) {
+                // Calculamos colspan restando 2 (Patio y Bloque que ocultaremos) o total
+                // Para simplificar en Excel, un colspan alto funciona bien
+                echo "<tr><td colspan='10' class='group-header' style='height:30px; vertical-align:middle;'>$titulo</td></tr>";
+            }
+
+            // Fila de Encabezados de Columnas
             echo "<tr>";
-            foreach ($row as $val) {
-                echo "<td style='border:1px solid #ccc; padding:5px;'>" . htmlspecialchars($val) . "</td>";
+            foreach ($headers as $i => $h) {
+                // Ocultamos columnas Patio y Bloque del header si estamos agrupando
+                if ($h !== 'Patio' && $h !== 'Bloque') {
+                    echo "<td class='table-header'>$h</td>";
+                }
             }
             echo "</tr>";
+
+            // Filas de Datos
+            foreach ($items as $row) {
+                echo "<tr>";
+                // Iteramos usando $dataKeys para mantener el orden correcto
+                foreach ($dataKeys as $i => $key) {
+                    // El header correspondiente es $headers[$i]
+                    $headerName = $headers[$i];
+
+                    // Ocultamos celda si es Patio o Bloque
+                    if ($headerName !== 'Patio' && $headerName !== 'Bloque') {
+                        $val = $row[$key] ?? ''; // Valor seguro
+                        echo "<td>" . htmlspecialchars($val) . "</td>";
+                    }
+                }
+                echo "</tr>";
+            }
+
+            // Fila vacía para separar grupos visualmente en Excel
+            echo "<tr><td colspan='10' style='border:none;'></td></tr>";
+            echo "</table>";
         }
-        echo "</tbody></table>";
     }
 
 } catch (Exception $e) {
-    if ($modo === 'preview') {
-        echo json_encode(['error' => $e->getMessage()]);
-    } else {
-        echo "Error: " . $e->getMessage();
-    }
+    if ($modo === 'preview') echo json_encode(['error' => $e->getMessage()]);
+    else echo "Error: " . $e->getMessage();
 }
 ?>
