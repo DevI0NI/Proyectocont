@@ -213,7 +213,7 @@ if ($rangoFin - $rangoInicio < $numBotonesMostrados && $totalBloques >= $numBoto
         <div class="actions-container">
             <input type="text" id="buscarInput" placeholder="Buscar contenedores..." onkeyup="buscarContenedores()">
             
-            <?php if(in_array($rol_usuario, [1, 2, 4])): ?>
+            <?php if(in_array($rol_usuario, [1, 2])): ?>
             <a href="../ingresos/ingresos.php" class="nuevo-button">
                 <div class="nuevo-content">
                     <img src="../imagenes/nuevo.png" alt="Nuevo" class="nuevo-icon">
