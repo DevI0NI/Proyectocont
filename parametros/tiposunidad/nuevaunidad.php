@@ -90,6 +90,59 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .error-message { color: red; display: none; }
         .valid-message { color: green; display: none; opacity: 1; transition: opacity 1s ease-out; }
         .valid-message.fade-out { opacity: 0; }
+
+        /* === CORRECCIÓN VISUAL PARA MODELOS (MÓVIL Y PC) === */
+        #modelos-container {
+            display: flex;
+            flex-direction: column; /* Apila los inputs verticalmente */
+            gap: 10px; /* Espacio entre inputs */
+            width: 100%;
+        }
+
+        #modelos-container input {
+            width: 100%; /* Ocupa todo el ancho disponible */
+            box-sizing: border-box; /* El padding no aumenta el ancho total */
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        /* Ajustes responsivos generales */
+        @media (max-width: 768px) {
+            .form-group { margin-bottom: 15px; }
+            label { display: block; margin-bottom: 5px; font-weight: bold; }
+            .modelos-buttons { display: flex; flex-direction: column; gap: 10px; }
+            .buttons { display: flex; flex-direction: column-reverse; gap: 10px; }
+            .buttons button, .buttons a { width: 100%; text-align: center; }
+        }
+
+        .modelos-buttons {
+            display: grid;
+            /* Crea 2 columnas de igual tamaño */
+            grid-template-columns: 1fr 1fr; 
+            gap: 10px; /* Espacio entre botones */
+            margin-top: 10px;
+        }
+
+        .modelos-buttons button,
+        .modelos-buttons a {
+            width: 100%; /* Ocupan todo el espacio de su celda */
+            padding: 12px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px; /* Espacio entre icono y texto */
+            box-sizing: border-box;
+            height: 50px; /* Altura uniforme */
+        }
+        
+        /* Ajuste específico para los íconos dentro de los botones */
+        .modelos-buttons img {
+            width: 20px;
+            height: 20px;
+        }
     </style>
 </head>
 <body>
