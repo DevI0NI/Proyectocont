@@ -258,11 +258,11 @@ $nombreSucursal = $stmtSuc->fetchColumn();
                         <label class="checkbox-label"><input type="checkbox" name="cols_desp[]" value="estatus_box"> Est. Box</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_desp[]" value="estatus_ipsa"> Est. IPSA</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_desp[]" value="estatus_pyp"> Est. PYP</label>
-                        <label class="checkbox-label"><input type="checkbox" name="cols_desp[]" value="fecha_ingreso" checked> Ingreso</label>
-                        <label class="checkbox-label"><input type="checkbox" name="cols_desp[]" value="fecha_despacho" checked> Despacho</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_desp[]" value="dias_estadia" checked> Días Estadía</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_desp[]" value="usuario" checked> Despachador</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_desp[]" value="observaciones"> Observaciones</label>
+                        <label class="checkbox-label"><input type="checkbox" name="cols_desp[]" value="fecha_ingreso" checked> Ingreso</label>
+                        <label class="checkbox-label"><input type="checkbox" name="cols_desp[]" value="fecha_despacho" checked> Despacho</label>
                     </div>
                 </div>
 
@@ -299,13 +299,12 @@ $nombreSucursal = $stmtSuc->fetchColumn();
                     <div class="checkbox-grid">
                         <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="patio" checked> Patio Destino</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="bloque" checked> Bloque Destino</label>
-                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="fecha" checked> Fecha</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="contenedor" checked> Equipo</label>
-                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="tipo"> Tipo</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="origen" checked> Desde (Origen)</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="destino" checked> Hacia (Destino)</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="usuario" checked> Operador</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="detalle"> Observaciones</label>
+                        <label class="checkbox-label"><input type="checkbox" name="cols_tras[]" value="fecha" checked> Fecha</label>
                     </div>
                 </div>
 
@@ -315,7 +314,6 @@ $nombreSucursal = $stmtSuc->fetchColumn();
                         <label class="checkbox-label"><input type="checkbox" name="cols_cambios[]" value="patio" checked> Patio</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_cambios[]" value="bloque" checked> Bloque</label>
                         
-                        <label class="checkbox-label"><input type="checkbox" name="cols_cambios[]" value="fecha" checked> Fecha</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_cambios[]" value="contenedor" checked> Contenedor</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_cambios[]" value="usuario" checked> Usuario</label>
                         
@@ -324,6 +322,7 @@ $nombreSucursal = $stmtSuc->fetchColumn();
                         
                         <label class="checkbox-label"><input type="checkbox" name="cols_cambios[]" value="anterior" checked> Valor Anterior</label>
                         <label class="checkbox-label"><input type="checkbox" name="cols_cambios[]" value="nuevo" checked> Valor Nuevo</label>
+                        <label class="checkbox-label"><input type="checkbox" name="cols_cambios[]" value="fecha" checked> Fecha</label>
                     </div>
                 </div>
 
