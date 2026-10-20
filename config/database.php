@@ -1,7 +1,7 @@
 <?php
 // filepath: c:\xampp\htdocs\proyectov2\config\database.php
 $host = 'localhost';
-$db = 'proyectocont_v2';
+$db = 'proyectocont_v2.1';
 $user = 'root'; // Cambia esto si tu usuario de MySQL es diferente
 $pass = ''; // Cambia esto si tu contraseña de MySQL es diferente
 

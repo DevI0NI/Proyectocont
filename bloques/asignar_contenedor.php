@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sqlCheck = "
             SELECT c.id, c.estatus_ipsa_id, pa.contenedor_id as ya_asignado
             FROM contenedores c
-            LEFT JOIN pyp_auditoria pa ON c.id = pa.contenedor_id
+            LEFT JOIN pyp_auditoria pa ON c.id = pa.contenedor_id AND pa.estado_id = 1
             WHERE c.id = :id AND c.estado_id = 1
         ";
         $stmtCheck = $pdo->prepare($sqlCheck);

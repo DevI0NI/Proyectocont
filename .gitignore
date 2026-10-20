@@ -1,0 +1,47 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+auth.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies and generated assets
+vendor/
+node_modules/
+/laravel/public/build/
+/laravel/public/hot
+/laravel/public/storage
+/laravel/public/fonts-manifest.dev.json
+
+# Databases, backups, uploads, and runtime files
+*.sql
+*.sqlite*
+*.bak
+*.log
+/laravel/storage/backups/
+/laravel/storage/framework/cache/*
+!/laravel/storage/framework/cache/.gitignore
+/laravel/storage/framework/sessions/*
+!/laravel/storage/framework/sessions/.gitignore
+/laravel/storage/framework/views/*
+!/laravel/storage/framework/views/.gitignore
+/laravel/storage/framework/testing/*
+!/laravel/storage/framework/testing/.gitignore
+
+# Local previews and personal documents
+/laravel/public/__*.html
+/Documentos/
+/render_2_sprints/
+/*.docx
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.codex/
+.phpunit.cache/
+.phpunit.result.cache

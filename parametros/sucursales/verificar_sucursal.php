@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // 2. VALIDACIÓN ESTRICTA (GLOBAL)
         // Buscamos si existe el nombre en todo el historial.
         // Excluimos el ID actual (útil si este script se reutiliza en edición).
-        $stmt = $pdo->prepare('SELECT COUNT(*) FROM sucursales WHERE nombre = :nombre AND id != :id');
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM sucursales WHERE nombre = :nombre AND id != :id AND estado_id = 1');
         
         $stmt->execute([
             'nombre' => $nombre,

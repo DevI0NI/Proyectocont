@@ -1,16 +1,87 @@
 <?php
 session_start();
+
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../login.php');
     exit;
 }
 
-// --- SEGURIDAD: CONTROL DE ACCESO POR ROL ---
-// Solo Super Admin (1) y Admin (2) pueden ver esta página.
-// Si el rol no es 1 ni 2, lo redirigimos al menú principal.
-if (!in_array($_SESSION['rol_id'], [1, 2])) {
+if (!isset($_SESSION['sucursal_activa'])) {
     header('Location: ../index.php');
     exit;
+}
+
+if (!in_array((int)($_SESSION['rol_id'] ?? 0), [1, 2], true)) {
+    header('Location: ../index.php');
+    exit;
+}
+
+require '../config/database.php';
+
+$sucursal_id = (int)$_SESSION['sucursal_activa'];
+$rol_id = (int)($_SESSION['rol_id'] ?? 0);
+$username = $_SESSION['username'] ?? 'Usuario';
+
+$sucursales = [];
+$nombreSucursalActiva = 'Sin asignar';
+
+if ($rol_id === 1) {
+    $stmtSuc = $pdo->query("SELECT id, nombre FROM sucursales WHERE estado_id = 1 ORDER BY nombre ASC");
+    $sucursales = $stmtSuc->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$stmtNomSucursal = $pdo->prepare('SELECT nombre FROM sucursales WHERE id = :id');
+$stmtNomSucursal->execute(['id' => $sucursal_id]);
+$nombreSucursalActiva = $stmtNomSucursal->fetchColumn() ?: 'Desconocida';
+
+$menuItems = [
+    ['label' => 'Contenedores', 'href' => '../bloques/bloques.php', 'icon' => '../imagenes/bloques.png', 'active' => false],
+    ['label' => 'Seguimiento PYP', 'href' => '../bloques/contenedor.php', 'icon' => '../imagenes/cont.png', 'active' => false],
+    ['label' => 'Traslados', 'href' => '../traslados/traslados.php', 'icon' => '../imagenes/traslados.png', 'active' => false],
+    ['label' => 'Despachos', 'href' => '../despachos/despachos.php', 'icon' => '../imagenes/egresos.png', 'active' => false],
+    ['label' => 'Reportes', 'href' => '../reportes/reportes.php', 'icon' => '../imagenes/reportes.png', 'active' => false],
+    ['label' => 'Parametros', 'href' => '../parametros/parametros.php', 'icon' => '../imagenes/parametros.png', 'active' => true],
+];
+
+$paramItems = [];
+if ($rol_id === 1) {
+    $paramItems[] = [
+        'label' => 'Sucursales',
+        'desc' => 'Administra sedes activas, disponibilidad y estructura base del sistema.',
+        'href' => 'sucursales/sucursales.php',
+        'icon' => '../imagenes/sucursales.png'
+    ];
+}
+
+$paramItems[] = [
+    'label' => 'Usuarios',
+    'desc' => 'Gestiona accesos, perfiles y permisos del personal operativo y administrativo.',
+    'href' => 'usuarios/usuarios.php',
+    'icon' => '../imagenes/usuarios.png'
+];
+
+$paramItems[] = [
+    'label' => 'Tipos de Unidad',
+    'desc' => 'Define prefijos, categorias y modelos base disponibles para ingresos y consulta.',
+    'href' => 'tiposunidad/tipos_unidad.php',
+    'icon' => '../imagenes/tipos_unidad.png'
+];
+
+$paramItems[] = [
+    'label' => 'Estatus de Contenedores',
+    'desc' => 'Mantiene los estados funcionales y la lectura operativa visible en inventario.',
+    'href' => 'estados/estados.php',
+    'icon' => '../imagenes/estados.png'
+];
+
+$paramItems[] = [
+    'label' => 'Configuracion de Patios y Bloques',
+    'desc' => 'Crea patios, bloques y capacidades para ordenar la ocupacion del puerto.',
+    'href' => 'bloques/configuracion.php',
+    'icon' => '../imagenes/bloquesconfig.png'
+];
+
+if ($rol_id === 1) {
 }
 ?>
 <!DOCTYPE html>
@@ -18,89 +89,410 @@ if (!in_array($_SESSION['rol_id'], [1, 2])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Parámetros del Sistema</title>
+    <meta name="color-scheme" content="light">
+    <title>Parametros - Proportsa</title>
+    <link rel="stylesheet" href="../styles/index.css">
     <link rel="stylesheet" href="../styles/parametros/parametros.css">
-    <style>
-        /* Estilo simple para el nuevo ícono si no tienes imagen aún */
-        .menu-item img { opacity: 0.9; transition: transform 0.2s; }
-        .menu-item:hover img { transform: scale(1.1); opacity: 1; }
-    </style>
+    <script>
+        (function () {
+            const savedTheme = localStorage.getItem('proportsa-theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
+    </script>
 </head>
 <body>
-<header>
-  <div class="header-left">
-    <a href="../index.php">
-      <img src="../imagenes/IPSA.png" alt="Logo" class="logo">
-      <span class="brand-name">IPROPORTSA</span>
-    </a>
-  </div>
-  <div class="header-right">
-    <span class="welcome-label">Bienvenido,</span>
-    <span class="username"><?php echo htmlspecialchars($_SESSION['username'] ?? ''); ?></span>
-    <a href="../logout.php" class="logout-button">Cerrar sesión</a>
-  </div>
-</header>
-    <main>
-        <h1>Parámetros del Sistema</h1>
-        <div class="menu">
-            
-            <!-- Gestión de Sucursales (SOLO SUPER ADMIN - ROL 1) -->
-            <?php if ($_SESSION['rol_id'] == 1): ?>
-            <div class="menu-item">
-                <a href="sucursales/sucursales.php">
-                    <!-- Usa una imagen genérica si no tienes sucursales.png aún -->
-                    <img src="../imagenes/sucursales.png" alt="Sucursales" onerror="this.src='../imagenes/bloquesconfig.png'">
-                    <span>Sucursales</span>
-                </a>
+<div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <img src="../imagenes/IPSA.png" alt="Logo" class="sidebar-logo">
+            <div class="sidebar-brand-copy">
+                <span class="sidebar-kicker">Sistema Portuario</span>
+                <span class="sidebar-name">Proportsa</span>
             </div>
-            <?php endif; ?>
+            <button class="sidebar-close" id="sidebarClose" type="button" aria-label="Cerrar menu">&times;</button>
+        </div>
 
-            <!-- Gestión de Usuarios (Disponible para Admin y Super Admin) -->
-            <div class="menu-item">
-                <a href="usuarios/usuarios.php">
-                    <img src="../imagenes/usuarios.png" alt="Usuarios" onerror="this.src='../imagenes/tipos_unidad.png'">
-                    <span>Usuarios</span>
-                </a>
+        <div class="sidebar-mobile-tools">
+            <div class="sidebar-mobile-user-menu" id="sidebarMobileUserMenu">
+                <button class="sidebar-mobile-user-button" id="sidebarMobileUserTrigger" type="button" aria-haspopup="true" aria-expanded="false">
+                    <span class="user-avatar sidebar-mobile-avatar" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                            <path d="M12 12a4.25 4.25 0 1 0-4.25-4.25A4.25 4.25 0 0 0 12 12Zm0 2c-4.21 0-7.5 2.19-7.5 5a.75.75 0 0 0 .75.75h13.5A.75.75 0 0 0 19.5 19c0-2.81-3.29-5-7.5-5Z" fill="currentColor"/>
+                        </svg>
+                    </span>
+                    <div class="sidebar-mobile-user-copy">
+                        <small>Usuario</small>
+                        <strong><?php echo htmlspecialchars($username); ?></strong>
+                    </div>
+                    <span class="sidebar-mobile-user-caret" aria-hidden="true">&#9662;</span>
+                </button>
+                <div class="sidebar-mobile-user-dropdown" id="sidebarMobileUserDropdown">
+                    <a href="../logout.php" class="sidebar-mobile-user-logout">Cerrar sesion</a>
+                </div>
             </div>
 
-            <div class="menu-item">
-                <a href="tiposunidad/tipos_unidad.php">
-                    <img src="../imagenes/tipos_unidad.png" alt="Tipos de Unidad">
-                    <span>Tipos de Unidad</span>
-                </a>
-            </div>
-            <div class="menu-item">
-                <a href="estados/estados.php">
-                    <img src="../imagenes/estados.png" alt="Estados de Contenedores">
-                    <span>Estatus de Contenedores</span>
-                </a>
-            </div>
-            <div class="menu-item">
-                <a href="bloques/configuracion.php">
-                    <img src="../imagenes/bloquesconfig.png" alt="Configuración de Bloques">
-                    <span>Configuración de Bloques</span>
-                </a>
-            </div>
-                        <!-- Gestión de Sucursales (SOLO SUPER ADMIN - ROL 1) -->
-            <?php if ($_SESSION['rol_id'] == 1): ?>
-            <div class="menu-item">
-                <a href="limpieza/limpieza.php">
-                    <!-- Usa una imagen genérica si no tienes sucursales.png aún -->
-                    <img src="../imagenes/limpieza.png" alt="Sucursales" onerror="this.src='../imagenes/bloquesconfig.png'">
-                    <span>Limpieza de Datos</span>
-                </a>
-            </div>
+            <?php if ($rol_id === 1): ?>
+                <form action="../cambiar_sucursal.php" method="POST" class="sidebar-mobile-sucursal-form">
+                    <input type="hidden" name="sucursal_id" id="sidebar_mobile_sucursal_id" value="<?php echo (int)$sucursal_id; ?>">
+                    <button type="button" class="sidebar-mobile-sucursal-trigger" id="sidebarMobileSucursalTrigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="sidebar-mobile-sucursal-copy">
+                            <small>Sucursal</small>
+                            <strong id="sidebarMobileSucursalValue"><?php echo htmlspecialchars($nombreSucursalActiva); ?></strong>
+                        </span>
+                        <span class="sidebar-mobile-sucursal-caret" aria-hidden="true">&#9662;</span>
+                    </button>
+                    <div class="sidebar-mobile-sucursal-menu" id="sidebarMobileSucursalMenu" role="listbox">
+                        <?php foreach ($sucursales as $suc): ?>
+                            <button type="button" class="sidebar-mobile-sucursal-option <?php echo ($sucursal_id == $suc['id']) ? 'active' : ''; ?>" data-value="<?php echo (int)$suc['id']; ?>" role="option" aria-selected="<?php echo ($sucursal_id == $suc['id']) ? 'true' : 'false'; ?>">
+                                <?php echo htmlspecialchars($suc['nombre']); ?>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
+                </form>
+            <?php else: ?>
+                <div class="sidebar-mobile-sucursal-static">
+                    <small>Sucursal</small>
+                    <strong><?php echo htmlspecialchars($nombreSucursalActiva); ?></strong>
+                </div>
             <?php endif; ?>
-            <div class="menu-item">
-                <a href="../index.php">
-                    <img src="../imagenes/regresar.png" alt="Regresar">
-                    <span>Regresar</span>
-                </a>
+
+            <div class="sidebar-mobile-actions">
+                <button class="theme-toggle sidebar-theme-toggle" id="sidebarThemeToggle" type="button" aria-label="Cambiar tema">
+                    <span class="theme-icon theme-sun"></span>
+                    <span class="theme-icon theme-moon"></span>
+                </button>
             </div>
         </div>
-    </main>
-    <footer>
-        <p>&copy; IPSA Web - 2025</p>
-    </footer>
+
+        <nav class="sidebar-nav">
+            <a href="../index.php" class="nav-item">
+                <span class="nav-icon dashboard-dot"></span>
+                <span class="nav-label">Dashboard</span>
+            </a>
+            <?php foreach ($menuItems as $item): ?>
+                <a href="<?php echo htmlspecialchars($item['href']); ?>" class="nav-item<?php echo $item['active'] ? ' active' : ''; ?>">
+                    <img src="<?php echo htmlspecialchars($item['icon']); ?>" alt="<?php echo htmlspecialchars($item['label']); ?>" class="nav-image">
+                    <span class="nav-label"><?php echo htmlspecialchars($item['label']); ?></span>
+                </a>
+            <?php endforeach; ?>
+        </nav>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="page-wrap">
+        <header class="topbar">
+            <div class="topbar-left">
+                <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Mostrar u ocultar menu">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+
+            <div class="topbar-right">
+                <div class="topbar-meta">
+                    <?php if ($rol_id === 1): ?>
+                        <form action="../cambiar_sucursal.php" method="POST" class="topbar-sucursal-form">
+                            <span class="topbar-sucursal-label">Sucursal</span>
+                            <div class="topbar-sucursal-dropdown" id="sucursalDropdown">
+                                <input type="hidden" name="sucursal_id" id="sucursal_id" value="<?php echo (int)$sucursal_id; ?>">
+                                <button type="button" class="topbar-sucursal-trigger" id="sucursalTrigger" aria-haspopup="listbox" aria-expanded="false">
+                                    <span class="topbar-sucursal-value" id="sucursalValue"><?php echo htmlspecialchars($nombreSucursalActiva); ?></span>
+                                    <span class="topbar-sucursal-caret" aria-hidden="true">&#9662;</span>
+                                </button>
+                                <div class="topbar-sucursal-menu" id="sucursalMenu" role="listbox">
+                                    <?php foreach ($sucursales as $suc): ?>
+                                        <button type="button" class="topbar-sucursal-option <?php echo ($sucursal_id == $suc['id']) ? 'active' : ''; ?>" data-value="<?php echo (int)$suc['id']; ?>" role="option" aria-selected="<?php echo ($sucursal_id == $suc['id']) ? 'true' : 'false'; ?>">
+                                            <?php echo htmlspecialchars($suc['nombre']); ?>
+                                        </button>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        </form>
+                    <?php else: ?>
+                        <div class="topbar-sucursal-pill">
+                            <span class="pill-label">Sucursal</span>
+                            <strong><?php echo htmlspecialchars($nombreSucursalActiva); ?></strong>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <button class="theme-toggle" id="themeToggle" type="button" aria-label="Cambiar tema">
+                    <span class="theme-icon theme-sun"></span>
+                    <span class="theme-icon theme-moon"></span>
+                </button>
+
+                <div class="user-menu" id="userMenu">
+                    <button class="user-menu-trigger" id="userMenuTrigger" type="button" aria-haspopup="true" aria-expanded="false">
+                        <span class="user-avatar" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                <path d="M12 12a4.25 4.25 0 1 0-4.25-4.25A4.25 4.25 0 0 0 12 12Zm0 2c-4.21 0-7.5 2.19-7.5 5a.75.75 0 0 0 .75.75h13.5A.75.75 0 0 0 19.5 19c0-2.81-3.29-5-7.5-5Z" fill="currentColor"/>
+                            </svg>
+                        </span>
+                        <span class="user-menu-name"><?php echo htmlspecialchars($username); ?></span>
+                        <span class="user-menu-caret" aria-hidden="true">&#9662;</span>
+                    </button>
+                    <div class="user-menu-dropdown" id="userMenuDropdown">
+                        <div class="user-menu-header">
+                            <span class="user-avatar user-avatar-large" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                    <path d="M12 12a4.25 4.25 0 1 0-4.25-4.25A4.25 4.25 0 0 0 12 12Zm0 2c-4.21 0-7.5 2.19-7.5 5a.75.75 0 0 0 .75.75h13.5A.75.75 0 0 0 19.5 19c0-2.81-3.29-5-7.5-5Z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                            <div>
+                                <p>Usuario</p>
+                                <strong><?php echo htmlspecialchars($username); ?></strong>
+                            </div>
+                        </div>
+                        <a href="../logout.php" class="user-menu-item user-menu-logout">Cerrar sesion</a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="dashboard-main parametros-main">
+            <section class="view-hero">
+                <div>
+                    <h1>Parametros del Sistema</h1>
+                    <p>Centraliza la configuracion administrativa, usuarios y catalogos base que sostienen la operacion diaria.</p>
+                </div>
+            </section>
+
+            <section class="panel-card parametros-panel">
+                <div class="section-heading">
+                    <h2>Centro administrativo</h2>
+                    <p>Selecciona la categoria que quieres gestionar y entra directo al modulo especifico.</p>
+                </div>
+
+                <div class="parametros-grid">
+                    <?php foreach ($paramItems as $item): ?>
+                        <a href="<?php echo htmlspecialchars($item['href']); ?>" class="param-card">
+                            <span class="param-card-icon">
+                                <img src="<?php echo htmlspecialchars($item['icon']); ?>" alt="<?php echo htmlspecialchars($item['label']); ?>">
+                            </span>
+                            <span class="param-card-title"><?php echo htmlspecialchars($item['label']); ?></span>
+                            <span class="param-card-text"><?php echo htmlspecialchars($item['desc']); ?></span>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+<script>
+const themeToggle = document.getElementById('themeToggle');
+const sidebarThemeToggle = document.getElementById('sidebarThemeToggle');
+const userMenu = document.getElementById('userMenu');
+const userMenuTrigger = document.getElementById('userMenuTrigger');
+const sucursalDropdown = document.getElementById('sucursalDropdown');
+const sucursalTrigger = document.getElementById('sucursalTrigger');
+const sucursalMenu = document.getElementById('sucursalMenu');
+const sucursalValue = document.getElementById('sucursalValue');
+const sucursalInput = document.getElementById('sucursal_id');
+const sidebarMobileUserMenu = document.getElementById('sidebarMobileUserMenu');
+const sidebarMobileUserTrigger = document.getElementById('sidebarMobileUserTrigger');
+const sidebarMobileSucursalTrigger = document.getElementById('sidebarMobileSucursalTrigger');
+const sidebarMobileSucursalMenu = document.getElementById('sidebarMobileSucursalMenu');
+const sidebarMobileSucursalValue = document.getElementById('sidebarMobileSucursalValue');
+const sidebarMobileSucursalInput = document.getElementById('sidebar_mobile_sucursal_id');
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+const sidebarClose = document.getElementById('sidebarClose');
+const toggle = document.getElementById('sidebarToggle');
+const mobileQuery = window.matchMedia('(max-width: 960px)');
+
+function openSidebar() {
+    document.body.classList.add('sidebar-open');
+    document.body.classList.remove('sidebar-collapsed');
+}
+
+function closeSidebar() {
+    if (mobileQuery.matches) {
+        document.body.classList.add('sidebar-collapsed');
+        document.body.classList.remove('sidebar-open');
+        if (sidebarMobileUserMenu && sidebarMobileUserTrigger) {
+            sidebarMobileUserMenu.classList.remove('open');
+            sidebarMobileUserTrigger.setAttribute('aria-expanded', 'false');
+        }
+        if (sidebarMobileSucursalMenu && sidebarMobileSucursalTrigger) {
+            sidebarMobileSucursalMenu.classList.remove('open');
+            sidebarMobileSucursalTrigger.setAttribute('aria-expanded', 'false');
+        }
+    } else {
+        document.body.classList.toggle('sidebar-collapsed');
+    }
+}
+
+function syncSidebarMode() {
+    if (mobileQuery.matches) {
+        document.body.classList.add('sidebar-collapsed');
+        document.body.classList.remove('sidebar-open');
+        sidebar.setAttribute('aria-hidden', document.body.classList.contains('sidebar-open') ? 'false' : 'true');
+    } else {
+        document.body.classList.remove('sidebar-open');
+        document.body.classList.remove('sidebar-collapsed');
+        sidebar.setAttribute('aria-hidden', 'false');
+    }
+}
+
+toggle.addEventListener('click', function () {
+    if (mobileQuery.matches) {
+        if (document.body.classList.contains('sidebar-open')) {
+            closeSidebar();
+        } else {
+            openSidebar();
+        }
+    } else {
+        document.body.classList.toggle('sidebar-collapsed');
+    }
+});
+
+if (sidebarClose) sidebarClose.addEventListener('click', closeSidebar);
+sidebarOverlay.addEventListener('click', closeSidebar);
+mobileQuery.addEventListener('change', syncSidebarMode);
+syncSidebarMode();
+
+function syncThemeToggle() {
+    const theme = document.documentElement.getAttribute('data-theme') || 'light';
+    themeToggle.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+    if (sidebarThemeToggle) {
+        sidebarThemeToggle.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+    }
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    localStorage.setItem('proportsa-theme', nextTheme);
+    syncThemeToggle();
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+if (sidebarThemeToggle) sidebarThemeToggle.addEventListener('click', toggleTheme);
+
+userMenuTrigger.addEventListener('click', function (event) {
+    event.stopPropagation();
+    if (sucursalDropdown && sucursalTrigger) {
+        sucursalDropdown.classList.remove('open');
+        sucursalTrigger.setAttribute('aria-expanded', 'false');
+    }
+    const isOpen = userMenu.classList.toggle('open');
+    userMenuTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+});
+
+document.addEventListener('click', function (event) {
+    if (!userMenu.contains(event.target)) {
+        userMenu.classList.remove('open');
+        userMenuTrigger.setAttribute('aria-expanded', 'false');
+    }
+});
+
+document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+        userMenu.classList.remove('open');
+        userMenuTrigger.setAttribute('aria-expanded', 'false');
+        if (sucursalDropdown && sucursalTrigger) {
+            sucursalDropdown.classList.remove('open');
+            sucursalTrigger.setAttribute('aria-expanded', 'false');
+        }
+    }
+});
+
+if (sucursalDropdown && sucursalTrigger && sucursalMenu && sucursalValue && sucursalInput) {
+    const sucursalOptions = sucursalMenu.querySelectorAll('.topbar-sucursal-option');
+    sucursalTrigger.addEventListener('click', function (event) {
+        event.stopPropagation();
+        userMenu.classList.remove('open');
+        userMenuTrigger.setAttribute('aria-expanded', 'false');
+        const isOpen = sucursalDropdown.classList.toggle('open');
+        sucursalTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
+    sucursalOptions.forEach(function (option) {
+        option.addEventListener('click', function () {
+            sucursalInput.value = option.getAttribute('data-value');
+            sucursalValue.textContent = option.textContent.trim();
+            sucursalOptions.forEach(function (item) {
+                item.classList.remove('active');
+                item.setAttribute('aria-selected', 'false');
+            });
+            option.classList.add('active');
+            option.setAttribute('aria-selected', 'true');
+            sucursalDropdown.classList.remove('open');
+            sucursalTrigger.setAttribute('aria-expanded', 'false');
+            sucursalInput.form.submit();
+        });
+    });
+
+    document.addEventListener('click', function (event) {
+        if (!sucursalDropdown.contains(event.target)) {
+            sucursalDropdown.classList.remove('open');
+            sucursalTrigger.setAttribute('aria-expanded', 'false');
+        }
+    });
+}
+
+if (sidebarMobileUserMenu && sidebarMobileUserTrigger) {
+    sidebarMobileUserTrigger.addEventListener('click', function (event) {
+        event.stopPropagation();
+        if (sidebarMobileSucursalMenu && sidebarMobileSucursalTrigger) {
+            sidebarMobileSucursalMenu.classList.remove('open');
+            sidebarMobileSucursalTrigger.setAttribute('aria-expanded', 'false');
+        }
+        const isOpen = sidebarMobileUserMenu.classList.toggle('open');
+        sidebarMobileUserTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
+    document.addEventListener('click', function (event) {
+        if (!sidebarMobileUserMenu.contains(event.target)) {
+            sidebarMobileUserMenu.classList.remove('open');
+            sidebarMobileUserTrigger.setAttribute('aria-expanded', 'false');
+        }
+    });
+}
+
+if (sidebarMobileSucursalTrigger && sidebarMobileSucursalMenu && sidebarMobileSucursalValue && sidebarMobileSucursalInput) {
+    const sidebarMobileSucursalOptions = sidebarMobileSucursalMenu.querySelectorAll('.sidebar-mobile-sucursal-option');
+
+    sidebarMobileSucursalTrigger.addEventListener('click', function (event) {
+        event.stopPropagation();
+        if (sidebarMobileUserMenu && sidebarMobileUserTrigger) {
+            sidebarMobileUserMenu.classList.remove('open');
+            sidebarMobileUserTrigger.setAttribute('aria-expanded', 'false');
+        }
+        const isOpen = sidebarMobileSucursalMenu.classList.toggle('open');
+        sidebarMobileSucursalTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
+    sidebarMobileSucursalOptions.forEach(function (option) {
+        option.addEventListener('click', function () {
+            sidebarMobileSucursalInput.value = option.getAttribute('data-value');
+            sidebarMobileSucursalValue.textContent = option.textContent.trim();
+            sidebarMobileSucursalOptions.forEach(function (item) {
+                item.classList.remove('active');
+                item.setAttribute('aria-selected', 'false');
+            });
+            option.classList.add('active');
+            option.setAttribute('aria-selected', 'true');
+            sidebarMobileSucursalMenu.classList.remove('open');
+            sidebarMobileSucursalTrigger.setAttribute('aria-expanded', 'false');
+            sidebarMobileSucursalInput.form.submit();
+        });
+    });
+
+    document.addEventListener('click', function (event) {
+        const form = sidebarMobileSucursalTrigger.closest('.sidebar-mobile-sucursal-form');
+        if (form && !form.contains(event.target)) {
+            sidebarMobileSucursalMenu.classList.remove('open');
+            sidebarMobileSucursalTrigger.setAttribute('aria-expanded', 'false');
+        }
+    });
+}
+
+syncThemeToggle();
+</script>
 </body>
 </html>

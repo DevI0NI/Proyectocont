@@ -1,11 +1,15 @@
 <?php
 session_start();
 
-// 1. SEGURIDAD
-if (!isset($_SESSION['user_id']) || $_SESSION['rol_id'] != 1) {
-    header('Location: ../../index.php');
+if (!isset($_SESSION['user_id'])) {
+    header('Location: ../../login.php');
     exit;
 }
+
+$_SESSION['toast_message'] = 'Esta herramienta de mantenimiento no esta disponible en el sistema.';
+$_SESSION['toast_type'] = 'error';
+header('Location: ../parametros.php');
+exit;
 
 // 2. CONFIGURACIÓN REGIONAL
 date_default_timezone_set('America/Guatemala');

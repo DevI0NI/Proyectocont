@@ -1,0 +1,63 @@
+.container-form .plate-field-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.container-form .plate-field-title label { display: inline; margin: 0; }
+
+:is(.container-form, .mw-repair-form) .plate-help {
+    display: inline-flex;
+    position: relative;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    margin: 0;
+}
+
+:is(.container-form, .mw-repair-form) .plate-help-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    max-width: 20px;
+    min-height: 20px;
+    max-height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: help;
+}
+
+.plate-help-trigger svg { width: 18px; height: 18px; }
+.plate-help-trigger:hover { color: var(--accent); }
+.plate-help-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+:is(.container-form, .mw-repair-form) .plate-help-tooltip {
+    display: block;
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: -110px;
+    width: 260px;
+    max-width: calc(100vw - 40px);
+    padding: 12px 14px;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: normal;
+    z-index: 80;
+    pointer-events: none;
+}
+
+:is(.container-form, .mw-repair-form) .plate-help-tooltip[hidden] { display: none !important; }

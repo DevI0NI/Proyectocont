@@ -1,64 +1,70 @@
 <?php
 session_start();
 require '../config/database.php';
+require __DIR__ . '/excel_export_helper.php';
+require __DIR__ . '/report_display_helper.php';
+require __DIR__ . '/pdf_export_helper.php';
 
-// 1. ZONA HORARIA OBLIGATORIA
 date_default_timezone_set('America/Guatemala');
 
 if (!isset($_SESSION['user_id'])) { exit('Acceso denegado'); }
 if (!isset($_SESSION['sucursal_activa'])) { exit('Sin sucursal activa'); }
 
-$sucursal_id = $_SESSION['sucursal_activa'];
+$sucursal_id = (int)$_SESSION['sucursal_activa'];
+$username = $_SESSION['username'] ?? 'Usuario';
 $modo = $_GET['modo'] ?? 'export';
+$formato = $_GET['formato'] ?? 'excel';
 $limit = ($modo === 'preview') ? " LIMIT 50" : "";
 
 try {
-    // 2. RECIBIR DATOS (Aquí faltaba recibir patio y bloque)
-    $f_inicio  = $_GET['f_inicio'] ?? date('Y-m-01');
-    $f_fin     = $_GET['f_fin'] ?? date('Y-m-t');
-    
-    $patio_id  = !empty($_GET['patio_id']) ? (int)$_GET['patio_id'] : null;
+    $f_inicio = $_GET['f_inicio'] ?? date('Y-m-01');
+    $f_fin = $_GET['f_fin'] ?? date('Y-m-t');
+    $patio_id = !empty($_GET['patio_id']) ? (int)$_GET['patio_id'] : null;
     $bloque_id = !empty($_GET['bloque_id']) ? (int)$_GET['bloque_id'] : null;
-    
     $cols = $_GET['cols_mov'] ?? [];
 
-    // 3. MAPEO
     $mapaCampos = [
-        'patio'      => "p.nombre AS patio_nombre",
-        'bloque'     => "b.numero AS bloque_numero",
-        'fecha'      => "l.fecha_evento AS fecha_hora",
-        'operacion'  => "top.nombre AS operacion",
+        'patio' => "p.nombre AS patio_nombre",
+        'bloque' => "b.numero AS bloque_numero",
+        'fecha' => "l.fecha_evento AS fecha_hora",
+        'operacion' => "top.nombre AS operacion",
         'contenedor' => "IFNULL(c.nombre, 'Eliminado') AS contenedor",
-        'tipo'       => "IFNULL(tu.nombre, '-') AS tipo",
-        'modelo'     => "IFNULL(m.nombre, '-') AS modelo",
-        'usuario'    => "u.username AS usuario",
-        'detalle'    => "l.observaciones AS detalle"
+        'tipo' => "IFNULL(tu.nombre, '-') AS tipo",
+        'modelo' => "IFNULL(m.nombre, '-') AS modelo",
+        'usuario' => "u.username AS usuario",
+        'detalle' => "l.observaciones AS detalle"
     ];
 
     $titulos = [
-        'patio'      => 'Patio', 'bloque' => 'Bloque', 'fecha' => 'Fecha Hora',
-        'operacion'  => 'Operacion', 'contenedor' => 'Contenedor',
-        'tipo'       => 'Tipo', 'modelo'     => 'Modelo',
-        'usuario'    => 'Usuario', 'detalle'    => 'Detalle'
+        'patio' => 'Patio',
+        'bloque' => 'Bloque',
+        'fecha' => 'Fecha Hora',
+        'operacion' => 'Operacion',
+        'contenedor' => 'Contenedor',
+        'tipo' => 'Tipo',
+        'modelo' => 'Modelo',
+        'usuario' => 'Usuario',
+        'detalle' => 'Detalle'
     ];
 
-    $selectParts = []; $headers = []; $dataKeys = [];
-
-    if (empty($cols)) { 
-        $cols = ['patio', 'bloque', 'contenedor', 'operacion', 'usuario', 'detalle', 'fecha']; 
+    if (empty($cols)) {
+        $cols = ['patio', 'bloque', 'contenedor', 'operacion', 'usuario', 'detalle', 'fecha'];
     }
+
+    $selectParts = [];
+    $headers = [];
+    $dataKeys = [];
 
     foreach ($cols as $k) {
-        if (isset($mapaCampos[$k])) {
-            $selectParts[] = $mapaCampos[$k];
-            $headers[] = $titulos[$k];
-            $parts = explode(" AS ", $mapaCampos[$k]);
-            $dataKeys[] = trim(end($parts));
-        }
+        if (!isset($mapaCampos[$k])) continue;
+        $selectParts[] = $mapaCampos[$k];
+        $headers[] = $titulos[$k];
+        $parts = explode(" AS ", $mapaCampos[$k]);
+        $dataKeys[] = trim(end($parts));
     }
+
     $sqlSelect = implode(", ", $selectParts);
 
-    // 4. PREPARAR SQL BASE
     $sql = "
         SELECT $sqlSelect
         FROM logs_eventos l
@@ -79,7 +85,6 @@ try {
         'suc' => $sucursal_id
     ];
 
-    // --- FILTROS DE PATIO Y BLOQUE (ESTO FALTABA) ---
     if ($patio_id) {
         $sql .= " AND p.id = :pid ";
         $params['pid'] = $patio_id;
@@ -88,61 +93,54 @@ try {
         $sql .= " AND b.id = :bid ";
         $params['bid'] = $bloque_id;
     }
-    // ------------------------------------------------
 
     $sql .= " ORDER BY l.fecha_evento DESC $limit";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $rows = report_format_row_dates($rows, ['fecha_hora']);
 
-    // 5. SALIDA
     if ($modo === 'preview') {
         header('Content-Type: application/json');
         echo json_encode(['headers' => $headers, 'rows' => $rows]);
     } else {
-        $filename = "Bitacora_" . date('Ymd_His') . ".xls";
-        header("Content-Type: application/vnd.ms-excel; charset=utf-8");
-        header("Content-Disposition: attachment; filename=$filename");
-        header("Pragma: no-cache");
-        header("Expires: 0");
-        
-        echo "<meta charset='UTF-8'><style>td{border:1px solid #ccc;mso-number-format:'\@';}.group-header{background:#e0f2f1;font-weight:bold;}.table-header{background:#00695C;color:white;}</style>";
-        
-        $grupos = [];
-        foreach ($rows as $row) {
-            $p = $row['patio_nombre'] ?? '';
-            $b = $row['bloque_numero'] ?? '';
-            $key = ($p && $b) ? "$p - Bloque $b" : "General";
-            $grupos[$key][] = $row;
+        $sucursalNombre = report_excel_get_sucursal_name($pdo, $sucursal_id);
+        if ($formato === 'pdf') {
+            $contentHtml = report_pdf_grouped_html($headers, $dataKeys, $rows, [
+                'hidden_headers' => ['Patio', 'Bloque']
+            ]);
+            report_pdf_output(
+                'Bitacora_' . date('Ymd_His') . '.pdf',
+                'Bitacora de Movimientos',
+                [
+                    'Sucursal' => $sucursalNombre,
+                    'Generado por' => $username,
+                    'Periodo' => date('d/m/Y', strtotime($f_inicio)) . ' al ' . date('d/m/Y', strtotime($f_fin)),
+                    'Fecha de emision' => date('d/m/Y'),
+                    'Hora de emision' => date('H:i')
+                ],
+                $contentHtml
+            );
         }
+        [$spreadsheet, $sheet, $startRow] = report_excel_bootstrap(
+            'Bitacora de Movimientos',
+            [
+                'Sucursal' => $sucursalNombre,
+                'Generado por' => $username,
+                'Periodo' => date('d/m/Y', strtotime($f_inicio)) . ' al ' . date('d/m/Y', strtotime($f_fin)),
+                'Fecha de emision' => date('d/m/Y'),
+                'Hora de emision' => date('H:i')
+            ],
+            max(count($headers) - 2, 1),
+            'Movimientos'
+        );
 
-        foreach ($grupos as $titulo => $items) {
-            echo "<table>";
-            if ($titulo !== 'General') {
-                echo "<tr><td colspan='".count($headers)."' class='group-header'>$titulo</td></tr>";
-            }
-            
-            echo "<tr>";
-            foreach ($headers as $h) { 
-                if ($h !== 'Patio' && $h !== 'Bloque') echo "<td class='table-header'>$h</td>"; 
-            }
-            echo "</tr>";
-            
-            foreach ($items as $row) {
-                echo "<tr>";
-                foreach ($dataKeys as $i => $key) {
-                    if ($headers[$i] !== 'Patio' && $headers[$i] !== 'Bloque') {
-                        echo "<td>" . htmlspecialchars($row[$key] ?? '') . "</td>";
-                    }
-                }
-                echo "</tr>";
-            }
-            echo "<tr><td colspan='10' style='border:none; height:15px;'></td></tr>";
-            echo "</table>";
-        }
+        report_excel_render_grouped_sheet($sheet, $startRow, $headers, $dataKeys, $rows, [
+            'hidden_headers' => ['Patio', 'Bloque']
+        ]);
+        report_excel_output($spreadsheet, "Bitacora_" . date('Ymd_His') . ".xlsx");
     }
-
 } catch (Exception $e) {
     if ($modo === 'preview') echo json_encode(['error' => $e->getMessage()]);
     else echo "Error: " . $e->getMessage();

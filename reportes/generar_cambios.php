@@ -1,93 +1,72 @@
 <?php
 session_start();
 require '../config/database.php';
+require __DIR__ . '/excel_export_helper.php';
+require __DIR__ . '/report_display_helper.php';
+require __DIR__ . '/pdf_export_helper.php';
 
-// 1. ZONA HORARIA
 date_default_timezone_set('America/Guatemala');
 
 if (!isset($_SESSION['user_id'])) { exit('Acceso denegado'); }
 if (!isset($_SESSION['sucursal_activa'])) { exit('Sin sucursal activa'); }
 
-$sucursal_id = $_SESSION['sucursal_activa'];
+$sucursal_id = (int)$_SESSION['sucursal_activa'];
+$username = $_SESSION['username'] ?? 'Usuario';
 $modo = $_GET['modo'] ?? 'export';
+$formato = $_GET['formato'] ?? 'excel';
 $limit = ($modo === 'preview') ? " LIMIT 50" : "";
 
 try {
-    // 2. RECIBIR FILTROS
     $fechaInicio = $_GET['f_inicio'] ?? date('Y-m-01');
-    $fechaFin    = $_GET['f_fin'] ?? date('Y-m-t');
-    $patio_id    = !empty($_GET['patio_id']) ? (int)$_GET['patio_id'] : null;
-    $bloque_id   = !empty($_GET['bloque_id']) ? (int)$_GET['bloque_id'] : null;
-
+    $fechaFin = $_GET['f_fin'] ?? date('Y-m-t');
+    $patio_id = !empty($_GET['patio_id']) ? (int)$_GET['patio_id'] : null;
+    $bloque_id = !empty($_GET['bloque_id']) ? (int)$_GET['bloque_id'] : null;
     $cols = $_GET['cols_cambios'] ?? [];
 
-    // 3. MAPEO DE CAMPOS
-    // Definimos qué columna de la DB corresponde a qué checkbox
     $mapaCampos = [
-        // Datos de Agrupación (Internos)
-        'patio'       => "patio_nombre",
-        'bloque'      => "bloque_numero",
-        
-        // Columnas Visibles
-        'fecha'       => "fecha_evento AS fecha",
-        'contenedor'  => "contenedor AS contenedor",
-        'usuario'     => "usuario AS usuario",
+        'patio' => "patio_nombre",
+        'bloque' => "bloque_numero",
+        'fecha' => "fecha_evento AS fecha",
+        'contenedor' => "contenedor AS contenedor",
+        'usuario' => "usuario AS usuario",
         'tipo_cambio' => "tipo_cambio AS tipo_cambio",
-        'campo'       => "campo AS campo",
-        'anterior'    => "valor_anterior AS anterior",
-        'nuevo'       => "valor_nuevo AS nuevo"
+        'campo' => "campo AS campo",
+        'anterior' => "valor_anterior AS anterior",
+        'nuevo' => "valor_nuevo AS nuevo"
     ];
 
     $titulos = [
-        'fecha'       => 'Fecha Hora',
-        'contenedor'  => 'Contenedor',
-        'usuario'     => 'Usuario',
+        'fecha' => 'Fecha Hora',
+        'contenedor' => 'Contenedor',
+        'usuario' => 'Usuario',
         'tipo_cambio' => 'Tipo de Cambio',
-        'campo'       => 'Campo Afectado',
-        'anterior'    => 'Valor Anterior',
-        'nuevo'       => 'Valor Nuevo'
+        'campo' => 'Campo Afectado',
+        'anterior' => 'Valor Anterior',
+        'nuevo' => 'Valor Nuevo'
     ];
 
-    // Construcción dinámica de la consulta
-    $selectParts = []; 
-    $headers = []; 
-    $dataKeys = [];
-
-    // Si no hay selección, valores por defecto
-    if (empty($cols)) { 
-        $cols = ['fecha', 'contenedor', 'usuario', 'tipo_cambio', 'campo', 'anterior', 'nuevo']; 
+    if (empty($cols)) {
+        $cols = ['fecha', 'contenedor', 'usuario', 'tipo_cambio', 'campo', 'anterior', 'nuevo'];
     }
 
-    // A. SIEMPRE agregamos las columnas de agrupación al SQL (necesarias para el azul)
-    // pero NO las agregamos a los headers ni datakeys visibles.
-    $selectParts[] = "patio_nombre";
-    $selectParts[] = "bloque_numero";
+    $selectParts = ["patio_nombre", "bloque_numero"];
+    $headers = [];
+    $dataKeys = [];
 
-    // B. Agregamos las columnas seleccionadas por el usuario
     foreach ($cols as $k) {
-        if (isset($mapaCampos[$k])) {
-            // Si es patio o bloque, ya los agregamos arriba al SQL, pero los ignoramos para la tabla visual
-            if ($k === 'patio' || $k === 'bloque') {
-                continue; 
-            }
-
-            $selectParts[] = $mapaCampos[$k];
-            $headers[] = $titulos[$k];
-            
-            // Extraer alias limpio (ej: "valor_nuevo")
-            $parts = explode(" AS ", $mapaCampos[$k]);
-            $dataKeys[] = trim(end($parts));
-        }
+        if (!isset($mapaCampos[$k]) || $k === 'patio' || $k === 'bloque') continue;
+        $selectParts[] = $mapaCampos[$k];
+        $headers[] = $titulos[$k];
+        $parts = explode(" AS ", $mapaCampos[$k]);
+        $dataKeys[] = trim(end($parts));
     }
 
     $selectParts = array_unique($selectParts);
-    $sqlSelect = implode(", ", $selectParts); // Solo columnas necesarias
+    $sqlSelect = implode(", ", $selectParts);
 
-    // 4. CONSULTA SQL UNIFICADA (UNION ALL)
     $sql = "
     SELECT $sqlSelect FROM (
-        -- 1. LOGS MODIFICACIONES
-        SELECT 
+        SELECT
             le.fecha_evento,
             IFNULL(c.nombre, 'Eliminado') as contenedor,
             u.username as usuario,
@@ -96,7 +75,7 @@ try {
             lm.valor_anterior,
             lm.valor_nuevo,
             p.sucursal_id,
-            IFNULL(p.nombre, 'Sin Ubicación') as patio_nombre,
+            IFNULL(p.nombre, 'Sin Ubicacion') as patio_nombre,
             IFNULL(b.numero, '0') as bloque_numero,
             p.id as pid, b.id as bid
         FROM logs_modificaciones lm
@@ -108,8 +87,7 @@ try {
 
         UNION ALL
 
-        -- 2. LOGS ESTATUS
-        SELECT 
+        SELECT
             le.fecha_evento,
             IFNULL(c.nombre, 'Eliminado') as contenedor,
             u.username as usuario,
@@ -118,7 +96,7 @@ try {
             IFNULL(ea.nombre, 'N/A') as valor_anterior,
             IFNULL(en.nombre, 'N/A') as valor_nuevo,
             p.sucursal_id,
-            IFNULL(p.nombre, 'Sin Ubicación') as patio_nombre,
+            IFNULL(p.nombre, 'Sin Ubicacion') as patio_nombre,
             IFNULL(b.numero, '0') as bloque_numero,
             p.id as pid, b.id as bid
         FROM logs_estatus le_st
@@ -133,17 +111,16 @@ try {
 
         UNION ALL
 
-        -- 3. LOGS IPSA
-        SELECT 
+        SELECT
             le.fecha_evento,
             IFNULL(c.nombre, 'Eliminado') as contenedor,
             u.username as usuario,
             'Estatus IPSA' as tipo_cambio,
-            'Condición IPSA' as campo,
+            'Condicion IPSA' as campo,
             IFNULL(ia.nombre, 'N/A') as valor_anterior,
             IFNULL(inew.nombre, 'N/A') as valor_nuevo,
             p.sucursal_id,
-            IFNULL(p.nombre, 'Sin Ubicación') as patio_nombre,
+            IFNULL(p.nombre, 'Sin Ubicacion') as patio_nombre,
             IFNULL(b.numero, '0') as bloque_numero,
             p.id as pid, b.id as bid
         FROM logs_ipsa li
@@ -155,7 +132,6 @@ try {
         LEFT JOIN bloques b ON c.bloque_id = b.id
         LEFT JOIN patios p ON b.patio_id = p.id
     ) AS unificada
-    
     WHERE unificada.fecha_evento BETWEEN :ini AND :fin
       AND unificada.sucursal_id = :suc
     ";
@@ -166,61 +142,52 @@ try {
         'suc' => $sucursal_id
     ];
 
-    // Filtros de ubicación
     if ($patio_id) { $sql .= " AND unificada.pid = :pid "; $params['pid'] = $patio_id; }
     if ($bloque_id) { $sql .= " AND unificada.bid = :bid "; $params['bid'] = $bloque_id; }
 
-    // Ordenamiento para agrupación
     $sql .= " ORDER BY unificada.patio_nombre, unificada.bloque_numero, unificada.fecha_evento DESC $limit";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $rows = report_format_row_dates($rows, ['fecha']);
 
-    // 5. SALIDA
     if ($modo === 'preview') {
         header('Content-Type: application/json');
         echo json_encode(['headers' => $headers, 'rows' => $rows]);
     } else {
-        // EXCEL
-        $filename = "Cambios_" . date('Ymd_His') . ".xls";
-        header("Content-Type: application/vnd.ms-excel; charset=utf-8");
-        header("Content-Disposition: attachment; filename=$filename");
-        header("Pragma: no-cache");
-        header("Expires: 0");
-        
-        echo "<meta charset='UTF-8'><style>td{border:1px solid #ccc;mso-number-format:'\@';}.group-header{background:#e0f2f1;font-weight:bold;}.table-header{background:#00695C;color:white;}</style>";
-        
-        // Agrupar
-        $grupos = [];
-        foreach ($rows as $row) {
-            $p = $row['patio_nombre'];
-            $b = $row['bloque_numero'];
-            $key = "$p - Bloque $b";
-            $grupos[$key][] = $row;
+        $sucursalNombre = report_excel_get_sucursal_name($pdo, $sucursal_id);
+        if ($formato === 'pdf') {
+            $contentHtml = report_pdf_grouped_html($headers, $dataKeys, $rows);
+            report_pdf_output(
+                'Cambios_' . date('Ymd_His') . '.pdf',
+                'Reporte de Cambios',
+                [
+                    'Sucursal' => $sucursalNombre,
+                    'Generado por' => $username,
+                    'Periodo' => date('d/m/Y', strtotime($fechaInicio)) . ' al ' . date('d/m/Y', strtotime($fechaFin)),
+                    'Fecha de emision' => date('d/m/Y'),
+                    'Hora de emision' => date('H:i')
+                ],
+                $contentHtml
+            );
         }
+        [$spreadsheet, $sheet, $startRow] = report_excel_bootstrap(
+            'Reporte de Cambios',
+            [
+                'Sucursal' => $sucursalNombre,
+                'Generado por' => $username,
+                'Periodo' => date('d/m/Y', strtotime($fechaInicio)) . ' al ' . date('d/m/Y', strtotime($fechaFin)),
+                'Fecha de emision' => date('d/m/Y'),
+                'Hora de emision' => date('H:i')
+            ],
+            max(count($headers), 1),
+            'Cambios'
+        );
 
-        foreach ($grupos as $titulo => $items) {
-            echo "<table>";
-            echo "<tr><td colspan='".count($headers)."' class='group-header'>$titulo</td></tr>";
-            
-            echo "<tr>";
-            foreach ($headers as $h) echo "<td class='table-header'>$h</td>";
-            echo "</tr>";
-            
-            foreach ($items as $row) {
-                echo "<tr>";
-                // Usamos dataKeys para imprimir EXACTAMENTE las columnas solicitadas en orden
-                foreach ($dataKeys as $key) {
-                    echo "<td>" . htmlspecialchars($row[$key] ?? '') . "</td>";
-                }
-                echo "</tr>";
-            }
-            echo "<tr><td colspan='10' style='border:none; height:15px;'></td></tr>";
-            echo "</table>";
-        }
+        report_excel_render_grouped_sheet($sheet, $startRow, $headers, $dataKeys, $rows);
+        report_excel_output($spreadsheet, "Cambios_" . date('Ymd_His') . ".xlsx");
     }
-
 } catch (Exception $e) {
     if ($modo === 'preview') echo json_encode(['error' => $e->getMessage()]);
     else echo "Error: " . $e->getMessage();

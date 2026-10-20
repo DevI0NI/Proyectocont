@@ -1,33 +1,44 @@
 <?php
 session_start();
-// Seguridad: Solo Admins/Super Admins pueden acceder a este validador
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['rol_id'], [1, 2])) { 
-    header("HTTP/1.1 401 Unauthorized"); 
-    exit; 
+
+if (!isset($_SESSION['user_id']) || !in_array((int)($_SESSION['rol_id'] ?? 0), [1, 2], true)) {
+    header('HTTP/1.1 401 Unauthorized');
+    exit;
 }
+
 require '../../config/database.php';
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Identificar qué campo se está validando (username o email)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $currentId = (int)($_POST['id'] ?? 0);
     $field = isset($_POST['username']) ? 'username' : (isset($_POST['email']) ? 'email' : '');
     $value = trim($_POST[$field] ?? '');
 
-    if (empty($field) || empty($value)) {
+    if ($field === '' || $value === '') {
         echo 'error';
         exit;
     }
 
     try {
-        // La consulta verifica si el valor existe en la tabla de usuarios.
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE $field = :val AND estado_id = 1");
-        $stmt->execute(['val' => $value]);
-        $count = $stmt->fetchColumn();
+        $sql = "SELECT estado_id FROM users WHERE $field = :val";
+        $params = ['val' => $value];
 
-        // Nota: Al no usar 'AND id != :id', este script NO sirve para editar, solo para creación.
-        if ($count > 0) {
+        if ($currentId > 0) {
+            $sql .= ' AND id != :id';
+            $params['id'] = $currentId;
+        }
+
+        $sql .= ' ORDER BY estado_id ASC, id DESC LIMIT 1';
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $estado = $stmt->fetchColumn();
+
+        if ($estado === false) {
+            echo 'available';
+        } elseif ((int)$estado === 1) {
             echo 'exists';
         } else {
-            echo 'available';
+            echo 'inactive';
         }
     } catch (Exception $e) {
         echo 'error';

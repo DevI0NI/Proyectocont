@@ -2,11 +2,8 @@
 session_start();
 require '../../config/database.php';
 
-// 1. SEGURIDAD ESTRICTA
-if (!isset($_SESSION['user_id']) || $_SESSION['rol_id'] != 1) {
-    echo json_encode(['error' => 'Acceso Denegado. Solo Super Admin.']);
-    exit;
-}
+echo json_encode(['error' => 'Esta herramienta de mantenimiento no esta disponible en el sistema.']);
+exit;
 
 date_default_timezone_set('America/Guatemala');
 

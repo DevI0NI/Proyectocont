@@ -1,7 +1,10 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_id'])) {
+
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['sucursal_activa'])) {
     header('HTTP/1.1 401 Unauthorized');
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'No autorizado']);
     exit;
 }
 
@@ -9,42 +12,47 @@ require '../config/database.php';
 
 if (!isset($_GET['bloque_id']) || empty($_GET['bloque_id'])) {
     header('HTTP/1.1 400 Bad Request');
+    header('Content-Type: application/json');
     echo json_encode(['error' => 'El ID del bloque es requerido']);
     exit;
 }
 
 try {
-    $bloqueId = (int) $_GET['bloque_id'];
+    $bloqueId = (int)$_GET['bloque_id'];
+    $sucursalId = (int)$_SESSION['sucursal_activa'];
 
-    // 1. Obtener la capacidad máxima del bloque (Solo si está activo)
-    $stmt = $pdo->prepare('SELECT capacidad_maxima FROM bloques WHERE id = :bloque_id AND estado_id = 1');
-    $stmt->execute(['bloque_id' => $bloqueId]);
+    $stmt = $pdo->prepare('
+        SELECT b.capacidad_maxima
+        FROM bloques b
+        JOIN patios p ON b.patio_id = p.id
+        WHERE b.id = :bloque_id
+          AND b.estado_id = 1
+          AND p.estado_id = 1
+          AND p.sucursal_id = :sucursal
+        LIMIT 1
+    ');
+    $stmt->execute([
+        'bloque_id' => $bloqueId,
+        'sucursal' => $sucursalId
+    ]);
     $capacidadMaxima = $stmt->fetchColumn();
 
     if ($capacidadMaxima === false) {
-        echo json_encode(['error' => 'Bloque no encontrado o inactivo']);
+        echo json_encode(['error' => 'Bloque no encontrado o acceso denegado']);
         exit;
     }
 
-    // 2. Obtener las posiciones ocupadas (SOLO ACTIVAS)
-    // Importante: Ignoramos los contenedores con estado_id = 2 (históricos/borrados)
     $stmt = $pdo->prepare('SELECT posicion FROM contenedores WHERE bloque_id = :bloque_id AND estado_id = 1');
     $stmt->execute(['bloque_id' => $bloqueId]);
-    $posicionesOcupadas = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    
-    // Aseguramos que sean enteros para la comparación
-    $posicionesOcupadas = array_map('intval', $posicionesOcupadas);
+    $posicionesOcupadas = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 
-    // 3. Calcular la posición más alta disponible (Lógica de Pila: Max -> 1)
     $posicionDisponible = (int)$capacidadMaxima;
-    
-    while (in_array($posicionDisponible, $posicionesOcupadas) && $posicionDisponible > 0) {
+    while (in_array($posicionDisponible, $posicionesOcupadas, true) && $posicionDisponible > 0) {
         $posicionDisponible--;
     }
 
-    // 4. Respuesta
+    header('Content-Type: application/json');
     if ($posicionDisponible > 0) {
-        // Devolvemos la posición y también el array de ocupadas por si quieres pintar el mapa en el futuro
         echo json_encode([
             'posicion' => $posicionDisponible,
             'ocupadas' => $posicionesOcupadas
@@ -52,10 +60,8 @@ try {
     } else {
         echo json_encode(['error' => 'El bloque está completamente lleno.']);
     }
-
 } catch (Exception $e) {
     header('HTTP/1.1 500 Internal Server Error');
-    // En producción es mejor no mostrar el mensaje crudo de la BD
-    echo json_encode(['error' => 'Error al calcular posición']);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Error al calcular la posición disponible']);
 }
-?>

@@ -13,13 +13,14 @@ require '../../config/database.php';
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // 2. LIMPIEZA: Usar trim() para evitar problemas con espacios accidentales
     $nombre = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
+    $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
 
     try {
-        // 3. CONSULTA ESTRICTA
-        // Buscamos en TODA la tabla. No importa si estado_id es 1 o 2.
-        // Si existe el registro, devolvemos "exists" para bloquear el uso del nombre.
-        $stmt = $pdo->prepare('SELECT COUNT(*) FROM tipos_unidad WHERE nombre = :nombre');
-        $stmt->execute(['nombre' => $nombre]);
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM tipos_unidad WHERE nombre = :nombre AND id != :id');
+        $stmt->execute([
+            'nombre' => $nombre,
+            'id' => $id,
+        ]);
         $count = $stmt->fetchColumn();
 
         if ($count > 0) {

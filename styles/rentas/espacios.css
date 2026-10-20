@@ -1,0 +1,636 @@
+.rentas-main{
+  gap:18px;
+}
+
+.rentas-hero{
+  display:grid;
+  grid-template-columns:minmax(0, 1.5fr) minmax(320px, .9fr);
+  gap:24px;
+  padding:26px 28px;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at top right, rgba(247,171,55,.18), transparent 28%),
+    radial-gradient(circle at bottom left, rgba(128,203,196,.14), transparent 24%),
+    linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+}
+
+.hero-copy h1{
+  margin:8px 0 12px;
+}
+
+.hero-copy p{
+  max-width:760px;
+  color:var(--muted);
+  line-height:1.7;
+  margin:0;
+}
+
+.hero-kicker{
+  display:inline-flex;
+  align-items:center;
+  min-height:34px;
+  padding:0 12px;
+  border-radius:999px;
+  background:rgba(128,203,196,.14);
+  color:var(--primary-dark);
+  font-size:.82rem;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+.hero-aside{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.hero-pill{
+  min-height:50px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 18px;
+  border-radius:18px;
+  border:1px solid rgba(128,203,196,.18);
+  background:rgba(128,203,196,.1);
+  color:var(--muted);
+  font-weight:700;
+}
+
+.hero-pill strong{
+  color:var(--text);
+  margin-left:8px;
+}
+
+.hero-stats{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:12px;
+}
+
+.hero-stat{
+  border:1px solid var(--line);
+  border-radius:20px;
+  background:rgba(255,255,255,.02);
+  padding:16px;
+}
+
+.hero-stat span{
+  display:block;
+  color:var(--muted);
+  font-size:.82rem;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  font-weight:800;
+  margin-bottom:8px;
+}
+
+.hero-stat strong{
+  color:var(--text);
+  font-size:1.65rem;
+}
+
+.rentas-grid{
+  display:grid;
+  grid-template-columns:minmax(0, 1.1fr) minmax(360px, .9fr);
+  gap:18px;
+}
+
+.rentas-bottom{
+  display:grid;
+  grid-template-columns:minmax(0, 1.45fr) minmax(320px, .75fr);
+  gap:18px;
+}
+
+.rent-form-card,
+.occupancy-card,
+.rents-table-card,
+.side-notes-card{
+  padding:24px;
+}
+
+.section-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  margin-bottom:20px;
+}
+
+.section-head h2{
+  margin:0 0 8px;
+}
+
+.section-head p{
+  margin:0;
+  color:var(--muted);
+  line-height:1.6;
+}
+
+.section-tag{
+  display:inline-flex;
+  align-items:center;
+  min-height:34px;
+  padding:0 12px;
+  border-radius:999px;
+  background:rgba(247,171,55,.16);
+  color:#f6c66d;
+  font-size:.82rem;
+  font-weight:800;
+  white-space:nowrap;
+}
+
+.rent-form{
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+}
+
+.form-block{
+  border:1px solid var(--line);
+  border-radius:22px;
+  padding:18px;
+  background:rgba(255,255,255,.02);
+}
+
+.block-title{
+  display:block;
+  color:var(--muted);
+  font-size:.84rem;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  margin-bottom:16px;
+}
+
+.form-grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:14px;
+}
+
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.field span{
+  color:var(--muted);
+  font-size:.9rem;
+  font-weight:700;
+}
+
+.field input,
+.field select,
+.field textarea{
+  width:100%;
+  min-height:48px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:var(--surface);
+  color:var(--text);
+  padding:0 16px;
+  font:inherit;
+  box-shadow:var(--control-shadow);
+}
+
+.field textarea{
+  min-height:112px;
+  padding:14px 16px;
+  resize:vertical;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus{
+  outline:none;
+  border-color:var(--primary-dark);
+  box-shadow:0 0 0 4px rgba(128,203,196,.16);
+}
+
+.field-full{
+  grid-column:1 / -1;
+}
+
+.form-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+.toolbar-button{
+  min-height:52px;
+  padding:0 20px;
+  border:none;
+  border-radius:16px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  text-decoration:none;
+  font:inherit;
+  font-weight:700;
+  cursor:pointer;
+  transition:transform .22s ease, box-shadow .22s ease, background-color .22s ease, border-color .22s ease;
+  appearance:none;
+  -webkit-appearance:none;
+}
+
+.toolbar-button:hover{
+  transform:translateY(-1px);
+}
+
+.toolbar-button-primary{
+  background:#f7ab37;
+  color:#1f2e3b;
+  box-shadow:0 14px 26px rgba(247,171,55,.2);
+}
+
+.toolbar-button-primary:hover{
+  background:#ee9d21;
+}
+
+.toolbar-button-secondary{
+  background:rgba(128,203,196,.22);
+  color:var(--text);
+  box-shadow:0 14px 26px rgba(128,203,196,.14);
+}
+
+.toolbar-button-secondary:hover{
+  background:rgba(128,203,196,.34);
+}
+
+.legend{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.legend-item{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  color:var(--muted);
+  font-size:.86rem;
+  font-weight:700;
+}
+
+.legend-dot{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  display:inline-block;
+}
+
+.legend-dot.disponible{ background:#60c3aa; }
+.legend-dot.ocupado{ background:#f6b956; }
+.legend-dot.reservado{ background:#6ea6f5; }
+.legend-dot.mantenimiento{ background:#d77f78; }
+
+.space-grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:14px;
+}
+
+.space-card{
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:16px;
+  background:rgba(255,255,255,.02);
+}
+
+.space-top{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:12px;
+}
+
+.space-top strong{
+  color:var(--text);
+  font-size:1.05rem;
+}
+
+.space-state{
+  display:inline-flex;
+  align-items:center;
+  min-height:28px;
+  padding:0 10px;
+  border-radius:999px;
+  font-size:.76rem;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+
+.space-card p{
+  margin:0 0 6px;
+  color:var(--text);
+  font-weight:700;
+}
+
+.space-card small{
+  color:var(--muted);
+}
+
+.space-disponible{
+  background:rgba(76,179,164,.08);
+  border-color:rgba(76,179,164,.2);
+}
+
+.space-disponible .space-state{
+  background:rgba(76,179,164,.16);
+  color:#7ce0cf;
+}
+
+.space-ocupado{
+  background:rgba(247,171,55,.08);
+  border-color:rgba(247,171,55,.16);
+}
+
+.space-ocupado .space-state{
+  background:rgba(247,171,55,.16);
+  color:#ffd38a;
+}
+
+.space-reservado{
+  background:rgba(82,140,245,.08);
+  border-color:rgba(82,140,245,.16);
+}
+
+.space-reservado .space-state{
+  background:rgba(82,140,245,.16);
+  color:#a9c4ff;
+}
+
+.space-mantenimiento{
+  background:rgba(233,128,110,.08);
+  border-color:rgba(233,128,110,.16);
+}
+
+.space-mantenimiento .space-state{
+  background:rgba(233,128,110,.16);
+  color:#f3b3aa;
+}
+
+.head-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.rents-table-wrap{
+  overflow:auto;
+}
+
+.rents-table{
+  min-width:980px;
+}
+
+.table-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:38px;
+  padding:0 14px;
+  border-radius:999px;
+  background:rgba(128,203,196,.14);
+  color:var(--text);
+  font-weight:800;
+  white-space:nowrap;
+}
+
+.table-primary{
+  color:var(--text);
+  font-weight:700;
+}
+
+.table-muted{
+  color:var(--muted);
+  font-weight:600;
+}
+
+.table-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.action-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:38px;
+  padding:0 16px;
+  border-radius:999px;
+  border:1px solid transparent;
+  text-decoration:none;
+  font:inherit;
+  font-weight:700;
+  cursor:pointer;
+  transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease, background-color .2s ease, color .2s ease;
+  appearance:none;
+  -webkit-appearance:none;
+}
+
+.action-pill:hover{
+  transform:translateY(-1px);
+}
+
+.action-pill-info{
+  background:rgba(128,203,196,.12);
+  color:var(--primary-dark);
+  border-color:rgba(128,203,196,.16);
+}
+
+.action-pill-edit{
+  background:rgba(76,179,164,.14);
+  color:#7ce0cf;
+  border-color:rgba(76,179,164,.2);
+}
+
+.action-pill-delete{
+  background:rgba(238,115,94,.12);
+  color:#d97562;
+  border-color:rgba(238,115,94,.2);
+}
+
+.state-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:32px;
+  padding:0 12px;
+  border-radius:999px;
+  font-size:.84rem;
+  font-weight:800;
+}
+
+.state-pill.activa{
+  background:rgba(76,179,164,.14);
+  color:#7ce0cf;
+}
+
+.state-pill.por-vencer{
+  background:rgba(247,171,55,.16);
+  color:#ffd38a;
+}
+
+.note-list{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+.note-item{
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:16px;
+  background:rgba(255,255,255,.02);
+}
+
+.note-top{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:10px;
+}
+
+.note-item strong{
+  color:var(--text);
+}
+
+.note-item p{
+  margin:0;
+  color:var(--muted);
+  line-height:1.65;
+}
+
+.mini-state{
+  display:inline-flex;
+  align-items:center;
+  min-height:28px;
+  padding:0 10px;
+  border-radius:999px;
+  font-size:.76rem;
+  font-weight:800;
+  white-space:nowrap;
+}
+
+.mini-state.pendiente{
+  background:rgba(82,140,245,.16);
+  color:#a9c4ff;
+}
+
+.mini-state.atencion{
+  background:rgba(247,171,55,.16);
+  color:#ffd38a;
+}
+
+.mini-state.bloqueado{
+  background:rgba(233,128,110,.16);
+  color:#f3b3aa;
+}
+
+@media (max-width: 1180px){
+  .rentas-hero,
+  .rentas-grid,
+  .rentas-bottom{
+    grid-template-columns:1fr;
+  }
+}
+
+@media (max-width: 980px){
+  .hero-copy h1{
+    font-size:2.45rem;
+  }
+
+  .hero-pill{
+    justify-content:flex-start;
+  }
+}
+
+@media (max-width: 760px){
+  .rentas-hero,
+  .rent-form-card,
+  .occupancy-card,
+  .rents-table-card,
+  .side-notes-card{
+    padding:20px;
+  }
+
+  .hero-copy h1{
+    font-size:2.05rem;
+    line-height:1.08;
+  }
+
+  .hero-stats{
+    grid-template-columns:1fr 1fr;
+  }
+
+  .section-head{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+
+  .form-grid{
+    grid-template-columns:1fr;
+  }
+
+  .field-full{
+    grid-column:auto;
+  }
+
+  .form-actions,
+  .head-actions{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .toolbar-button{
+    width:100%;
+  }
+
+  .legend{
+    justify-content:flex-start;
+  }
+
+  .space-grid{
+    grid-template-columns:1fr;
+  }
+}
+
+@media (max-width: 520px){
+  .rentas-hero,
+  .rent-form-card,
+  .occupancy-card,
+  .rents-table-card,
+  .side-notes-card{
+    padding:16px;
+  }
+
+  .hero-copy h1{
+    font-size:1.78rem;
+  }
+
+  .hero-stats{
+    grid-template-columns:1fr;
+  }
+
+  .hero-pill{
+    min-height:auto;
+    padding:12px 14px;
+    line-height:1.5;
+    flex-wrap:wrap;
+  }
+}

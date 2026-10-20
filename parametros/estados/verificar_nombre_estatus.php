@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Ignoramos estado_id (buscamos en todo el historial).
         // Excluimos el ID actual (útil si este script se reutiliza en edición).
         $stmt = $pdo->prepare('
-            SELECT COUNT(*) 
+            SELECT id, estado_id
             FROM estatus_contenedores 
             WHERE nombre = :nombre 
             AND tipo_estatus_id = :tipo_id 
@@ -54,13 +54,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             'id' => $id
         ]);
         
-        $count = $stmt->fetchColumn();
+        $registro = $stmt->fetch(PDO::FETCH_ASSOC);
 
         // 4. RESPUESTA
-        if ($count > 0) {
+        if (!$registro) {
+            echo 'available';
+        } elseif ((int)$registro['estado_id'] === 1) {
             echo 'exists';
         } else {
-            echo 'available';
+            echo 'inactive';
         }
     } catch (Exception $e) {
         // En desarrollo puedes hacer echo $e->getMessage(), pero en prod mejor solo 'error'

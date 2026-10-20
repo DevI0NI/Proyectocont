@@ -1,0 +1,312 @@
+.ingreso-doc-button{
+  flex:0 0 auto;
+}
+
+.eir-helper-strip{
+  padding:16px 18px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+
+.eir-helper-copy{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.eir-helper-copy strong{
+  color:var(--text);
+  font-size:1rem;
+}
+
+.eir-helper-copy span{
+  color:var(--muted);
+  line-height:1.55;
+}
+
+.eir-layout{
+  display:grid;
+  grid-template-columns:minmax(0, 1.5fr) minmax(280px, .8fr);
+  gap:16px;
+  align-items:start;
+}
+
+.eir-form{
+  gap:12px;
+}
+
+.eir-summary-card{
+  padding:22px 24px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+}
+
+.eir-summary-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.eir-summary-header h2{
+  margin:0;
+  font-size:1.2rem;
+  color:var(--text);
+}
+
+.eir-chip{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:34px;
+  padding:0 14px;
+  border-radius:999px;
+  background:rgba(128,203,196,.16);
+  border:1px solid rgba(128,203,196,.22);
+  color:var(--primary-dark);
+  font-weight:800;
+}
+
+.eir-summary-grid{
+  display:grid;
+  gap:10px;
+}
+
+.eir-summary-item{
+  padding:14px 16px;
+  border-radius:16px;
+  border:1px solid var(--line);
+  background:var(--surface-2);
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.eir-summary-item small{
+  color:var(--muted);
+  font-size:.83rem;
+}
+
+.eir-summary-item strong{
+  color:var(--text);
+  line-height:1.45;
+}
+
+.ticket-toolbar{
+  padding:16px 18px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:14px;
+}
+
+.ticket-preview-card{
+  padding:22px 24px;
+}
+
+.eir-ticket-sheet{
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  border-radius:24px;
+  background:linear-gradient(180deg, rgba(128,203,196,.08), rgba(128,203,196,.03));
+  border:1px solid rgba(128,203,196,.18);
+  padding:24px;
+}
+
+.eir-ticket-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:20px;
+  padding-bottom:18px;
+  border-bottom:1px solid var(--line);
+}
+
+.eir-ticket-brand{
+  display:flex;
+  align-items:center;
+  gap:16px;
+}
+
+.eir-ticket-logo{
+  width:84px;
+  height:84px;
+  object-fit:contain;
+  padding:10px;
+  border-radius:20px;
+  background:rgba(255,255,255,.88);
+  border:1px solid rgba(128,203,196,.18);
+}
+
+.eir-ticket-brand-copy small{
+  display:block;
+  color:var(--muted);
+  margin-bottom:4px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+.eir-ticket-brand-copy h2{
+  margin:0;
+  font-size:1.9rem;
+  color:var(--text);
+}
+
+.eir-ticket-brand-copy p{
+  margin:8px 0 0;
+  color:var(--muted);
+}
+
+.eir-ticket-code{
+  min-width:220px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  padding:16px 18px;
+  border-radius:18px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  text-align:right;
+}
+
+.eir-ticket-code span,
+.eir-ticket-code small{
+  color:var(--muted);
+}
+
+.eir-ticket-code strong{
+  color:var(--text);
+  font-size:1.1rem;
+}
+
+.eir-ticket-section{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+.eir-ticket-title-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.eir-ticket-title-row h3,
+.eir-ticket-section h3{
+  margin:0;
+  font-size:1.1rem;
+  color:var(--text);
+}
+
+.eir-ticket-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:32px;
+  padding:0 14px;
+  border-radius:999px;
+  background:rgba(247,171,55,.16);
+  border:1px solid rgba(247,171,55,.24);
+  color:#a36200;
+  font-weight:800;
+}
+
+.eir-ticket-grid{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:12px;
+}
+
+.eir-ticket-grid > div,
+.eir-signature-box{
+  padding:14px 16px;
+  border-radius:16px;
+  border:1px solid var(--line);
+  background:var(--surface);
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.eir-ticket-grid small,
+.eir-signature-box span{
+  color:var(--muted);
+  font-size:.82rem;
+}
+
+.eir-ticket-grid strong,
+.eir-signature-box strong{
+  color:var(--text);
+  line-height:1.45;
+}
+
+.eir-ticket-notes{
+  margin:0;
+  padding:16px 18px;
+  border-radius:16px;
+  border:1px solid var(--line);
+  background:var(--surface);
+  color:var(--text);
+  line-height:1.7;
+}
+
+.eir-ticket-signatures{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:12px;
+}
+
+@media (max-width: 1200px){
+  .eir-layout{
+    grid-template-columns:1fr;
+  }
+}
+
+@media (max-width: 980px){
+  .eir-helper-strip,
+  .ticket-toolbar{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .eir-ticket-header{
+    flex-direction:column;
+  }
+
+  .eir-ticket-code{
+    min-width:0;
+    width:100%;
+    text-align:left;
+  }
+
+  .eir-ticket-grid,
+  .eir-ticket-signatures{
+    grid-template-columns:1fr 1fr;
+  }
+}
+
+@media (max-width: 720px){
+  .eir-summary-card,
+  .ticket-preview-card{
+    padding:20px 16px;
+  }
+
+  .eir-ticket-sheet{
+    padding:18px 16px;
+  }
+
+  .eir-ticket-brand{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+
+  .eir-ticket-grid,
+  .eir-ticket-signatures{
+    grid-template-columns:1fr;
+  }
+}
