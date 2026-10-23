@@ -1,6 +1,9 @@
 @extends('layouts.app')
 
 @section('content')
+    @if(!empty($returnUrl))
+        <div class="mw-actions"><a class="mw-button" href="{{ $returnUrl }}"><span data-catalog-icon="arrow-left" aria-hidden="true"></span>Volver</a></div>
+    @endif
     @if ($errors->any())
         <div class="form-error page-error">{{ $errors->first() }}</div>
     @endif

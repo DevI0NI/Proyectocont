@@ -67,6 +67,18 @@ class MaintenanceWorkflow
         });
     }
 
+    public function startableContainers(int $branchId): Builder
+    {
+        return $this->repairableContainers($branchId)->whereNotExists(function (Builder $query): void {
+            $query->selectRaw('1')->from('estatus_contenedores as pending_status')
+                ->whereRaw("UPPER(TRIM(pending_status.nombre)) LIKE 'PENDIENT%'")
+                ->where(function (Builder $status): void {
+                    $status->whereColumn('pending_status.id', 'c.estatus_unidad_id')
+                        ->orWhereColumn('pending_status.id', 'c.estatus_box_id');
+                });
+        });
+    }
+
     public function currentJobs(object $container): Builder
     {
         $query = DB::table('maintenance_jobs')->where('container_id', $container->id);
@@ -99,6 +111,9 @@ class MaintenanceWorkflow
                 }
                 if (! $this->repairableContainers($branchId)->where('c.id', $container->id)->exists()) {
                     throw ValidationException::withMessages(['container_id' => 'Solo se pueden iniciar reparaciones en contenedores con estado IPSA OOS y un ingreso activo en esta sucursal.']);
+                }
+                if (! $this->startableContainers($branchId)->where('c.id', $container->id)->exists()) {
+                    throw ValidationException::withMessages(['container_id' => 'Revisa primero los estados de Unidad y Box. No se puede iniciar una reparacion mientras alguno este pendiente.']);
                 }
                 $hasDetails = collect([$data['diagnosis'] ?? '', $data['repair_service_id'] ?? '', $data['work_performed'] ?? ''])
                     ->contains(fn ($value): bool => trim((string) $value) !== '');
@@ -227,10 +242,18 @@ class MaintenanceWorkflow
                     'submitted_at' => $submit ? now() : null, 'updated_at' => now(),
                 ]);
                 if ($submit) {
-                    DB::table('maintenance_review_requests')->insert([
+                    $counter = DB::table('maintenance_counters')->where('name', 'review_request')->lockForUpdate()->first();
+                    if (! $counter) {
+                        throw new \LogicException('Falta configurar el consecutivo de solicitudes de mantenimiento.');
+                    }
+                    $folio = (int) $counter->last_value + 1;
+                    DB::table('maintenance_counters')->where('name', 'review_request')->update(['last_value' => $folio]);
+                    $reviewId = DB::table('maintenance_review_requests')->insertGetId([
+                        'folio' => $folio,
                         'job_id' => $jobId, 'branch_id' => $branchId, 'requested_by' => $user->id,
                         'status' => 'pending', 'created_at' => now(), 'updated_at' => now(),
                     ]);
+                    app(SystemNotifications::class)->reviewRequested($reviewId);
                 }
                 $this->event($jobId, $user, $submit ? 'review_requested' : 'saved', $before, [
                     'job' => DB::table('maintenance_jobs')->find($jobId), 'materials' => $materials, 'new_evidence' => $stored,

@@ -5,10 +5,10 @@
     $mayAssign = (int)auth()->user()->rol_id === 1;
     $permissionDefaults = [1 => $accessService::defaults(1), 2 => $accessService::defaults(2), 3 => $accessService::defaults(3), 4 => [], 5 => []];
     $modules = $accessService::modules();
-    $modules['pyp'] = ['Seguimiento PYP', ['view' => 'Consultar', 'assign' => 'Asignar contenedores a PYP']];
+    $modules['pyp'] = ['Auditoría externa', ['view' => 'Consultar', 'assign' => 'Asignar revisiones externas']];
     $modules['statuses'][0] = 'Estatus de contenedores';
     $permissionGroups = [
-        'Operacion' => ['dashboard', 'containers', 'pyp', 'transfers', 'dispatches', 'reports'],
+        'Operacion' => ['dashboard', 'containers', 'pyp', 'maintenance', 'transfers', 'dispatches', 'reports'],
         'Parametros' => ['users', 'unit-types', 'statuses', 'yard-layout'],
         'Catalogos' => ['navieras', 'auditoras', 'repuestos', 'reparaciones'],
     ];
@@ -19,8 +19,10 @@
         'containers.edit' => 'Modificar los datos de un contenedor. No autoriza traslados, despachos ni cambios de estados tecnicos o disponibilidad IPSA por si solo.',
         'containers.technical' => 'Cambiar los estados tecnicos de unidad y estructura del contenedor. Tambien habilita consultar y modificar su informacion.',
         'containers.ipsa' => 'Cambiar la disponibilidad IPSA del contenedor. Tambien habilita consultar y modificar su informacion.',
-        'pyp.view' => 'Ver los contenedores del seguimiento PYP y consultar el estado de sus revisiones.',
+        'pyp.view' => 'Consultar los contenedores y resultados de auditoría externa de la sucursal.',
         'pyp.assign' => 'Confirmar o cambiar la auditora indicada por la naviera. No permite emitir el veredicto externo.',
+        'maintenance.view' => 'Recibir solicitudes de reparación de la sucursal y consultar su diagnóstico, materiales y evidencias. No permite modificar el trabajo del mecánico ni aprobar estados técnicos.',
+        'maintenance.confirm' => 'Confirmar la entrega del mecánico para habilitar la revisión externa. No modifica automáticamente los estados técnicos ni el dictamen de la auditora.',
         'transfers.view' => 'Consultar los contenedores disponibles en la vista de traslados, sin confirmar movimientos.',
         'transfers.operate' => 'Confirmar traslados de contenedores entre ubicaciones permitidas. Tambien habilita consultar la vista de traslados.',
         'dispatches.view' => 'Consultar los contenedores en la vista de despachos, sin confirmar su salida.',

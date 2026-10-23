@@ -1,4 +1,4 @@
-<div class="containers-livewire-shell @if($maintenanceMode) maintenance-inventory @endif">
+<div class="containers-livewire-shell @if($maintenanceMode || $pypMode) maintenance-inventory @endif">
     @php
         $roleId = (int) auth()->user()->rol_id;
         $showPyp = true;
@@ -69,14 +69,14 @@
     <section class="panel-card containers-module">
         <div class="containers-module-head">
             <div class="view-header-copy">
-                <h1>{{ $maintenanceMode ? 'Mantenimiento' : ($pypMode ? 'Seguimiento PYP' : 'Configuracion de Bloques') }}</h1>
-                <p>{{ $maintenanceMode ? 'Contenedores y estados tecnicos por patio y bloque.' : ($pypMode ? 'Consulta las asignaciones y el estado de revision por patio y bloque.' : 'Consulta ocupacion, recorre bloques por patio y navega a los movimientos del inventario interno.') }}</p>
+                <h1>{{ $maintenanceMode ? 'Mantenimiento' : ($pypMode ? 'Auditoría externa' : 'Configuracion de Bloques') }}</h1>
+                <p>{{ $maintenanceMode ? 'Contenedores y estados tecnicos por patio y bloque.' : ($pypMode ? $externalCompanyName.' · '.$branchName : 'Consulta ocupacion, recorre bloques por patio y navega a los movimientos del inventario interno.') }}</p>
             </div>
         </div>
 
         <div class="containers-toolbar">
             <div class="containers-search">
-                <input type="search" maxlength="255" placeholder="{{ $pypMode ? 'Buscar número en toda la sucursal...' : ($viewMode === 'yard3d' ? 'Buscar contenedor...' : 'Buscar en tabla...') }}" aria-label="Buscar contenedor" autocomplete="off" wire:model.live.debounce.300ms="search">
+                <input type="search" maxlength="255" placeholder="{{ $viewMode === 'yard3d' ? 'Buscar contenedor en el patio...' : ($pypMode ? 'Buscar número en toda la sucursal...' : 'Buscar en tabla...') }}" aria-label="Buscar contenedor" autocomplete="off" wire:model.live.debounce.300ms="search">
             </div>
 
             <div class="containers-filters">
@@ -84,7 +84,7 @@
                     <span class="topbar-sucursal-label">Patio</span>
                     <div class="topbar-dropdown container-dropdown">
                         <button type="button" class="topbar-dropdown-trigger container-dropdown-trigger" data-container-dropdown-trigger aria-haspopup="listbox" aria-expanded="false" @disabled($patios->isEmpty())>
-                            <span>{{ $selectedPatio?->nombre ?? ($patios->isEmpty() ? 'Sin patios' : 'Seleccionar') }}</span>
+                            <span>{{ $selectedPatio?->nombre ?? ($patios->isEmpty() ? 'Sin patios' : 'Seleccionar') }}{{ $pypMode && $selectedPatio ? ' - '.$selectedPatio->assigned_count.' asig.' : '' }}</span>
                             <svg class="dropdown-caret" viewBox="0 0 20 20" aria-hidden="true">
                                 <path d="M5.75 7.5 10 11.75 14.25 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
@@ -98,7 +98,7 @@
                                 role="option"
                                 aria-selected="{{ $selectedPatio?->id === $patio->id ? 'true' : 'false' }}"
                             >
-                                {{ $patio->nombre }}
+                                {{ $patio->nombre }}{{ $pypMode ? ' - '.$patio->assigned_count.' asig.' : '' }}
                             </button>
                         @endforeach
                         </div>
@@ -112,7 +112,7 @@
                             <button type="button" class="topbar-dropdown-trigger container-dropdown-trigger" data-container-dropdown-trigger aria-haspopup="listbox" aria-expanded="false" @disabled($blocks->isEmpty())>
                                 <span>
                                     @if ($selectedBlock)
-                                        Bloque {{ $selectedBlock->numero }} - {{ $capacityCurrent }}/{{ $capacityMax }}
+                                        Bloque {{ $selectedBlock->numero }} - {{ $capacityCurrent }}{{ $pypMode ? ' asig.' : '/'.$capacityMax }}
                                     @else
                                         {{ $blocks->isEmpty() ? 'Sin bloques' : 'Seleccionar' }}
                                     @endif
@@ -130,7 +130,7 @@
                                     role="option"
                                     aria-selected="{{ $selectedBlock?->id === $block->id ? 'true' : 'false' }}"
                                 >
-                                    Bloque {{ $block->numero }} - {{ $selectedBlock?->id === $block->id ? $capacityCurrent : $block->contenedores_activos_count }}/{{ $block->capacidad_maxima }}
+                                    Bloque {{ $block->numero }} - {{ $selectedBlock?->id === $block->id ? $capacityCurrent : $block->contenedores_activos_count }}{{ $pypMode ? ' asig.' : '/'.$block->capacidad_maxima }}
                                 </button>
                             @endforeach
                             </div>
@@ -183,24 +183,26 @@
             </div>
         </div>
 
-        @unless ($pypMode)
-            <div class="containers-view-switch" role="group" aria-label="Cambiar vista">
-                <button type="button" class="@if($viewMode === 'table') active @endif" wire:click="setViewMode('table')">Tabla</button>
-                <button type="button" class="@if($viewMode === 'yard3d') active @endif" wire:click="setViewMode('yard3d')">Vista 3D</button>
-            </div>
-        @endunless
+        <div class="containers-view-switch" role="group" aria-label="Cambiar vista">
+            <button type="button" class="@if($viewMode === 'table') active @endif" wire:click="setViewMode('table')">Tabla</button>
+            <button type="button" class="@if($viewMode === 'yard3d') active @endif" wire:click="setViewMode('yard3d')">Vista 3D</button>
+        </div>
 
         <div class="containers-table-panel">
             <div class="containers-table-heading">
                 <div>
-                    <h2>{{ $globalSearch ? 'Resultados en la sucursal' : ($pypMode ? 'Estado PYP del bloque' : ($viewMode === 'yard3d' ? 'Vista 3D del patio' : 'Inventario del Bloque')) }}</h2>
+                    <h2>{{ $globalSearch ? 'Resultados en la sucursal' : ($viewMode === 'yard3d' ? 'Vista 3D del patio' : ($pypMode ? 'Contenedores asignados' : 'Inventario del Bloque')) }}</h2>
                     <p>
                         @if ($missingLayout)
                             {{ $layoutTitle }}.
                         @elseif ($globalSearch)
                             {{ number_format($pagination['total']) }} contenedores encontrados.
                         @elseif ($viewMode === 'yard3d' && $selectedPatio)
-                            Patio {{ $selectedPatio->nombre }} con bloques y contenedores activos.
+                            @if ($pypMode)
+                                {{ number_format($selectedPatio->assigned_count) }} contenedores asignados en {{ $selectedPatio->nombre }}.
+                            @else
+                                Patio {{ $selectedPatio->nombre }} con bloques y contenedores activos.
+                            @endif
                         @elseif ($selectedBlock)
                             {{ number_format($pagination['total']) }} de {{ number_format($capacityCurrent) }} contenedores visibles.
                         @elseif ($selectedPatio)
@@ -211,10 +213,15 @@
                     </p>
                 </div>
 
-                @if ($selectedBlock && $viewMode === 'table')
-                    <div class="container-capacity-pill" aria-label="Ocupacion del bloque">
-                        <strong>{{ $capacityCurrent }} / {{ $capacityMax }}</strong>
-                        <span>{{ $occupancy }}% ocupado</span>
+                @if (($selectedBlock && $viewMode === 'table') || ($pypMode && $selectedPatio))
+                    <div class="container-capacity-pill" aria-label="{{ $pypMode ? 'Contenedores asignados' : 'Ocupacion del bloque' }}">
+                        @if ($pypMode)
+                            <strong>{{ $viewMode === 'table' && $selectedBlock ? $capacityCurrent : $selectedPatio->assigned_count }}</strong>
+                            <span>contenedores asignados</span>
+                        @else
+                            <strong>{{ $capacityCurrent }} / {{ $capacityMax }}</strong>
+                            <span>{{ $occupancy }}% ocupado</span>
+                        @endif
                     </div>
                 @endif
             </div>
@@ -274,14 +281,15 @@
                             <strong data-yard-action-name></strong>
                             <small data-yard-action-meta></small>
                             <div class="containers-yard3d-actions-list">
-                                <a data-yard-action-info href="#">Informacion</a>
+                                <a data-yard-action-info href="#">{{ $pypMode ? 'Ver auditoría' : 'Informacion' }}</a>
                                 @if($maintenanceMode)
                                 <a data-yard-action-maintenance href="#" hidden>Reparar</a>
-                                @else
+                                @elseif (! $pypMode)
                                 <a data-yard-action-ticket href="#">Constancia ingreso</a>
                                 <a data-yard-action-transfer href="#">Trasladar</a>
                                 <a data-yard-action-dispatch href="#">Despachar</a>
                                 @endif
+                                @if(! $pypMode)<a data-yard-action-history href="#" hidden>Reparaciones</a>@endif
                             </div>
                         </div>
                     </div>
@@ -290,6 +298,9 @@
                         <span><i class="pending"></i>Pendiente</span>
                         <span><i class="oos"></i>OOS / reparacion</span>
                         <span><i class="other"></i>Otros</span>
+                        @if ($pypMode)
+                            <span><i class="other"></i>Ocupación sin acceso</span>
+                        @endif
                     </div>
                 </div>
             @elseif (! $selectedBlock && ! $globalSearch)
@@ -392,10 +403,10 @@
                                 @if ($showPyp)
                                     <th class="containers-header-cell">
                                         <button type="button" class="containers-column-trigger" data-containers-menu-trigger="menu-pyp">
-                                            <span>{{ $pypMode ? 'PYP' : ($maintenanceMode ? 'Auditora externa' : 'Auditoria externa') }}</span>
+                                            <span>Auditoría externa</span>
                                         </button>
                                         <div class="containers-header-menu" id="menu-pyp" hidden>
-                                            <strong>{{ $pypMode ? 'PYP' : ($maintenanceMode ? 'Auditora externa' : 'Auditoria externa') }}</strong>
+                                            <strong>Auditoría externa</strong>
                                             @include('livewire.containers.status-filter', ['filter' => 'pypStatusFilter', 'selected' => $pypStatusFilter, 'options' => $statusOptions['pyp']])
                                         </div>
                                     </th>
@@ -426,8 +437,12 @@
                                                         @if($container->maintenance_actions['maintenance'])
                                                             <a href="{{ $container->maintenance_actions['maintenance'] }}">{{ $container->maintenance_actions['maintenance_label'] }}</a>
                                                         @endif
+                                                        @if($container->maintenance_actions['history'])
+                                                            <a href="{{ $container->maintenance_actions['history'] }}">Reparaciones</a>
+                                                        @endif
                                                     @endif
                                                     @if ($showInternalActions)
+                                                        <a href="{{ $container->repair_history_url }}">Reparaciones</a>
                                                         <a href="{{ route('containers.show', ['container' => $container->id, 'patio_id' => $selectedPatio?->id, 'bloque_id' => $selectedBlock?->id]) }}">
                                                             Informacion
                                                         </a>
@@ -444,7 +459,7 @@
                                                             <button type="button" data-pyp-assign data-action="{{ route('pyp-audits.assign', ['container' => $container->id]) }}" data-code="{{ $container->nombre }}" data-patio="{{ $container->patio_id }}" data-bloque="{{ $container->bloque_id }}">Asignar PYP</button>
                                                         @elseif ($container->es_asignado && in_array($roleId, [4, 5], true))
                                                             <a href="{{ route('pyp-audits.edit', ['container' => $container->id, 'patio_id' => $container->patio_id, 'bloque_id' => $container->bloque_id]) }}">
-                                                                Estatus PYP
+                                                                Ver auditoría
                                                             </a>
                                                         @elseif ($container->es_asignado)
                                                             <span>Asignado</span>
@@ -494,7 +509,7 @@
                                         </td>
                                     @endif
                                     @if ($showPyp)
-                                        <td data-label="{{ $pypMode ? 'PYP' : ($maintenanceMode ? 'Auditora externa' : 'Auditoria externa') }}">
+                                        <td data-label="Auditoría externa">
                                             <div class="mw-inventory-audit">
                                                 @if(!$isCensored && !$container->audit_company_name)<span class="mw-auditor-name">Sin auditora asignada</span>@endif
                                                 @if($container->audit_status && !$isCensored)
@@ -530,7 +545,7 @@
 
     @if ($showPyp && ! $maintenanceMode)
         <dialog class="container-exit-dialog pyp-dialog" data-pyp-dialog="assign" aria-labelledby="pypAssignTitle">
-            <span class="pyp-dialog-kicker">Seguimiento PYP</span>
+            <span class="pyp-dialog-kicker">Auditoría externa</span>
             <h2 id="pypAssignTitle">Asignar contenedor</h2>
             <p>Se iniciara la auditoria del equipo <strong data-pyp-assign-code></strong>.</p>
             <form method="POST" data-pyp-assign-form>
@@ -545,7 +560,7 @@
         </dialog>
 
         <dialog class="container-exit-dialog pyp-dialog" data-pyp-dialog="info" aria-labelledby="pypInfoTitle">
-            <span class="pyp-dialog-kicker">Seguimiento PYP</span>
+            <span class="pyp-dialog-kicker">Auditoría externa</span>
             <h2 id="pypInfoTitle">Informacion adicional</h2>
             <p class="pyp-dialog-container" data-pyp-info-code></p>
             <div class="pyp-dialog-info" data-pyp-info-text></div>

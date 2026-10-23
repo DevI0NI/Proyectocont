@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -179,10 +180,20 @@ final class OperationalCatalog
 
     private function event(string $catalog, int $id, int $userId, string $action, ?array $before): void
     {
+        $after = $this->snapshot($catalog, $id);
         DB::table('operational_catalog_events')->insert([
             'catalog' => $catalog, 'record_id' => $id, 'user_id' => $userId, 'action' => $action,
             'before_data' => $before === null ? null : json_encode($before, JSON_THROW_ON_ERROR),
             'after_data' => json_encode($this->snapshot($catalog, $id), JSON_THROW_ON_ERROR), 'created_at' => now(),
         ]);
+        $changes = app(SystemNotifications::class)->changes($before ?? [], $after, [
+            'name' => 'Nombre', 'description' => 'Descripción', 'status' => 'Estado (1 activo / 2 inactivo)',
+            'unit' => 'Unidad', 'reference_cost' => 'Precio referencial', 'currency' => 'Moneda', 'code' => 'Código',
+            'branches' => 'Sucursales autorizadas', 'auditor_assignments' => 'Autorizaciones de auditoras por sucursal',
+        ]);
+        if ($changes !== []) {
+            app(SystemNotifications::class)->activity($catalog, $action.' de catálogo', $after['name'] ?? $after['code'] ?? (string) $id,
+                $changes, null, User::find($userId));
+        }
     }
 }

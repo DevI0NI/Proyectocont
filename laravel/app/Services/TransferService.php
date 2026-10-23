@@ -122,6 +122,10 @@ class TransferService
                 'bloque_nuevo_id' => $destination->id,
                 'posicion_nueva' => (int) $data['nueva_posicion'],
             ]);
+            app(SystemNotifications::class)->activity('transfers', 'Contenedor trasladado', $current->nombre, [
+                ['field' => 'Ubicación', 'before' => $current->patio_nombre.' / Bloque '.$current->bloque_numero.' / Pos. '.$current->posicion,
+                    'after' => $destination->patio_nombre.' / Bloque '.$destination->bloque_numero.' / Pos. '.$data['nueva_posicion']],
+            ], [$branchId], $user);
         });
     }
 }

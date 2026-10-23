@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\AccessPermissions;
 use App\Services\AdministrationTable;
 use App\Services\ExternalAuditAccess;
+use App\Services\SystemNotifications;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -101,7 +102,7 @@ class UserManagementController extends Controller
                 ->withInput();
         }
 
-        DB::transaction(function () use ($data): void {
+        DB::transaction(function () use ($data, $request): void {
             $user = User::create([
                 'username' => $data['username'],
                 'email' => $data['email'],
@@ -114,6 +115,7 @@ class UserManagementController extends Controller
                 'external_access_level' => $data['external_access_level'],
             ]);
             $user->authorizedExternalBranches()->sync($data['external_branches']);
+            app(SystemNotifications::class)->userChanged($request->user(), $user, [], 'Usuario creado');
         });
 
         return $this->saved($request, 'Usuario creado correctamente.');
@@ -183,9 +185,13 @@ class UserManagementController extends Controller
             $payload['estado_id'] = self::ACTIVE;
         }
 
-        DB::transaction(function () use ($user, $payload, $data): void {
+        DB::transaction(function () use ($user, $payload, $data, $request, $reactivate): void {
+            $before = $user->toArray();
+            $before['external_branches'] = $user->authorizedExternalBranches()->orderBy('sucursales.id')->pluck('sucursales.id')->all();
             $user->update($payload);
             $user->authorizedExternalBranches()->sync($data['external_branches']);
+            app(SystemNotifications::class)->userChanged($request->user(), $user, $before,
+                $reactivate ? 'Usuario reactivado' : 'Usuario actualizado', ! empty($data['password']));
         });
 
         if ((int) $request->user()->id === (int) $user->id) {
@@ -213,7 +219,12 @@ class UserManagementController extends Controller
             return back()->withErrors(['delete' => 'No puedes desactivar tu propia cuenta mientras estas conectado.']);
         }
 
-        $user->update(['estado_id' => self::INACTIVE]);
+        DB::transaction(function () use ($request, $user): void {
+            $before = $user->toArray();
+            $before['external_branches'] = $user->authorizedExternalBranches()->orderBy('sucursales.id')->pluck('sucursales.id')->all();
+            $user->update(['estado_id' => self::INACTIVE]);
+            app(SystemNotifications::class)->userChanged($request->user(), $user, $before, 'Usuario desactivado');
+        });
 
         return $this->saved($request, 'Usuario desactivado correctamente.');
     }

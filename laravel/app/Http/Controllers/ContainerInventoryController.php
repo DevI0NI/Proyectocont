@@ -75,6 +75,7 @@ class ContainerInventoryController extends Controller
         [$unitStatusType, $boxStatusType] = $this->statusTypeIds();
 
         return view('containers.edit', [
+            'returnUrl' => $this->localReturnUrl($request),
             'sucursal' => $branch,
             'sucursales' => Sucursal::activas()->orderBy('nombre')->get(),
             'container' => $record,
@@ -175,7 +176,7 @@ class ContainerInventoryController extends Controller
         }
 
         return redirect()
-            ->route('containers.show', ['container' => $container] + $redirectParams)
+            ->to($this->localReturnUrl($request) ?? route('containers.show', ['container' => $container] + $redirectParams))
             ->with('status', "Contenedor {$updatedCode} actualizado correctamente.");
     }
 

@@ -56,6 +56,15 @@ class ContainerUpdateService
 
             Contenedor::where('id', $record->id)->update($payload);
             $this->writeModificationLogs($record, $payload, $user->id);
+            app(SystemNotifications::class)->containerStatuses($container, $branchId, $record, $payload, $user);
+            $changes = app(SystemNotifications::class)->changes((array) $record, $payload, [
+                'nombre' => 'Número de equipo', 'tipo_unidad_id' => 'Tipo de unidad', 'modelo_id' => 'Modelo',
+                'iso_code' => 'ISO', 'marca' => 'Marca', 'observaciones_unidad' => 'Observaciones de unidad', 'observaciones_box' => 'Observaciones de estructura',
+                'transportista' => 'Transportista', 'conductor' => 'Conductor', 'placa_cabezal' => 'Placa del cabezal', 'placa_chasis' => 'Placa del chasis',
+            ]);
+            if ($changes !== []) {
+                app(SystemNotifications::class)->activity('containers', 'Información del contenedor actualizada', $payload['nombre'], $changes, [$branchId], $user);
+            }
 
             return $payload['nombre'];
         });

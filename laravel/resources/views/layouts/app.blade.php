@@ -45,12 +45,14 @@
 
         $navItems = [
             ['label' => 'Dashboard', 'route' => 'dashboard', 'active' => ['dashboard'], 'icon' => null, 'visible' => !in_array($roleId, [4, 5], true)],
+            ['label' => 'Dashboard', 'route' => 'external-audits.dashboard', 'active' => ['external-audits.dashboard'], 'icon' => null, 'visible' => $roleId === 5 && $user->external_access_level === 'supervisor'],
             ['label' => 'Mantenimiento', 'route' => 'maintenance.orders', 'active' => ['maintenance.*'], 'icon' => null, 'vectorIcon' => 'wrench', 'visible' => $roleId === 4],
             ['label' => 'Contenedores', 'route' => 'containers.index', 'active' => ['containers.*'], 'icon' => 'bloques.png', 'visible' => $canOperate],
-            ['label' => 'Seguimiento PYP', 'route' => 'pyp-audits.index', 'active' => ['pyp-audits.*'], 'icon' => 'cont.png', 'visible' => $roleId !== 4],
+            ['label' => 'Contenedores', 'route' => 'pyp-audits.index', 'active' => ['pyp-audits.*'], 'icon' => 'cont.png', 'visible' => $roleId === 5],
             ['label' => 'Traslados', 'route' => 'transfers.create', 'active' => ['transfers.*'], 'icon' => 'traslados.png', 'visible' => $canOperate],
             ['label' => 'Despachos', 'route' => 'dispatches.create', 'active' => ['dispatches.*'], 'icon' => 'egresos.png', 'visible' => $canOperate],
             ['label' => 'Reportes', 'route' => 'reports.index', 'active' => ['reports.*'], 'icon' => 'reportes.png', 'visible' => $canManage],
+            ['label' => 'Notificaciones', 'route' => 'notifications.index', 'active' => ['notifications.*'], 'icon' => null, 'vectorIcon' => 'bell', 'visible' => true],
             ['label' => 'Parametros', 'route' => 'parameters.index', 'active' => ['parameters.*', 'branches.*', 'users.*', 'unit-types.*', 'statuses.*', 'yard-layout.*'], 'icon' => 'parametros.png', 'visible' => $canManage, 'group' => 'parameters', 'children' => $parameterLinks],
             ['label' => 'Catalogos', 'route' => 'catalogs.overview', 'active' => ['catalogs.*'], 'icon' => null, 'vectorIcon' => 'book-open', 'visible' => $canManage, 'group' => 'catalogs', 'children' => $catalogLinks],
             ['label' => 'Parqueo', 'route' => 'rentals.index', 'active' => ['rentals.*'], 'icon' => 'traslados.png', 'visible' => $roleId === 1],
@@ -67,6 +69,12 @@
                 if (($item['group'] ?? '') === 'parameters') { $item['children'] = $parameterLinks; $item['visible'] = collect($parameterLinks)->contains('visible', true); }
                 elseif (($item['group'] ?? '') === 'catalogs') { $item['children'] = $catalogLinks; $item['visible'] = collect($catalogLinks)->contains('visible', true); }
                 elseif ($permission = \App\Services\AccessPermissions::forRoute($item['route'])) { $item['visible'] = $user->hasPermission($permission); }
+            }
+            unset($item);
+        }
+        if ($roleId !== 5) {
+            foreach ($navItems as &$item) {
+                if (in_array($item['route'], ['pyp-audits.index', 'external-audits.dashboard'], true)) { $item['visible'] = false; }
             }
             unset($item);
         }
@@ -148,6 +156,7 @@
                         </div>
                     @endif
 
+                    <livewire:shell.notification-bell />
                     <div class="user-menu" id="userMenu">
                         <button class="user-menu-trigger" id="userMenuTrigger" type="button" aria-haspopup="true" aria-expanded="false">
                             <span class="user-avatar" aria-hidden="true">

@@ -15,6 +15,13 @@ class AdministrationTable
         $column = fn (string $key, string $label, string|array $fields, ?Builder $relation = null, int $scale = 1): array => compact('key', 'label', 'fields', 'relation', 'scale');
 
         return match ($scope) {
+            'repair-history' => [
+                $column('date', 'Fecha de inicio', ['repair_history.created_at', 'repair_history.display_date']),
+                $column('name', 'Reparación', 'repair_history.repair_type') + ['filter_field' => 'repair_history.repair_type'],
+                $column('mechanic', 'Mecánico', 'repair_history.mechanic_name') + ['filter_field' => 'repair_history.mechanic_id'],
+                $column('status', 'Estado', 'repair_history.status_label') + ['filter_field' => 'repair_history.status'],
+                $column('corrections', 'Correcciones de auditoría', 'repair_history.correction_count') + ['numeric' => true, 'description' => 'Número de rondas de corrección solicitadas por la auditora para esta reparación.'],
+            ],
             'branches' => [$column('name', 'Nombre', 'sucursales.nombre'), $column('location', 'Ubicacion', ['sucursales.ubicacion', 'sucursales.direccion'])],
             'users' => [
                 $column('name', 'Usuario', 'users.username'), $column('email', 'Correo', 'users.email'),
@@ -76,14 +83,20 @@ class AdministrationTable
             });
         }
         foreach ($columns as $column) {
-            $value = self::text($filters[$column['key']] ?? null);
+            $input = $filters[$column['key']] ?? null;
+            $value = isset($column['filter_field']) && is_string($input) ? mb_substr(trim($input), 0, 255) : self::text($input);
             if ($value !== '') {
-                self::matchColumn($query, $column, $value);
+                if (isset($column['filter_field'])) {
+                    $query->where($column['filter_field'], $value);
+                } else {
+                    self::matchColumn($query, $column, $value);
+                }
             }
         }
         $sortableColumns = collect($columns)->filter(fn (array $column) => $column['sortable'] ?? true);
-        $sort = $sortableColumns->firstWhere('key', $request->query('sort')) ?? $sortableColumns->firstWhere('key', 'name');
-        $direction = $request->query('order') === 'desc' ? 'desc' : 'asc';
+        $defaultSort = $scope === 'repair-history' ? 'date' : 'name';
+        $sort = $sortableColumns->firstWhere('key', $request->query('sort')) ?? $sortableColumns->firstWhere('key', $defaultSort);
+        $direction = $request->query('order', $scope === 'repair-history' ? 'desc' : 'asc') === 'desc' ? 'desc' : 'asc';
         $field = (array) $sort['fields'];
         $query->reorder()->orderBy($sort['relation'] ? (clone $sort['relation'])->select($field[0])->orderBy($field[0])->limit(1) : $field[0], $direction);
         $table = $tableAlias ?? ($query instanceof EloquentBuilder ? $query->getModel()->getTable() : $query->from);

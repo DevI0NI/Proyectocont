@@ -127,7 +127,7 @@ class UnitTypeController extends Controller
 
             foreach ($data['modelos_payload'] as $model) {
                 if ($model['id'] > 0) {
-                    $unitType->modelos()->where('id', $model['id'])->update([
+                    $unitType->modelos()->findOrFail($model['id'])->update([
                         'nombre' => $model['nombre'],
                         'estado_id' => self::ACTIVE,
                     ]);
@@ -147,7 +147,7 @@ class UnitTypeController extends Controller
                 if ($unitType->contenedores()->where('estado_id', self::ACTIVE)->whereIn('modelo_id', $idsToDisable)->exists()) {
                     throw ValidationException::withMessages(['modelos_nombres' => 'No puedes quitar un modelo que usan contenedores activos.']);
                 }
-                $unitType->modelos()->whereIn('id', $idsToDisable)->update(['estado_id' => self::INACTIVE]);
+                $unitType->modelos()->whereIn('id', $idsToDisable)->get()->each(fn ($model) => $model->update(['estado_id' => self::INACTIVE]));
             }
         });
 
@@ -168,7 +168,7 @@ class UnitTypeController extends Controller
         }
 
         DB::transaction(function () use ($unitType): void {
-            $unitType->modelos()->update(['estado_id' => self::INACTIVE]);
+            $unitType->modelos()->get()->each(fn ($model) => $model->update(['estado_id' => self::INACTIVE]));
             $unitType->update(['estado_id' => self::INACTIVE]);
         });
 

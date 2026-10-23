@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -99,5 +100,9 @@ class RentalParkingService
             'action' => $action, 'details' => json_encode($details, JSON_THROW_ON_ERROR),
             'created_at' => CarbonImmutable::now('UTC')->toDateTimeString(),
         ]);
+        $location = DB::table('rental_locations')->find($locationId);
+        $changes = app(SystemNotifications::class)->changes([], $details, array_combine(array_keys($details), array_keys($details)));
+        app(SystemNotifications::class)->activity('parking', $action, $location->name.($stayId ? ' · Estancia '.$stayId : ''),
+            $changes, null, User::find($userId));
     }
 }

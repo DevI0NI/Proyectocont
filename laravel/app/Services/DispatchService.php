@@ -83,6 +83,10 @@ class DispatchService
                 ->decrement('capacidad_actual');
 
             Contenedor::where('id', $container->id)->update(['estado_id' => self::INACTIVE]);
+            app(SystemNotifications::class)->activity('dispatches', 'Contenedor despachado', $container->nombre, [
+                ['field' => 'Estado', 'before' => 'En patio', 'after' => 'Despachado'],
+                ['field' => 'Observaciones', 'before' => null, 'after' => trim((string) ($data['observaciones'] ?? ''))],
+            ], [$branchId], $user);
 
             return $container->nombre;
         });

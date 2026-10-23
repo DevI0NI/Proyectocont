@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Sucursal;
 use App\Services\ExternalAuditAccess;
+use App\Services\MaintenanceWorkflow;
 use App\Services\PypAuditService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,16 +16,35 @@ class PypAuditController extends Controller
 {
     private const ACTIVE = 1;
 
-    public function index(Request $request): View
+    public function dashboard(Request $request): View
     {
+        $access = app(ExternalAuditAccess::class);
+        abort_unless($access->isSupervisor($request->user()), 403);
+        $branchId = (int) $request->session()->get('sucursal_activa');
+        $access->authorizeBranch($request->user(), $branchId);
+
+        return view('external-audits.dashboard', [
+            'sucursal' => Sucursal::activas()->findOrFail($branchId),
+            'sucursales' => $access->branches($request->user())->orderBy('nombre')->get(),
+        ]);
+    }
+
+    public function index(Request $request): View|RedirectResponse
+    {
+        if ((int) $request->user()->rol_id !== 5) {
+            return redirect()->route('containers.index', $request->only(['patio_id', 'bloque_id']));
+        }
+        app(ExternalAuditAccess::class)->authorizeBranch($request->user(), (int) $request->session()->get('sucursal_activa'));
         $request->validate(['search' => ['nullable', 'string', 'max:255'], 'nombre' => ['nullable', 'string', 'max:255']]);
         $branch = $this->activeBranch($request);
         abort_if(! $branch, 404, 'No hay sucursal activa.');
 
         return view('containers.index', [
             'sucursal' => $branch,
-            'sucursales' => Sucursal::activas()->orderBy('nombre')->get(),
+            'sucursales' => app(ExternalAuditAccess::class)->branches($request->user())->orderBy('nombre')->get(),
             'pypMode' => true,
+            'externalCompanyName' => DB::table('external_audit_companies')->where('id', $request->user()->external_audit_company_id)->value('name'),
+            'returnUrl' => $this->localReturnUrl($request),
         ]);
     }
 
@@ -46,6 +66,8 @@ class PypAuditController extends Controller
 
     public function edit(Request $request, int $container): View|RedirectResponse
     {
+        abort_unless((int) $request->user()->rol_id === 5, 403);
+        app(ExternalAuditAccess::class)->authorizeBranch($request->user(), (int) $request->session()->get('sucursal_activa'));
         $branch = $this->activeBranch($request);
         abort_if(! $branch, 404, 'No hay sucursal activa.');
 
@@ -57,14 +79,20 @@ class PypAuditController extends Controller
         if (! $record) {
             return redirect()
                 ->route('pyp-audits.index', $this->redirectParams($request))
-                ->withErrors(['pyp' => 'No se encontro una auditoria PYP activa para este contenedor.']);
+                ->withErrors(['pyp' => 'No se encontró una auditoría externa asignada para este contenedor.']);
         }
 
+        $job = app(MaintenanceWorkflow::class)->currentJobs(DB::table('contenedores')->find($container))->latest('id')->first();
+
         return view('pyp-audits.edit', [
+            'maintenanceJob' => $job,
+            'canInspect' => (int) $record->estatus_ipsa_id === 1 && (! $job || $job->status === 'completed'),
             'sucursal' => $branch,
-            'sucursales' => Sucursal::activas()->orderBy('nombre')->get(),
+            'sucursales' => app(ExternalAuditAccess::class)->branches($request->user())->orderBy('nombre')->get(),
+            'externalCompanyName' => DB::table('external_audit_companies')->where('id', $request->user()->external_audit_company_id)->value('name'),
             'container' => $record,
             'backParams' => $this->redirectParams($request),
+            'returnUrl' => $this->localReturnUrl($request),
         ]);
     }
 
@@ -78,8 +106,9 @@ class PypAuditController extends Controller
             'informacion_adicional' => ['required', 'string', 'max:150'],
             'patio_id' => ['nullable', 'integer'],
             'bloque_id' => ['nullable', 'integer'],
+            'maintenance_version' => ['nullable', 'integer'],
         ], [
-            'estatus_pyp.required' => 'El estatus PYP es obligatorio.',
+            'estatus_pyp.required' => 'El estado de auditoría externa es obligatorio.',
             'estatus_pyp.in' => 'Selecciona un estado de auditoria valido.',
             'estatus_pyp.max' => 'El estatus no puede superar los 25 caracteres.',
             'informacion_adicional.required' => 'La informacion adicional es obligatoria.',
@@ -94,7 +123,7 @@ class PypAuditController extends Controller
             return back()->withErrors(['pyp' => $exception->getMessage()])->withInput();
         }
 
-        return redirect()->route('pyp-audits.index', $redirectParams)->with('status', 'Auditoria guardada correctamente.');
+        return redirect()->to($this->localReturnUrl($request) ?? route('pyp-audits.index', $redirectParams))->with('status', 'Auditoria guardada correctamente.');
     }
 
     private function containerQuery(int $branchId)

@@ -60,18 +60,23 @@ document.addEventListener('administration:pause', () => closeRowMenu(true));
 function closeColumnMenu(animate = true) {
     if (!columnMenu) return;
     const { menu, trigger, parent } = columnMenu;
+    menu.querySelectorAll('[data-admin-choice].open').forEach((dropdown) => togglePageSize(dropdown, false));
     menu.getAnimations().forEach((animation) => animation.cancel());
     trigger.setAttribute('aria-expanded', 'false');
     columnMenu = null;
     const finish = () => { menu.hidden = true; parent.append(menu); };
-    if (animate && menu.classList.contains('live-column-menu')) {
+    if (menu.classList.contains('containers-header-menu')) {
+        menu.classList.remove('is-open');
+        if (animate) setTimeout(() => { if (!menu.classList.contains('is-open')) finish(); }, 160);
+        else finish();
+    } else if (animate && menu.classList.contains('live-column-menu')) {
         menu.style.pointerEvents = 'none';
         menu.animate([{ opacity:1, transform:'translateY(0)' }, { opacity:0, transform:'translateY(-4px)' }], { duration:160, easing:'ease-out' }).onfinish = finish;
     } else finish();
 }
 function openColumnMenu(trigger, animate = true) {
     const parent = trigger.parentElement;
-    const menu = parent.querySelector('.admin-column-menu') || trigger.adminColumnMenu;
+    const menu = parent.querySelector('.admin-column-menu, .containers-header-menu') || trigger.adminColumnMenu;
     trigger.adminColumnMenu = menu;
     menu.getAnimations().forEach((animation) => animation.cancel());
     columnMenu = { menu, trigger, parent };
@@ -80,22 +85,45 @@ function openColumnMenu(trigger, animate = true) {
     menu.style.pointerEvents = '';
     trigger.setAttribute('aria-expanded', 'true');
     positionColumnMenu();
+    if (menu.classList.contains('containers-header-menu')) {
+        if (animate) requestAnimationFrame(() => { if (columnMenu?.menu === menu) menu.classList.add('is-open'); });
+        else menu.classList.add('is-open');
+    }
     if (animate && menu.classList.contains('live-column-menu')) menu.animate([{ opacity:0, transform:'translateY(-4px)' }, { opacity:1, transform:'translateY(0)' }], { duration:200, easing:'cubic-bezier(.2,0,0,1)' });
 }
 function togglePageSize(dropdown, open) {
     const menu = dropdown.querySelector('.form-select-menu');
     dropdown.classList.toggle('open', open);
     dropdown.querySelector('button').setAttribute('aria-expanded', String(open));
-    if (dropdown.closest('.standard-records-table')) {
+    if (dropdown.matches('[data-admin-choice]')) {
+        menu.inert = !open;
+        if (open) {
+            const box = dropdown.getBoundingClientRect();
+            const below = innerHeight - box.bottom - 16;
+            const upwards = below < 120 && box.top > below;
+            dropdown.classList.toggle('opens-above', upwards);
+            menu.style.maxHeight = `${Math.max(80, Math.min(172, upwards ? box.top - 16 : below))}px`;
+        }
+        return;
+    }
+    if (dropdown.closest('.standard-records-table') || dropdown.matches('[data-admin-choice]')) {
         menu.getAnimations().forEach((animation) => animation.cancel());
         const closed = { opacity:0, transform:'translateY(-6px) scale(.98)' };
         const opened = { opacity:1, transform:'translateY(0) scale(1)' };
-        menu.animate(open ? [closed, opened] : [opened, closed], { duration:200, easing:'cubic-bezier(.2,0,0,1)' });
+        menu.animate(open ? [closed, opened] : [opened, closed], { duration:matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 200, easing:'cubic-bezier(.2,0,0,1)' });
     }
 }
 function positionColumnMenu() {
     if (!columnMenu) return;
     const box = columnMenu.trigger.getBoundingClientRect();
+    if (columnMenu.menu.classList.contains('containers-header-menu')) {
+        const header = columnMenu.trigger.closest('th')?.getBoundingClientRect() || box;
+        const width = Math.max(190, columnMenu.menu.offsetWidth || 190);
+        const left = Math.min(header.left + header.width / 2 - width / 2, innerWidth - width - 12);
+        columnMenu.menu.style.setProperty('--column-menu-left', `${Math.max(12, left)}px`);
+        columnMenu.menu.style.setProperty('--column-menu-top', `${header.bottom + 8}px`);
+        return;
+    }
     columnMenu.menu.style.left = Math.max(8, Math.min(box.left, innerWidth - columnMenu.menu.offsetWidth - 8)) + 'px';
     columnMenu.menu.style.top = Math.max(8, Math.min(box.bottom + 8, innerHeight - columnMenu.menu.offsetHeight - 8)) + 'px';
 }
@@ -182,6 +210,19 @@ document.addEventListener('click', (event) => {
     loadPage(link.href || link.dataset.url);
 });
 document.addEventListener('keydown', (event) => {
+    const choice = event.target.closest('[data-admin-choice]');
+    if (choice && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        if (!choice.classList.contains('open')) togglePageSize(choice, true);
+        const options = [...choice.querySelectorAll('[role=option]')];
+        if (!options.length) return;
+        const current = options.indexOf(document.activeElement);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1
+            : current < 0 ? (event.key === 'ArrowUp' ? options.length - 1 : 0)
+            : (current + (event.key === 'ArrowUp' ? -1 : 1) + options.length) % options.length;
+        options[next].focus();
+        return;
+    }
     if (event.key !== 'Escape') return;
     const optionsTrigger = rowMenu?.trigger;
     closeRowMenu();

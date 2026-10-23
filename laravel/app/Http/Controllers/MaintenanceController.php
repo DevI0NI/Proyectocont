@@ -104,7 +104,7 @@ class MaintenanceController extends Controller
             return redirect()->route('maintenance.orders');
         }
         $request->validate(['container_id' => ['required', 'integer']]);
-        $container = $workflow->repairableContainers((int) $context['sucursal']->id)
+        $container = $workflow->startableContainers((int) $context['sucursal']->id)
             ->where('c.id', $request->integer('container_id'))
             ->whereNotExists(function ($query): void {
                 MaintenanceWorkflow::scopeCurrentIngress($query->selectRaw('1')->from('maintenance_jobs as j'))
@@ -205,10 +205,18 @@ class MaintenanceController extends Controller
         $editable = (int) $request->user()->rol_id === 4 && (int) $record->mechanic_id === (int) $request->user()->id
             && $record->status === 'in_progress' && $container && $workflow->currentJobs($container)->where('id', $job)->exists()
             && $workflow->repairableContainers((int) $context['sucursal']->id)->where('c.id', $record->container_id)->exists();
+        $readonlyReason = $editable ? null : match ($record->status) {
+            'pending_review' => 'Solo lectura: enviado a revisión',
+            'completed' => 'Solo lectura: reparación finalizada',
+            'returned_for_repair' => 'Solo lectura: reparación devuelta',
+            default => (int) $record->mechanic_id !== (int) $request->user()->id
+                ? 'Solo lectura: asignado a otro mecánico'
+                : 'Solo lectura: el contenedor no está habilitado para reparación',
+        };
 
         return view('maintenance.show', $context + ['job' => $record, 'materials' => $materials, 'parts' => $parts, 'repairServices' => $repairServices, 'editable' => $editable,
             'exchangeQuote' => $record->usd_gtq_rate !== null || $editable ? app(MaintenanceExchangeRate::class)->quote($record) : ['rate' => null, 'date' => null, 'token' => null],
-            'container' => $container, 'backParams' => $this->inventoryBackParams($request, $container ? ['patio_id' => $container->yard_id, 'bloque_id' => $container->bloque_id] : []),
+            'container' => $container, 'readonlyReason' => $readonlyReason, 'returnUrl' => $this->localReturnUrl($request), 'backParams' => $this->inventoryBackParams($request, $container ? ['patio_id' => $container->yard_id, 'bloque_id' => $container->bloque_id] : []),
             'evidence' => DB::table('maintenance_evidence')->where('job_id', $job)->get(),
             'review' => DB::table('maintenance_review_requests')->where('job_id', $job)->first()]);
     }
@@ -249,7 +257,7 @@ class MaintenanceController extends Controller
         }
         $workflow->save($request->user(), (int) $context['sucursal']->id, $job, $data, $uploads);
 
-        return redirect()->route('maintenance.show', ['job' => $job, 'step' => $request->integer('active_step', 1), 'back' => $this->inventoryBackParams($request)])->with('status', $data['action'] === 'submit'
+        return redirect()->route('maintenance.show', array_filter(['job' => $job, 'step' => $request->integer('active_step', 1), 'back' => $this->inventoryBackParams($request), 'return_to' => $this->localReturnUrl($request)], fn ($value): bool => $value !== null))->with('status', $data['action'] === 'submit'
             ? 'Solicitud de revision registrada. La reparacion no libera el contenedor.' : 'Avance guardado.');
     }
 

@@ -1,4 +1,4 @@
-@foreach (['per_page', 'sort', 'order', 'estado', 'status', 'tipo', 'rol_filtro', 'patio_id', 'q'] as $parameter)
+@foreach (['per_page', 'sort', 'order', 'estado', 'status', 'tipo', 'rol_filtro', 'patio_id', 'q', 'return_to'] as $parameter)
     @if (!in_array($parameter, $exclude ?? [], true) && is_string(request()->query($parameter)))
         <input type="hidden" name="{{ $parameter }}" value="{{ request()->query($parameter) }}">
     @endif

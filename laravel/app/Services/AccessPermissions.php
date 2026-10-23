@@ -16,6 +16,7 @@ final class AccessPermissions
             'dispatches' => ['Despachos', ['view' => 'Consultar', 'operate' => 'Realizar despachos']],
             'reports' => ['Reportes', ['view' => 'Consultar', 'export' => 'Exportar']],
             'pyp' => ['Seguimiento de auditoria', ['view' => 'Consultar', 'assign' => 'Asignar revisiones']],
+            'maintenance' => ['Revisiones de reparaciones', ['view' => 'Consultar solicitudes', 'confirm' => 'Confirmar trabajos realizados']],
         ];
         foreach (['users' => 'Usuarios', 'unit-types' => 'Tipos de unidad', 'statuses' => 'Estatus', 'yard-layout' => 'Patios y bloques', 'navieras' => 'Navieras', 'auditoras' => 'Auditoras externas', 'repuestos' => 'Repuestos', 'reparaciones' => 'Reparaciones'] as $key => $label) {
             $modules[$key] = [$label, ['view' => 'Consultar', 'manage' => 'Administrar']];

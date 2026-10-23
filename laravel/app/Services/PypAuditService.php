@@ -59,6 +59,9 @@ class PypAuditService
             ]);
 
             $this->logEvent($record->id, $user->id, 'Contenedor asignado para auditoria PYP');
+            app(SystemNotifications::class)->auditAssigned($container, $branchId);
+            app(SystemNotifications::class)->activity('audits', 'Contenedor asignado a revisión externa', $container->nombre,
+                [['field' => 'Seguimiento de auditoría', 'before' => null, 'after' => 'Asignado']], [$branchId], $user);
         });
     }
 
@@ -71,6 +74,7 @@ class PypAuditService
         $data = Validator::make($data, [
             'estatus_pyp' => ['required', Rule::in(self::STATES)],
             'informacion_adicional' => ['required', 'string', 'max:150'],
+            'maintenance_version' => ['nullable', 'integer'],
         ], ['estatus_pyp.in' => 'Selecciona un estado de auditoria valido.',
             'informacion_adicional.required' => 'Describe la revision o el motivo del resultado.'])->validate();
         DB::transaction(function () use ($user, $branchId, $containerId, $data): void {
@@ -81,6 +85,10 @@ class PypAuditService
             if ($hasOpenWork) {
                 throw new \RuntimeException('El contenedor tiene mantenimiento o revision interna pendiente.');
             }
+            $job = app(MaintenanceWorkflow::class)->currentJobs($container)->latest('id')->lockForUpdate()->first();
+            if ($job && (int) ($data['maintenance_version'] ?? 0) !== (int) $job->version) {
+                throw new \RuntimeException('La reparación cambió. Recarga y revisa las evidencias antes de emitir el dictamen.');
+            }
             $record = app(ExternalAuditAccess::class)->scope($this->containerQuery($branchId), $user, $branchId)
                 ->where('c.id', $containerId)
                 ->whereNotNull('pa.contenedor_id')
@@ -90,9 +98,17 @@ class PypAuditService
             if (! $record) {
                 throw new \RuntimeException('No se encontro una auditoria PYP activa para este contenedor.');
             }
+            if ((int) $record->estatus_ipsa_id !== self::AVAILABLE_IPSA) {
+                throw new \RuntimeException('El contenedor está pendiente de liberación IPSA. Puedes consultar sus antecedentes, pero todavía no emitir un dictamen.');
+            }
 
             $newStatus = trim($data['estatus_pyp']);
             $newInfo = trim($data['informacion_adicional']);
+            if ($newStatus === 'Rechazado') {
+                app(MaintenanceCorrections::class)->request($container, $user, $newInfo);
+            } elseif ($newStatus === 'Aprobado') {
+                app(MaintenanceCorrections::class)->approve($container);
+            }
 
             DB::table('pyp_auditoria')
                 ->where('contenedor_id', $record->id)
@@ -105,6 +121,9 @@ class PypAuditService
                 ]);
 
             if ($record->estatus_pyp !== $newStatus || $record->informacion_adicional !== $newInfo) {
+                if ($job && $newStatus !== 'Rechazado') {
+                    DB::table('maintenance_jobs')->where('id', $job->id)->update(['version' => $job->version + 1, 'updated_at' => now()]);
+                }
                 DB::table('container_assignment_events')->insert([
                     'container_id' => $record->id, 'ingress_cycle_id' => $container->current_ingress_cycle_id,
                     'user_id' => $user->id, 'event_type' => 'external_audit_status', 'reason' => $newInfo,
@@ -117,6 +136,9 @@ class PypAuditService
                     'created_at' => now(),
                 ]);
                 $this->logEvent($record->id, $user->id, 'Auditoria PYP actualizada. Estatus: '.$newStatus.'.');
+                $changes = app(SystemNotifications::class)->changes(['status' => $record->estatus_pyp, 'notes' => $record->informacion_adicional],
+                    ['status' => $newStatus, 'notes' => $newInfo], ['status' => 'Dictamen', 'notes' => 'Observaciones']);
+                app(SystemNotifications::class)->activity('audits', 'Auditoría externa actualizada', $container->nombre, $changes, [$branchId], $user);
             }
         });
     }

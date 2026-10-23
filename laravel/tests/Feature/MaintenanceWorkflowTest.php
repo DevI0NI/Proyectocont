@@ -3,13 +3,20 @@
 namespace Tests\Feature;
 
 use App\Livewire\Containers\InventoryTable;
+use App\Livewire\ExternalAudits\Overview;
+use App\Livewire\Notifications\Inbox;
+use App\Livewire\Shell\NotificationBell;
+use App\Models\Bloque;
 use App\Models\Contenedor;
 use App\Models\User;
 use App\Services\AccessPermissions;
 use App\Services\ContainerAuditAssignment;
+use App\Services\IngresoService;
 use App\Services\MaintenanceExchangeRate;
 use App\Services\MaintenanceWorkflow;
 use App\Services\PypAuditService;
+use App\Services\SystemNotifications;
+use Carbon\Carbon;
 use Database\Seeders\MaintenanceCatalogSeeder;
 use Database\Seeders\MaintenanceReferencePriceSeeder;
 use Illuminate\Http\UploadedFile;
@@ -75,8 +82,8 @@ class MaintenanceWorkflowTest extends TestCase
         $this->assertGreaterThan(0, $this->oosStatus);
         $this->container = DB::table('contenedores')->insertGetId(['nombre' => 'MNTU'.random_int(1000000, 9999999),
             'tipo_unidad_id' => $type, 'modelo_id' => DB::table('modelos')->where('tipo_unidad_id', $type)->value('id'),
-            'estatus_unidad_id' => DB::table('estatus_contenedores')->where('tipo_estatus_id', 1)->value('id'),
-            'estatus_box_id' => DB::table('estatus_contenedores')->where('tipo_estatus_id', 2)->value('id'),
+            'estatus_unidad_id' => DB::table('estatus_contenedores')->insertGetId(['nombre' => 'DMG QA', 'tipo_estatus_id' => 1, 'estado_id' => 1]),
+            'estatus_box_id' => DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 2, 'estado_id' => 1]),
             'estatus_ipsa_id' => $this->oosStatus, 'bloque_id' => $block, 'posicion' => 1, 'fecha_ingreso' => now(), 'estado_id' => 1]);
         $this->cycle = DB::table('container_ingress_cycles')->insertGetId(['container_id' => $this->container,
             'branch_id' => $this->branch, 'shipping_line_id' => $line, 'shipping_line_name' => 'Naviera mantenimiento',
@@ -97,6 +104,343 @@ class MaintenanceWorkflowTest extends TestCase
             DB::rollBack();
         }
         parent::tearDown();
+    }
+
+    public function test_container_repair_history_is_paginated_and_keeps_other_mechanics_jobs_private(): void
+    {
+        $id = $this->start();
+        DB::table('maintenance_jobs')->where('id', $id)->update(['status' => 'completed']);
+        $copy = (array) DB::table('maintenance_jobs')->find($id);
+        unset($copy['id']);
+        for ($index = 0; $index < 15; $index++) {
+            DB::table('maintenance_jobs')->insert($copy);
+        }
+        $copy['mechanic_id'] = $this->other->id;
+        $copy['repair_type'] = 'Reparacion privada de otro mecanico';
+        $privateId = DB::table('maintenance_jobs')->insertGetId($copy);
+        $url = route('corrections.history', ['job' => $id, 'return_to' => '/mantenimiento/ordenes']);
+        $this->get($url)->assertOk()->assertSee('Reparaciones')
+            ->assertDontSee('Reparacion privada de otro mecanico')
+            ->assertViewHas('filterOptions', fn (array $options): bool => ! isset($options['mechanic'][$this->other->id])
+                && ! isset($options['name']['Reparacion privada de otro mecanico']))
+            ->assertViewHas('jobs', fn ($jobs): bool => $jobs->total() === 16 && $jobs->count() === 10 && $jobs->lastPage() === 2)
+            ->assertViewHas('returnUrl', '/mantenimiento/ordenes');
+        $this->get($url.'&page=2')->assertOk()
+            ->assertViewHas('jobs', fn ($jobs): bool => $jobs->count() === 6);
+        $this->get(route('corrections.history', $privateId))->assertForbidden();
+        $this->actingAs($this->admin)->get($url)->assertOk()
+            ->assertViewHas('filterOptions', fn (array $options): bool => isset($options['mechanic'][$this->mechanic->id], $options['mechanic'][$this->other->id]))
+            ->assertViewHas('jobs', fn ($jobs): bool => $jobs->total() === 17);
+    }
+
+    public function test_repair_history_search_column_filters_sorting_and_page_size_share_the_same_scope(): void
+    {
+        $id = $this->start();
+        DB::table('maintenance_jobs')->where('id', $id)->update([
+            'status' => 'completed', 'repair_type' => 'Soldadura especial', 'created_at' => '2026-10-22 03:30:00',
+        ]);
+        $copy = (array) DB::table('maintenance_jobs')->find($id);
+        unset($copy['id']);
+        $copy['repair_type'] = 'Cambio de empaque';
+        $copy['created_at'] = '2026-10-23 03:30:00';
+        $second = DB::table('maintenance_jobs')->insertGetId($copy);
+        $this->get(route('corrections.history', ['job' => $id, 'q' => 'especial']))->assertOk()
+            ->assertViewHas('jobs', fn ($jobs): bool => $jobs->total() === 1 && (int) $jobs->first()->id === $id);
+        $this->get(route('corrections.history', ['job' => $id, 'q' => '21/10/2026']))->assertOk()
+            ->assertViewHas('jobs', fn ($jobs): bool => $jobs->total() === 1 && (int) $jobs->first()->id === $id);
+        $this->get(route('corrections.history', ['job' => $id, 'filters' => ['name' => 'Cambio de empaque', 'status' => 'completed', 'mechanic' => (string) $this->mechanic->id]]))->assertOk()
+            ->assertViewHas('jobs', fn ($jobs): bool => $jobs->total() === 1 && (int) $jobs->first()->id === $second);
+        $this->get(route('corrections.history', ['job' => $id, 'filters' => ['name' => 'Cambio de empaque']]))->assertOk()
+            ->assertViewHas('filterOptions', fn (array $options): bool => array_keys($options['name']) === ['Cambio de empaque', 'Soldadura especial']
+                && $options['mechanic'] === [$this->mechanic->id => $this->mechanic->username]
+                && $options['status'] === MaintenanceWorkflow::STATES);
+        $this->get(route('corrections.history', ['job' => $id, 'filters' => ['mechanic' => (string) $this->other->id]]))->assertOk()
+            ->assertViewHas('jobs', fn ($jobs): bool => $jobs->total() === 0);
+        $this->get(route('corrections.history', ['job' => $id, 'sort' => 'date', 'order' => 'desc', 'per_page' => 5]))->assertOk()
+            ->assertViewHas('jobs', fn ($jobs): bool => $jobs->perPage() === 5 && (int) $jobs->first()->id === $second);
+        $this->get(route('corrections.history', ['job' => $id, 'sort' => 'invalid', 'per_page' => 999]))->assertOk()
+            ->assertViewHas('jobs', fn ($jobs): bool => $jobs->perPage() === 10 && $jobs->total() === 2);
+    }
+
+    public function test_external_repair_history_only_includes_the_assigned_ingress_and_submitted_work(): void
+    {
+        $id = $this->start();
+        DB::table('maintenance_jobs')->where('id', $id)->update(['status' => 'completed']);
+        $copy = (array) DB::table('maintenance_jobs')->find($id);
+        unset($copy['id']);
+        $copy['ingress_cycle_id'] = null;
+        $copy['repair_type'] = 'Reparacion de otro ingreso';
+        DB::table('maintenance_jobs')->insert($copy);
+        $copy['ingress_cycle_id'] = $this->cycle;
+        $copy['status'] = 'in_progress';
+        DB::table('maintenance_jobs')->insert($copy);
+        $this->actingAs($this->auditor)->get(route('corrections.history', $id))->assertOk()
+            ->assertDontSee('Reparacion de otro ingreso')
+            ->assertViewHas('jobs', fn ($jobs): bool => $jobs->total() === 1);
+        $this->withSession(['sucursal_activa' => 0])->get(route('corrections.history', $id))->assertForbidden();
+    }
+
+    public function test_repair_history_detail_reuses_the_three_steps_without_editing_or_review_actions(): void
+    {
+        $id = $this->start();
+        $return = '/reparaciones/'.$id.'/historial?page=2&filters%5Bname%5D=Soldadura';
+        $url = route('corrections.detail', ['job' => $id, 'return_to' => $return]);
+        $this->get($url)->assertOk()->assertViewIs('notifications.repair')->assertViewHas('readOnlyDetail', true)
+            ->assertViewHas('returnUrl', $return)->assertSee('Detalle de reparación')->assertDontSee('@else', false)->assertSee('Evaluación inicial')
+            ->assertDontSee('aria-controls="repairInterventionsMenu"', false)->assertDontSee('class="repair-interventions"', false)
+            ->assertSee('Reparación y materiales')->assertSee('Resultado de la reparación')
+            ->assertDontSee('Intervenciones')->assertDontSee('Historial de correcciones')->assertSee('data-notification-review', false)
+            ->assertDontSee('data-maintenance-form', false)->assertDontSee('Confirmar trabajo realizado')
+            ->assertDontSee('Actualizar estados del contenedor')->assertDontSee('Guardar cambios');
+        $this->actingAs($this->other)->get($url)->assertForbidden();
+        DB::table('maintenance_jobs')->where('id', $id)->update(['status' => 'pending_review']);
+        $this->actingAs($this->admin)->get($url)->assertOk()->assertDontSee('Confirmar trabajo realizado');
+        $this->actingAs($this->auditor)->get($url)->assertOk()->assertViewHas('readOnlyDetail', true);
+    }
+
+    public function test_internal_container_readers_can_consult_repair_history_without_maintenance_permissions(): void
+    {
+        $reader = User::create(['username' => 'QA_reader_'.uniqid(), 'email' => uniqid().'@example.test',
+            'password' => Hash::make('Secret123!'), 'rol_id' => 3, 'sucursal_id' => $this->branch,
+            'estado_id' => 1, 'permissions' => ['containers.view']]);
+        $url = route('corrections.container-history', ['container' => $this->container]);
+        $this->actingAs($reader)->get($url)->assertOk()->assertViewHas('jobs', fn ($jobs): bool => $jobs->total() === 0);
+        $this->actingAs($this->mechanic);
+        $id = $this->start();
+        foreach ([1, 2, 3] as $role) {
+            $reader->update(['rol_id' => $role]);
+            $this->actingAs($reader->fresh())->get($url)->assertOk()->assertViewHas('jobs', fn ($jobs): bool => $jobs->total() === 1);
+            $this->get(route('corrections.detail', $id))->assertOk()->assertViewHas('readOnlyDetail', true)
+                ->assertDontSee('Confirmar trabajo realizado')->assertDontSee('Actualizar estados del contenedor');
+        }
+        $reader->update(['rol_id' => 3]);
+        $this->actingAs($reader->fresh())->post(route('notifications.confirm', $id), ['version' => 1])->assertForbidden();
+        $record = DB::table('contenedores')->find($this->container);
+        $block = DB::table('bloques')->find($record->bloque_id);
+        Livewire::test(InventoryTable::class)->call('selectPatio', $block->patio_id)->call('selectBlock', $block->id)
+            ->assertSee('Reparaciones')->call('setViewMode', 'yard3d')
+            ->assertViewHas('yardScene', function (array $scene): bool {
+                $item = collect($scene['blocks'])->flatMap(fn (array $block): array => $block['containers'])->firstWhere('id', $this->container);
+
+                return str_contains($item['actions']['history'], '/contenedores/'.$this->container.'/reparaciones');
+            });
+        $reader->update(['permissions' => []]);
+        $this->actingAs($reader->fresh())->get($url)->assertForbidden();
+        $this->get(route('corrections.detail', $id))->assertForbidden();
+        $this->get(route('corrections.original-photo', ['job' => $id, 'photo' => 1]))->assertForbidden();
+        $reader->update(['permissions' => ['containers.view']]);
+        $this->actingAs($reader->fresh())->withSession(['sucursal_activa' => 0])->get($url)->assertForbidden();
+    }
+
+    public function test_readonly_interventions_keep_the_original_snapshot_and_hide_unsubmitted_corrections(): void
+    {
+        $id = $this->start();
+        DB::table('maintenance_jobs')->where('id', $id)->update(['diagnosis' => 'Diagnostico original', 'work_performed' => 'Trabajo original', 'status' => 'completed']);
+        $round = DB::table('maintenance_corrections')->insertGetId(['job_id' => $id, 'number' => 1, 'requested_by' => $this->auditor->id,
+            'reason' => 'Sellar una fuga pendiente', 'work_performed' => 'Se corrigio la fuga', 'status' => 'submitted',
+            'materials' => '[]', 'photos' => '[]', 'version' => 1, 'created_at' => now(), 'updated_at' => now()]);
+        $draft = DB::table('maintenance_corrections')->insertGetId(['job_id' => $id, 'number' => 2, 'requested_by' => $this->auditor->id,
+            'reason' => 'Observacion sin entregar', 'status' => 'draft', 'version' => 1, 'created_at' => now(), 'updated_at' => now()]);
+        $url = route('corrections.detail', ['job' => $id, 'intervention' => $round]);
+        $this->actingAs($this->admin)->get($url)->assertOk()->assertSee('Intervenciones')
+            ->assertSee('Solicitud de corrección')->assertSee('Se corrigio la fuga')->assertDontSee('Trabajo original')
+            ->assertDontSee('Historial de correcciones')->assertDontSee('data-correction-form', false)
+            ->assertViewHas('interventions', fn ($rounds): bool => $rounds->count() === 1)
+            ->assertViewHas('materials', fn ($materials): bool => $materials->isEmpty());
+        $this->get(route('corrections.detail', $id))->assertOk()->assertSee('Trabajo original')->assertSee('Diagnostico original');
+        $this->get(route('corrections.detail', ['job' => $id, 'intervention' => $draft]))->assertNotFound();
+        $this->get(route('corrections.detail', ['job' => $id, 'intervention' => 99999999]))->assertNotFound();
+        $this->assertDatabaseHas('maintenance_jobs', ['id' => $id, 'diagnosis' => 'Diagnostico original', 'work_performed' => 'Trabajo original']);
+    }
+
+    public function test_external_supervisor_dashboard_is_not_available_to_inspectors_or_internal_accounts(): void
+    {
+        $this->actingAs($this->auditor)->get(route('external-audits.dashboard'))->assertForbidden();
+        Livewire::test(Overview::class)->assertForbidden();
+        $this->auditor->update(['external_access_level' => 'supervisor']);
+        $this->actingAs($this->auditor->fresh())->get('/')->assertRedirect(route('external-audits.dashboard'));
+        $this->get(route('external-audits.dashboard'))->assertOk()->assertSee('Auditora mantenimiento')->assertSee('Actividad por sucursal');
+        Livewire::test(Overview::class)->assertViewHas('totals', fn ($totals): bool => $totals['total'] === 1);
+        $this->actingAs($this->admin)->get(route('external-audits.dashboard'))->assertForbidden();
+        Livewire::test(Overview::class)->assertForbidden();
+        $this->auditor->update(['external_access_level' => 'inspector']);
+        $this->actingAs($this->auditor->fresh())->get('/')->assertRedirect(route('pyp-audits.index'));
+    }
+
+    public function test_external_inventory_is_the_same_scoped_view_for_both_responsibilities(): void
+    {
+        foreach (['inspector', 'supervisor'] as $level) {
+            $this->auditor->update(['external_access_level' => $level]);
+            $this->actingAs($this->auditor->fresh())->get(route('pyp-audits.index'))->assertOk()->assertSee('Auditoría externa')
+                ->assertSee('Auditora mantenimiento')->assertDontSee('Seguimiento PYP');
+            Livewire::test(InventoryTable::class, ['pypMode' => false])
+                ->assertSet('pypMode', true)->set('search', DB::table('contenedores')->where('id', $this->container)->value('nombre'))
+                ->assertViewHas('pagination', fn ($pagination): bool => $pagination['total'] === 1);
+        }
+        $this->expectException(CannotUpdateLockedPropertyException::class);
+        Livewire::test(InventoryTable::class, ['pypMode' => true])->set('pypMode', false);
+    }
+
+    public function test_external_3d_keeps_foreign_equipment_anonymous_and_only_links_assigned_audits(): void
+    {
+        $record = DB::table('contenedores')->find($this->container);
+        $block = DB::table('bloques')->find($record->bloque_id);
+        $foreign = (array) $record;
+        unset($foreign['id']);
+        $foreign['nombre'] = 'PRIV'.random_int(1000000, 9999999);
+        $foreign['posicion'] = 2;
+        $foreign['current_ingress_cycle_id'] = null;
+        $foreignId = DB::table('contenedores')->insertGetId($foreign);
+
+        foreach (['inspector', 'supervisor'] as $level) {
+            $this->auditor->update(['external_access_level' => $level]);
+            $this->actingAs($this->auditor->fresh());
+            $table = Livewire::test(InventoryTable::class)->call('selectPatio', $block->patio_id)
+                ->call('selectBlock', $block->id)->call('setViewMode', 'yard3d')
+                ->assertSet('viewMode', 'yard3d')->assertSee('Ver auditoría')->assertDontSee($foreign['nombre'])
+                ->assertSee('contenedores asignados')->assertDontSee('% ocupado')
+                ->assertViewHas('capacityCurrent', 1)
+                ->assertViewHas('patios', fn ($patios): bool => (int) $patios->firstWhere('id', $block->patio_id)->assigned_count === 1)
+                ->assertViewHas('blocks', fn ($blocks): bool => (int) $blocks->firstWhere('id', $block->id)->contenedores_activos_count === 1)
+                ->assertViewHas('yardScene', function (array $scene) use ($record, $foreignId): bool {
+                    $items = collect($scene['blocks'])->flatMap(fn (array $block): array => $block['containers']);
+                    $own = $items->firstWhere('id', $this->container);
+                    $anonymous = $items->firstWhere('anonymous', true);
+
+                    return $scene['fit_to_viewport'] && $items->count() === 2
+                        && $scene['blocks'][0]['ocupados'] === 1
+                        && $own['nombre'] === $record->nombre
+                        && $own['actions'] === ['info' => $own['url']]
+                        && str_contains($own['url'], '/pyp?')
+                        && $anonymous === ['anonymous' => true, 'posicion' => 2, 'matches' => false]
+                        && $items->firstWhere('id', $foreignId) === null;
+                });
+            $table->set('search', 'NO-MATCH')->assertViewHas('capacityCurrent', 1)->assertViewHas('yardScene', function (array $scene): bool {
+                return collect($scene['blocks'])->flatMap(fn (array $block): array => $block['containers'])
+                    ->every(fn (array $item): bool => ! $item['matches']);
+            });
+            $table->set('search', '')->call('setViewMode', 'table')
+                ->assertViewHas('pagination', fn (array $pagination): bool => $pagination['total'] === 1);
+        }
+    }
+
+    public function test_supervisor_summary_does_not_count_another_company_or_an_unauthorized_branch(): void
+    {
+        $this->auditor->update(['external_access_level' => 'supervisor']);
+        $this->actingAs($this->auditor->fresh());
+        DB::table('pyp_auditoria')->where('contenedor_id', $this->container)->update(['external_audit_company_id' => null]);
+        Livewire::test(Overview::class)->assertViewHas('totals', fn ($totals): bool => $totals['total'] === 0);
+        DB::table('pyp_auditoria')->where('contenedor_id', $this->container)->update(['external_audit_company_id' => $this->auditor->external_audit_company_id]);
+        $branch = DB::table('sucursales')->insertGetId(['nombre' => 'Sucursal privada '.uniqid(), 'ubicacion' => 'Temporal', 'estado_id' => 1]);
+        Livewire::test(Overview::class)->assertDontSee('Sucursal privada')->assertViewHas('rows', fn ($rows): bool => $rows->count() === 1);
+        $this->withSession(['sucursal_activa' => $branch])->get(route('external-audits.dashboard'))->assertForbidden();
+    }
+
+    public function test_external_auditor_cannot_save_a_verdict_while_ipsa_remains_oos(): void
+    {
+        $this->actingAs($this->auditor)->patch(route('pyp-audits.update', $this->container), [
+            'estatus_pyp' => 'Aprobado', 'informacion_adicional' => 'Intento sin liberación IPSA',
+        ])->assertSessionHasErrors('pyp');
+        $this->assertDatabaseHas('pyp_auditoria', ['contenedor_id' => $this->container, 'informacion_adicional' => 'Aprobacion anterior']);
+    }
+
+    public function test_activity_notifications_respect_module_branch_and_personal_audiences(): void
+    {
+        $permitted = User::create(['username' => 'QA_activity_'.uniqid(), 'email' => uniqid().'@example.test',
+            'password' => Hash::make('Secret123!'), 'rol_id' => 3, 'sucursal_id' => $this->branch,
+            'estado_id' => 1, 'permissions' => ['repuestos.view']]);
+        $denied = User::create(['username' => 'QA_denied_'.uniqid(), 'email' => uniqid().'@example.test',
+            'password' => Hash::make('Secret123!'), 'rol_id' => 3, 'sucursal_id' => $this->branch,
+            'estado_id' => 1, 'permissions' => ['containers.view']]);
+        $outsideBranch = DB::table('sucursales')->insertGetId(['nombre' => 'QA Otra '.uniqid(), 'ubicacion' => 'Temporal', 'estado_id' => 1]);
+        $outside = User::create(['username' => 'QA_outside_'.uniqid(), 'email' => uniqid().'@example.test',
+            'password' => Hash::make('Secret123!'), 'rol_id' => 3, 'sucursal_id' => $outsideBranch,
+            'estado_id' => 1, 'permissions' => ['repuestos.view']]);
+        $superadmin = User::create(['username' => 'QA_super_'.uniqid(), 'email' => uniqid().'@example.test',
+            'password' => Hash::make('Secret123!'), 'rol_id' => 1, 'sucursal_id' => $outsideBranch, 'estado_id' => 1]);
+        $notifications = app(SystemNotifications::class);
+        $notifications->activity('repuestos', 'Registro actualizado', 'Sellador de prueba',
+            [['field' => 'Precio', 'before' => '20', 'after' => '25']], [$this->branch], $this->admin);
+        $recipients = DB::table('system_notifications')->where('event_key', 'like', 'activity:%')
+            ->where('branch_id', $this->branch)->where('body', 'like', 'Sellador de prueba%')->pluck('user_id')->all();
+        $this->assertContains($permitted->id, $recipients);
+        $this->assertContains($superadmin->id, $recipients);
+        foreach ([$denied, $outside, $this->mechanic, $this->other, $this->auditor] as $excluded) {
+            $this->assertNotContains($excluded->id, $recipients);
+        }
+        $this->assertSame(1, $notifications->inbox($permitted, $this->branch)->count());
+        $id = (int) $notifications->inbox($permitted, $this->branch)->value('n.id');
+        $this->actingAs($permitted)->get('/notificaciones/'.$id.'/detalle')->assertOk()
+            ->assertSee('Sellador de prueba')->assertSee($this->admin->username);
+        $permitted->update(['permissions' => ['containers.view']]);
+        $this->assertSame(0, $notifications->inbox($permitted->fresh(), $this->branch)->count());
+        $this->actingAs($permitted->fresh())->get('/notificaciones/'.$id.'/detalle')->assertNotFound();
+    }
+
+    public function test_bell_preview_separates_the_actor_and_summarizes_without_exposing_changes(): void
+    {
+        $preview = app(SystemNotifications::class)->bellPreview((object) [
+            'event_key' => 'container-status:legacy', 'details' => null, 'title' => 'Estado del contenedor actualizado',
+            'body' => "SUDU0000034\nModificado por: Ioni\nUnidad: Pendiente PTI → OK",
+        ]);
+        $this->assertSame('Ioni', $preview['actor']);
+        $this->assertSame('Se actualizó el estado del contenedor SUDU0000034.', $preview['description']);
+        $this->assertStringNotContainsString('Pendiente PTI', $preview['description']);
+        $preview = app(SystemNotifications::class)->bellPreview((object) [
+            'event_key' => 'activity:example', 'title' => 'Contenedor trasladado',
+            'details' => json_encode(['actor' => 'Autor original', 'subject' => 'Equipo'], JSON_THROW_ON_ERROR),
+            'body' => 'Equipo · Autor original',
+        ]);
+        $this->assertSame(['actor' => 'Autor original', 'description' => 'Se trasladó el contenedor Equipo.'], $preview);
+    }
+
+    public function test_clearing_the_bell_keeps_unread_notifications_in_the_panel_and_other_users_bells(): void
+    {
+        $service = app(SystemNotifications::class);
+        $service->activity('containers', 'Aviso anterior', 'Equipo de prueba',
+            [['field' => 'Dato', 'before' => 'Anterior', 'after' => 'Nuevo']], [$this->branch], $this->admin);
+        $this->actingAs($this->admin)->withSession(['sucursal_activa' => $this->branch]);
+        $before = $service->inbox($this->admin, $this->branch)->pluck('n.id')->all();
+        $this->assertNotEmpty($before);
+        Livewire::test(NotificationBell::class)->call('clearBell')->assertDontSee('Aviso anterior');
+        $this->assertSame($before, $service->inbox($this->admin, $this->branch)->pluck('n.id')->all());
+        $records = DB::table('system_notifications')->whereIn('id', $before)->get();
+        foreach ($records as $record) {
+            $this->assertNotNull($record->bell_dismissed_at);
+            $this->assertNull($record->read_at);
+            $this->assertNull($record->archived_at);
+        }
+        $this->assertSame(0, DB::table('system_notifications')->where('user_id', '!=', $this->admin->id)
+            ->whereNotNull('bell_dismissed_at')->count());
+        $service->activity('containers', 'Aviso nuevo', 'Otro equipo', [], [$this->branch], $this->admin);
+        Livewire::test(NotificationBell::class)->assertSee('Aviso nuevo')->assertDontSee('Aviso anterior');
+    }
+
+    public function test_activity_notifications_roll_back_with_the_source_operation(): void
+    {
+        $before = DB::table('system_notifications')->count();
+        DB::beginTransaction();
+        app(SystemNotifications::class)->activity('containers', 'Cambio temporal', 'Registro temporal',
+            [['field' => 'Nombre', 'before' => 'Anterior', 'after' => 'Nuevo']], [$this->branch], $this->admin);
+        $this->assertGreaterThan($before, DB::table('system_notifications')->count());
+        DB::rollBack();
+        $this->assertSame($before, DB::table('system_notifications')->count());
+    }
+
+    public function test_user_activity_does_not_expose_passwords_and_ignores_unchanged_values(): void
+    {
+        $notifications = app(SystemNotifications::class);
+        $before = $this->other->toArray();
+        $before['external_branches'] = [];
+        $count = DB::table('system_notifications')->count();
+        $notifications->userChanged($this->admin, $this->other, $before, 'Usuario actualizado');
+        $this->assertSame($count, DB::table('system_notifications')->count());
+        $notifications->userChanged($this->admin, $this->other, $before, 'Usuario actualizado', true);
+        $details = DB::table('system_notifications')->where('category', 'users')->where('branch_id', $this->branch)
+            ->where('body', 'like', $this->other->username.'%')->value('details');
+        $this->assertStringContainsString('valor protegido', $details);
+        $this->assertStringNotContainsString($this->other->password, $details);
+        $this->assertStringNotContainsString('Secret123!', $details);
     }
 
     private function start(): int
@@ -129,6 +473,46 @@ class MaintenanceWorkflowTest extends TestCase
         $this->assertDatabaseHas('pyp_auditoria', ['contenedor_id' => $this->container, 'estatus_pyp' => 'Aprobado']);
         $this->get('/mantenimiento/ordenes')->assertOk()->assertSee('data-maintenance-summary', false);
         $this->getJson(route('maintenance.create', ['container_id' => 0]))->assertNotFound();
+    }
+
+    public function test_pending_unit_or_box_blocks_starting_from_the_menu_and_direct_requests(): void
+    {
+        $container = DB::table('contenedores')->find($this->container);
+        $block = DB::table('bloques')->find($container->bloque_id);
+        foreach (['estatus_unidad_id' => [1, 'Pendiente PTI'], 'estatus_box_id' => [2, 'Pendiente Revision']] as $column => [$type, $name]) {
+            $pending = DB::table('estatus_contenedores')->insertGetId(['nombre' => $name, 'tipo_estatus_id' => $type, 'estado_id' => 1]);
+            DB::table('contenedores')->where('id', $this->container)->update([$column => $pending]);
+            $this->get(route('maintenance.create', ['container_id' => $this->container]))->assertNotFound();
+            $this->getJson(route('maintenance.create', ['container_id' => $this->container]))->assertNotFound();
+            $this->post('/mantenimiento/ordenes', ['container_id' => $this->container, 'diagnosis' => 'Reparar panel'])
+                ->assertSessionHasErrors('container_id');
+            $this->assertDatabaseMissing('maintenance_jobs', ['container_id' => $this->container]);
+            Livewire::test(InventoryTable::class, ['maintenanceMode' => true])
+                ->call('selectPatio', $block->patio_id)->call('selectBlock', $block->id)
+                ->assertViewHas('containers', fn (array $rows): bool => ! $rows[0]->maintenance_can_start
+                    && $rows[0]->maintenance_actions['maintenance'] === null)
+                ->call('setViewMode', 'yard3d')->assertViewHas('yardScene', function (array $scene): bool {
+                    $item = collect($scene['blocks'])->flatMap(fn (array $block): array => $block['containers'])->firstWhere('id', $this->container);
+
+                    return $item['actions']['maintenance'] === null;
+                });
+            DB::table('contenedores')->where('id', $this->container)->update([$column => $container->{$column}]);
+        }
+        $this->get(route('maintenance.create', ['container_id' => $this->container]))->assertOk();
+        $this->assertGreaterThan(0, $this->start());
+    }
+
+    public function test_pending_status_does_not_block_saving_or_submitting_work_that_already_started(): void
+    {
+        $job = $this->start();
+        $pending = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'Pendiente PTI', 'tipo_estatus_id' => 1, 'estado_id' => 1]);
+        DB::table('contenedores')->where('id', $this->container)->update(['estatus_unidad_id' => $pending]);
+        $this->get(route('maintenance.show', $job))->assertOk();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload())->assertSessionHasNoErrors();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload([
+            'version' => 2, 'action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')],
+        ]))->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('maintenance_jobs', ['id' => $job, 'status' => 'pending_review']);
     }
 
     public function test_initial_draft_rejects_invalid_uploads_and_empty_saves(): void
@@ -584,6 +968,64 @@ class MaintenanceWorkflowTest extends TestCase
         $this->assertDatabaseHas('maintenance_jobs', ['id' => $id, 'status' => 'pending_review']);
     }
 
+    private function anotherContainer(int $position): int
+    {
+        $container = (array) DB::table('contenedores')->find($this->container);
+        unset($container['id']);
+        $container['nombre'] = 'MNTU'.random_int(1000000, 9999999);
+        $container['posicion'] = $position;
+        $container['current_ingress_cycle_id'] = null;
+        $id = DB::table('contenedores')->insertGetId($container);
+        $cycle = (array) DB::table('container_ingress_cycles')->find($this->cycle);
+        unset($cycle['id']);
+        $cycle['container_id'] = $id;
+        $cycleId = DB::table('container_ingress_cycles')->insertGetId($cycle);
+        DB::table('contenedores')->where('id', $id)->update(['current_ingress_cycle_id' => $cycleId]);
+
+        return $id;
+    }
+
+    public function test_parallel_work_is_allowed_for_distinct_containers_but_not_duplicate_work(): void
+    {
+        $first = $this->start();
+        $this->actingAs($this->other)->post('/mantenimiento/ordenes', ['container_id' => $this->container, 'diagnosis' => 'Intento de abrir otra reparación.'])
+            ->assertSessionHasErrors('container_id');
+        $secondContainer = $this->anotherContainer(2);
+        $this->post('/mantenimiento/ordenes', ['container_id' => $secondContainer, 'diagnosis' => 'Reparación en otro contenedor.'])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('maintenance_jobs', ['id' => $first, 'mechanic_id' => $this->mechanic->id, 'status' => 'in_progress']);
+        $this->assertDatabaseHas('maintenance_jobs', ['container_id' => $secondContainer, 'mechanic_id' => $this->other->id, 'status' => 'in_progress']);
+        $this->get('/mantenimiento/ordenes/'.$first)->assertOk()->assertSee('Solo lectura: asignado a otro mecánico')->assertDontSee('name="action"', false);
+        $this->patch('/mantenimiento/ordenes/'.$first, $this->payload())->assertForbidden();
+        $thirdContainer = $this->anotherContainer(3);
+        $this->actingAs($this->mechanic)->post('/mantenimiento/ordenes', ['container_id' => $thirdContainer, 'diagnosis' => 'Otro trabajo del mismo responsable.'])->assertSessionHasNoErrors();
+        $this->assertSame(3, DB::table('maintenance_jobs')->where('branch_id', $this->branch)->where('status', 'in_progress')->count());
+    }
+
+    public function test_review_folios_do_not_use_ids_and_roll_back_without_consuming_a_number(): void
+    {
+        $first = $this->start();
+        $last = (int) DB::table('maintenance_counters')->where('name', 'review_request')->value('last_value');
+        $this->patch('/mantenimiento/ordenes/'.$first, $this->payload(['action' => 'submit']))->assertSessionHasErrors('evidence');
+        $this->assertSame($last, (int) DB::table('maintenance_counters')->where('name', 'review_request')->value('last_value'));
+        DB::beginTransaction();
+        $this->patch('/mantenimiento/ordenes/'.$first, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')]]))->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('maintenance_review_requests', ['job_id' => $first, 'folio' => $last + 1]);
+        DB::rollBack();
+        $this->assertSame($last, (int) DB::table('maintenance_counters')->where('name', 'review_request')->value('last_value'));
+        $this->patch('/mantenimiento/ordenes/'.$first, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')]]))->assertSessionHasNoErrors();
+        $review = DB::table('maintenance_review_requests')->where('job_id', $first)->first();
+        $this->assertSame($last + 1, (int) $review->folio);
+        $response = $this->get('/mantenimiento/ordenes/'.$first)->assertOk()
+            ->assertSee('Solicitud '.str_pad((string) $review->folio, 3, '0', STR_PAD_LEFT))
+            ->assertSee('Pendiente de revisión')->assertSee('Solo lectura: enviado a revisión')
+            ->assertDontSee('Solicitud #'.$review->id)->assertDontSee('Consulta solamente')->assertDontSee('mw-notice', false)
+            ->assertDontSee('name="action"', false);
+        $this->container = $this->anotherContainer(2);
+        $second = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$second, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado-2.jpg')]]))->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('maintenance_review_requests', ['job_id' => $second, 'folio' => $last + 2]);
+    }
+
     public function test_ownership_branch_and_mechanic_only_access_are_enforced(): void
     {
         $id = $this->start();
@@ -595,6 +1037,336 @@ class MaintenanceWorkflowTest extends TestCase
         $this->get('/mantenimiento/ordenes')->assertForbidden();
         $this->actingAs($this->auditor)->get('/mantenimiento/ordenes/'.$id)->assertForbidden();
         $this->actingAs($this->mechanic)->withSession(['sucursal_activa' => 0])->get('/mantenimiento/ordenes')->assertForbidden();
+    }
+
+    public function test_review_notifications_are_personal_idempotent_and_permission_scoped(): void
+    {
+        $job = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')]]))->assertSessionHasNoErrors();
+        $review = DB::table('maintenance_review_requests')->where('job_id', $job)->first();
+        $service = app(SystemNotifications::class);
+        $service->reviewRequested($review->id);
+        $query = $service->inbox($this->admin, $this->branch)->where('n.job_id', $job);
+        $this->assertSame(1, (clone $query)->count());
+        $notification = $query->first();
+        $this->post(route('notifications.open', $notification->id))->assertNotFound();
+        $this->actingAs($this->admin)->get(route('notifications.index'))->assertOk()->assertSee('Reparación pendiente de revisión');
+        $this->post(route('notifications.open', $notification->id))->assertRedirect(route('notifications.repair', $job));
+        $this->assertDatabaseMissing('system_notifications', ['id' => $notification->id, 'read_at' => null]);
+        $service->reviewRequested($review->id);
+        $this->assertDatabaseMissing('system_notifications', ['id' => $notification->id, 'read_at' => null]);
+        $this->get(route('notifications.repair', $job))->assertOk()->assertSee('Evaluación inicial')
+            ->assertSee('data-notification-review', false)->assertSee('data-maintenance-tab="2"', false)
+            ->assertSee('data-review-gallery', false)->assertSee('data-review-photo-next', false)
+            ->assertSee('Resultado de la reparación')->assertDontSee('data-maintenance-save', false);
+        $origin = '/notificaciones?category=repairs&status=read&page=2';
+        $destination = route('notifications.repair', ['job' => $job, 'return_to' => $origin]);
+        $this->post(route('notifications.open', $notification->id), ['return_to' => $origin])->assertRedirect($destination);
+        $this->get($destination)->assertOk()->assertViewHas('returnUrl', $origin)->assertSee(e($origin), false);
+        foreach (['https://example.com', '//example.com', '/%2fexample.com', '/%5cexample.com', ['invalid']] as $unsafeOrigin) {
+            $this->post(route('notifications.open', $notification->id), ['return_to' => $unsafeOrigin])
+                ->assertRedirect(route('notifications.repair', $job));
+        }
+        $this->admin->update(['permissions' => ['containers.view']]);
+        $this->assertSame(0, $service->inbox($this->admin, $this->branch)->count());
+        $this->post(route('notifications.read', $notification->id))->assertNotFound();
+        $this->get(route('notifications.repair', $job))->assertForbidden();
+    }
+
+    public function test_general_audit_notifications_are_only_for_the_external_auditor_and_internal_users(): void
+    {
+        $job = $this->start();
+        $service = app(SystemNotifications::class);
+        $container = Contenedor::findOrFail($this->container);
+        $service->auditAssigned($container, $this->branch);
+        $this->assertSame(0, $service->inbox($this->mechanic, $this->branch)->where('n.job_id', $job)->count());
+        $this->assertSame(0, $service->inbox($this->other, $this->branch)->count());
+        $this->assertSame(1, $service->inbox($this->auditor, $this->branch)->count());
+        $service->maintenanceResult($job, 'Reparación confirmada', 'Trabajo confirmado por el encargado.');
+        $this->actingAs($this->mechanic)->get(route('notifications.index'))->assertOk()->assertSee('Reparación confirmada')->assertDontSee('Asignación de auditora actualizada');
+        $notice = $service->inbox($this->mechanic, $this->branch)->where('n.job_id', $job)->first();
+        $origin = '/mantenimiento/ordenes?patio_id=3&bloque_id=5&search=panel%20lateral';
+        $destination = route('maintenance.show', ['job' => $job, 'step' => 2, 'return_to' => $origin]);
+        $this->post(route('notifications.open', $notice->id), ['return_to' => $origin])->assertRedirect($destination);
+        $this->get($destination)->assertOk()->assertViewHas('returnUrl', $origin);
+        $this->actingAs($this->auditor)->get(route('notifications.index'))->assertOk()->assertSee('Contenedor asignado a tu auditora');
+        $this->auditor->update(['external_audit_company_id' => null]);
+        $this->get(route('notifications.index'))->assertForbidden();
+    }
+
+    public function test_notification_folders_do_not_delete_the_repair_and_filters_update_without_navigation(): void
+    {
+        $job = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')]]))->assertSessionHasNoErrors();
+        $service = app(SystemNotifications::class);
+        $id = (int) $service->inbox($this->admin, $this->branch)->where('n.job_id', $job)->value('n.id');
+        Livewire::test(NotificationBell::class)->call('act', 'delete', $id)->assertStatus(403);
+        $this->actingAs($this->admin);
+        $inbox = Livewire::test(Inbox::class)
+            ->set('search', 'sin-coincidencias-'.uniqid())->assertSee('Sin coincidencias')
+            ->set('search', '')->set('category', 'repairs')->assertSee('Reparación pendiente de revisión');
+        $inbox->set('selected', [(string) $id])->call('act', 'archive')->assertDispatched('notifications-changed');
+        $this->assertFalse($service->inbox($this->admin, $this->branch)->where('n.id', $id)->exists());
+        $expiry = DB::table('system_notifications')->where('id', $id)->value('expires_at');
+        $this->assertSame(now()->addMonthNoOverflow()->toDateString(), Carbon::parse($expiry)->toDateString());
+        $this->assertTrue($service->inbox($this->admin, $this->branch, 'archived')->where('n.id', $id)->exists());
+        $inbox->set('folder', 'archived')->assertSee('Reparación pendiente de revisión')->set('selected', [(string) $id])->call('act', 'unarchive');
+        $this->assertTrue($service->inbox($this->admin, $this->branch)->where('n.id', $id)->exists());
+        $this->assertDatabaseHas('system_notifications', ['id' => $id, 'archived_at' => null, 'expires_at' => null]);
+        $service->pruneExpired();
+        $this->assertDatabaseHas('system_notifications', ['id' => $id]);
+        $service->act($this->admin, $this->branch, 'archive', [$id]);
+        DB::table('system_notifications')->where('id', $id)->update(['expires_at' => now()->subSecond()]);
+        $service->pruneExpired();
+        $this->assertDatabaseMissing('system_notifications', ['id' => $id]);
+        $this->assertDatabaseHas('maintenance_jobs', ['id' => $job, 'status' => 'pending_review']);
+    }
+
+    public function test_status_notifications_reach_internal_branch_users_but_not_mechanics(): void
+    {
+        $job = $this->start();
+        $container = Contenedor::findOrFail($this->container);
+        $before = (object) $container->getAttributes();
+        $newStatus = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 1, 'estado_id' => 1]);
+        $after = ['estatus_unidad_id' => $newStatus, 'estatus_box_id' => $container->estatus_box_id, 'estatus_ipsa_id' => $container->estatus_ipsa_id];
+        $service = app(SystemNotifications::class);
+        $service->containerStatuses($container, $this->branch, $before, $after, $this->admin);
+        $internal = $service->inbox($this->admin, $this->branch)->where('n.category', 'containers')->first();
+        $mechanic = $service->inbox($this->mechanic, $this->branch)->where('n.event_key', $internal->event_key)->first();
+        $this->assertNull($mechanic);
+        $this->assertStringContainsString($this->admin->username, $internal->body);
+        $this->assertStringContainsString('OK QA', $internal->body);
+        $this->assertNotNull($internal->created_at);
+        $this->assertSame(0, $service->inbox($this->other, $this->branch)->where('n.event_key', $internal->event_key)->count());
+        $this->assertSame(0, $service->inbox($this->auditor, $this->branch)->where('n.event_key', $internal->event_key)->count());
+        $this->actingAs($this->admin)->post(route('notifications.open', $internal->id), ['return_to' => '/notificaciones?category=containers'])
+            ->assertRedirect(route('notifications.detail', ['notification' => $internal->id, 'folder' => 'inbox', 'return_to' => '/notificaciones?category=containers']));
+        $this->get(route('notifications.detail', $internal->id))->assertOk()->assertSee($this->admin->username)->assertSee('OK QA')->assertDontSee('data-maintenance-tab', false)
+            ->assertViewHas('actorName', $this->admin->username)
+            ->assertViewHas('containerName', $container->nombre)
+            ->assertViewHas('changes', fn (array $changes): bool => count($changes) === 1 && $changes[0]['part'] === 'Unidad' && $changes[0]['after'] === 'OK QA')
+            ->assertSee('Comparación de estados')->assertSee('Antes')->assertSee('Después');
+        $this->actingAs($this->mechanic)->get(route('notifications.detail', $internal->id))->assertNotFound();
+        $service->containerStatuses($container, $this->branch, $before, (array) $before, $this->admin);
+        $this->assertSame(1, $service->inbox($this->admin, $this->branch)->where('n.category', 'containers')->count());
+    }
+
+    public function test_damaged_ingress_reaches_branch_mechanics_without_a_job_and_is_idempotent(): void
+    {
+        $service = app(SystemNotifications::class);
+        $unitOk = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 1, 'estado_id' => 1]);
+        $boxOk = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 2, 'estado_id' => 1]);
+        $damage = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'DMG QA', 'tipo_estatus_id' => 2, 'estado_id' => 1]);
+        DB::table('contenedores')->where('id', $this->container)->update(['estatus_unidad_id' => $unitOk, 'estatus_box_id' => $boxOk]);
+        $container = Contenedor::findOrFail($this->container);
+        $service->damagedIngress($container, $this->branch);
+        $this->assertSame(0, $service->inbox($this->mechanic, $this->branch)->count());
+        $foreignBranch = DB::table('sucursales')->insertGetId(['nombre' => 'QA Otra sucursal '.uniqid(), 'ubicacion' => 'Temporal', 'estado_id' => 1]);
+        $this->admin->update(['rol_id' => 4, 'sucursal_id' => $foreignBranch]);
+        $container->update(['estatus_box_id' => $damage, 'observaciones_box' => 'Panel lateral golpeado.']);
+        $service->damagedIngress($container, $this->branch);
+        $service->damagedIngress($container, $this->branch);
+        $this->assertSame(1, $service->inbox($this->mechanic, $this->branch)->count());
+        $this->assertSame(1, $service->inbox($this->other, $this->branch)->count());
+        $this->assertSame(0, $service->inbox($this->admin, $foreignBranch)->count());
+        $notice = $service->inbox($this->mechanic, $this->branch)->first();
+        $this->assertNull($notice->job_id);
+        $this->assertDatabaseMissing('maintenance_jobs', ['container_id' => $this->container]);
+        $this->post(route('notifications.open', $notice->id))->assertRedirect(route('notifications.detail', ['notification' => $notice->id, 'folder' => 'inbox']));
+        $this->get(route('notifications.detail', $notice->id))->assertOk()->assertSee('Panel lateral golpeado.');
+        DB::table('container_ingress_cycles')->where('id', $this->cycle)->update(['closed_at' => now()]);
+        $this->assertSame(0, $service->inbox($this->mechanic, $this->branch)->count());
+    }
+
+    public function test_healthy_ingress_notifies_internal_branch_users_but_not_the_mechanic(): void
+    {
+        $unitOk = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 1, 'estado_id' => 1]);
+        $boxOk = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 2, 'estado_id' => 1]);
+        $reference = Contenedor::findOrFail($this->container);
+        $cycle = DB::table('container_ingress_cycles')->find($this->cycle);
+        $block = Bloque::with('patio')->findOrFail($reference->bloque_id);
+        $this->other->update(['rol_id' => 3, 'permissions' => ['containers.view']]);
+        $data = ['posicion' => 2, 'tipo_unidad' => $reference->tipo_unidad_id, 'modelo' => $reference->modelo_id,
+            'iso_code' => '22G1', 'marca' => 'QA', 'estado_unidad' => $unitOk, 'status_box' => $boxOk,
+            'estatus_ipsa' => $this->oosStatus, 'fecha_ingreso' => now()->toDateString(),
+            'transportista' => 'QA', 'placa_cabezal' => 'P123ABC', 'shipping_line_id' => $cycle->shipping_line_id, 'audit_company_id' => $cycle->audit_company_id];
+        $result = app(IngresoService::class)->register($this->admin, $data, 'NTFU'.random_int(1000000, 9999999), $block);
+        $container = Contenedor::findOrFail($result['container_id']);
+        $service = app(SystemNotifications::class);
+        $service->containerIngress($container, $this->branch, $this->admin);
+        $key = 'container-ingress:'.$container->current_ingress_cycle_id;
+        $notice = $service->inbox($this->admin, $this->branch)->where('n.event_key', $key)->first();
+        $this->assertNotNull($notice);
+        $this->assertSame(1, $service->inbox($this->admin, $this->branch)->where('n.event_key', $key)->count());
+        $this->assertSame(1, $service->inbox($this->other, $this->branch)->where('n.event_key', $key)->count());
+        $this->assertSame(0, $service->inbox($this->mechanic, $this->branch)->count());
+        $this->assertSame(0, $service->inbox($this->auditor, $this->branch)->where('n.event_key', $key)->count());
+        $this->assertStringContainsString($this->admin->username, $notice->body);
+        $this->actingAs($this->admin)->post(route('notifications.open', $notice->id))
+            ->assertRedirect(route('notifications.detail', ['notification' => $notice->id, 'folder' => 'inbox']));
+        $this->get(route('notifications.detail', $notice->id))->assertOk()->assertSee('Estados al ingresar')->assertSee($container->nombre)->assertSee('Registrado por');
+        $this->other->update(['permissions' => []]);
+        $this->assertSame(0, $service->inbox($this->other, $this->branch)->where('n.event_key', $key)->count());
+    }
+
+    public function test_legacy_general_mechanic_notices_are_hidden_but_personal_results_remain_visible(): void
+    {
+        $job = $this->start();
+        $base = ['user_id' => $this->mechanic->id, 'branch_id' => $this->branch, 'audience' => 'mechanic',
+            'job_id' => $job, 'container_id' => $this->container, 'ingress_cycle_id' => $this->cycle, 'body' => 'Aviso anterior.', 'created_at' => now()];
+        $hidden = DB::table('system_notifications')->insertGetId($base + ['event_key' => 'container-status:'.uniqid(), 'category' => 'repairs', 'title' => 'Estado del contenedor actualizado']);
+        $visible = DB::table('system_notifications')->insertGetId($base + ['event_key' => 'maintenance-result:'.uniqid(), 'category' => 'repairs', 'title' => 'Reparación confirmada']);
+        $service = app(SystemNotifications::class);
+        $this->assertSame([$visible], $service->inbox($this->mechanic, $this->branch)->pluck('n.id')->map(fn ($id): int => (int) $id)->all());
+        $this->post(route('notifications.open', $hidden))->assertNotFound();
+        $service->maintenanceResult($job, 'La auditora solicitó una corrección', 'Corregir el sellado.', 'correction-requested');
+        $this->assertSame(2, $service->inbox($this->mechanic, $this->branch)->count());
+        $this->assertSame(0, $service->inbox($this->other, $this->branch)->count());
+    }
+
+    public function test_repair_status_action_disappears_when_technical_damage_is_resolved(): void
+    {
+        $damage = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'DMG QA', 'tipo_estatus_id' => 1, 'estado_id' => 1]);
+        $unitOk = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 1, 'estado_id' => 1]);
+        $boxOk = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 2, 'estado_id' => 1]);
+        DB::table('contenedores')->where('id', $this->container)->update(['estatus_unidad_id' => $damage, 'estatus_box_id' => $boxOk]);
+        $job = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')]]))->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)->get(route('notifications.repair', $job))->assertOk()
+            ->assertViewHas('canUpdateTechnicalStates', true)->assertSee('Actualizar estados del contenedor');
+        DB::table('contenedores')->where('id', $this->container)->update(['estatus_unidad_id' => $unitOk]);
+        $this->get(route('notifications.repair', $job))->assertOk()->assertViewHas('canUpdateTechnicalStates', true)
+            ->assertSee('Confirma primero el trabajo realizado');
+        DB::table('contenedores')->where('id', $this->container)->update(['estatus_ipsa_id' => 1]);
+        $this->get(route('notifications.repair', $job))->assertOk()->assertViewHas('canUpdateTechnicalStates', false)
+            ->assertDontSee('Actualizar estados del contenedor')->assertDontSee('Intervenciones');
+    }
+
+    public function test_confirmed_repair_keeps_status_action_until_ipsa_is_available_with_the_required_permission(): void
+    {
+        $unitOk = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 1, 'estado_id' => 1]);
+        $boxOk = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 2, 'estado_id' => 1]);
+        DB::table('contenedores')->where('id', $this->container)->update(['estatus_unidad_id' => $unitOk, 'estatus_box_id' => $boxOk]);
+        $job = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')]]))->assertSessionHasNoErrors();
+        $version = DB::table('maintenance_jobs')->where('id', $job)->value('version');
+        $this->actingAs($this->admin)->get(route('notifications.repair', $job))->assertOk()
+            ->assertSee('Confirma primero el trabajo realizado');
+        $this->get(route('containers.edit', $this->container))->assertOk();
+        $this->actingAs($this->admin)->post(route('notifications.confirm', $job), ['version' => $version])->assertSessionHasNoErrors();
+        $this->get(route('notifications.repair', $job))->assertOk()->assertViewHas('canUpdateTechnicalStates', true)
+            ->assertSee('Actualizar estados del contenedor');
+        $this->admin->update(['permissions' => ['maintenance.view', 'containers.ipsa']]);
+        $this->actingAs($this->admin->fresh())->get(route('notifications.repair', $job))->assertOk()->assertViewHas('canUpdateTechnicalStates', true);
+        $this->admin->update(['permissions' => ['maintenance.view', 'containers.technical']]);
+        $this->actingAs($this->admin->fresh())->get(route('notifications.repair', $job))->assertOk()->assertViewHas('canUpdateTechnicalStates', false);
+        $this->admin->update(['permissions' => null]);
+        $available = DB::table('estatus_ipsa')->where('estado_id', 1)->whereRaw("UPPER(TRIM(nombre)) = 'DISPONIBLE'")->value('id');
+        $this->assertNotNull($available);
+        DB::table('contenedores')->where('id', $this->container)->update(['estatus_ipsa_id' => $available]);
+        $this->actingAs($this->admin->fresh())->get(route('notifications.repair', $job))->assertOk()->assertViewHas('canUpdateTechnicalStates', false);
+    }
+
+    public function test_repair_detail_confirms_without_opening_a_notification_and_keeps_only_unfinished_actions(): void
+    {
+        $unitOk = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 1, 'estado_id' => 1]);
+        $boxOk = DB::table('estatus_contenedores')->insertGetId(['nombre' => 'OK QA', 'tipo_estatus_id' => 2, 'estado_id' => 1]);
+        $job = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')]]))->assertSessionHasNoErrors();
+        $version = (int) DB::table('maintenance_jobs')->where('id', $job)->value('version');
+        $returnUrl = route('corrections.container-history', ['container' => $this->container, 'q' => 'QA', 'page' => 2], false);
+        $detail = route('corrections.detail', ['job' => $job, 'return_to' => $returnUrl]);
+        $this->actingAs($this->admin)->get($detail)->assertOk()
+            ->assertViewHas('canConfirmWork', true)->assertViewHas('canUpdateTechnicalStates', true)
+            ->assertSee(route('corrections.confirm', $job), false)->assertSee('Confirma primero el trabajo realizado')
+            ->assertDontSee('aria-controls="repairInterventionsMenu"', false);
+        $this->post(route('corrections.confirm', $job), ['version' => $version, 'return_to' => $returnUrl])
+            ->assertSessionHasNoErrors()->assertRedirect(route('corrections.detail', ['job' => $job, 'step' => 2, 'return_to' => $returnUrl]));
+        $this->assertDatabaseHas('maintenance_jobs', ['id' => $job, 'status' => 'completed']);
+        $this->get($detail)->assertOk()->assertViewHas('canConfirmWork', false)
+            ->assertSee('Actualizar estados del contenedor')->assertDontSee('Confirmar trabajo realizado');
+        $available = DB::table('estatus_ipsa')->where('estado_id', 1)->whereRaw("UPPER(TRIM(nombre)) = 'DISPONIBLE'")->value('id');
+        $this->assertNotNull($available);
+        DB::table('contenedores')->where('id', $this->container)->update([
+            'estatus_unidad_id' => $unitOk, 'estatus_box_id' => $boxOk, 'estatus_ipsa_id' => $available,
+        ]);
+        $this->get($detail)->assertOk()->assertViewHas('canUpdateTechnicalStates', false)
+            ->assertDontSee('aria-controls="repairReviewOptions"', false)
+            ->assertDontSee('aria-controls="repairInterventionsMenu"', false);
+        $round = DB::table('maintenance_corrections')->insertGetId([
+            'job_id' => $job, 'number' => 1, 'requested_by' => $this->auditor->id, 'reason' => 'Revisar sellado',
+            'work_performed' => 'Sellado corregido', 'status' => 'approved', 'version' => 1, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->get($detail)->assertOk()->assertSee('aria-controls="repairInterventionsMenu"', false)
+            ->assertDontSee('aria-controls="repairReviewOptions"', false);
+        $this->get(route('corrections.detail', ['job' => $job, 'intervention' => $round]))->assertOk()
+            ->assertViewHas('canConfirmWork', false)->assertViewHas('canUpdateTechnicalStates', false)
+            ->assertDontSee('aria-controls="repairReviewOptions"', false);
+    }
+
+    public function test_repair_detail_does_not_grant_review_actions_to_container_readers_or_mechanics(): void
+    {
+        $job = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')]]))->assertSessionHasNoErrors();
+        $version = (int) DB::table('maintenance_jobs')->where('id', $job)->value('version');
+        $this->get(route('corrections.detail', $job))->assertOk()
+            ->assertViewHas('canConfirmWork', false)->assertViewHas('canUpdateTechnicalStates', false);
+        $this->post(route('corrections.confirm', $job), ['version' => $version])->assertForbidden();
+        $this->admin->update(['permissions' => ['containers.view']]);
+        $this->actingAs($this->admin->fresh())->get(route('corrections.detail', $job))->assertOk()
+            ->assertViewHas('canConfirmWork', false)->assertViewHas('canUpdateTechnicalStates', false)
+            ->assertDontSee('aria-controls="repairReviewOptions"', false);
+        $this->post(route('corrections.confirm', $job), ['version' => $version])->assertForbidden();
+        $this->assertDatabaseHas('maintenance_jobs', ['id' => $job, 'status' => 'pending_review', 'version' => $version]);
+    }
+
+    public function test_old_repair_cannot_be_managed_when_a_newer_job_exists_in_the_same_ingress(): void
+    {
+        $job = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')]]))->assertSessionHasNoErrors();
+        $original = (array) DB::table('maintenance_jobs')->find($job);
+        $newer = $original;
+        unset($newer['id']);
+        $newer['status'] = 'in_progress';
+        DB::table('maintenance_jobs')->insert($newer);
+        $this->actingAs($this->admin)->get(route('corrections.detail', $job))->assertOk()
+            ->assertViewHas('canConfirmWork', false)->assertViewHas('canUpdateTechnicalStates', false)
+            ->assertDontSee('aria-controls="repairReviewOptions"', false);
+        $this->post(route('corrections.confirm', $job), ['version' => $original['version']])->assertStatus(409);
+        $this->assertDatabaseHas('maintenance_jobs', ['id' => $job, 'status' => 'pending_review']);
+    }
+
+    public function test_select_all_spans_notification_pages_and_does_not_include_new_arrivals(): void
+    {
+        $job = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('resultado.jpg')]]))->assertSessionHasNoErrors();
+        $service = app(SystemNotifications::class);
+        $notification = (array) $service->inbox($this->admin, $this->branch)->where('n.job_id', $job)->first();
+        $excludedId = (int) $notification['id'];
+        unset($notification['id']);
+        for ($index = 0; $index < 16; $index++) {
+            DB::table('system_notifications')->insert(array_replace($notification, ['event_key' => 'selection-fixture:'.uniqid()]));
+        }
+        $this->actingAs($this->admin);
+        $component = Livewire::test(Inbox::class)->assertSee('Página 1 de 2')->assertSee('17 notificaciones')
+            ->call('toggleAll')->assertSet('allSelected', true)->assertViewHas('selectedCount', 17)
+            ->call('nextPage')->assertSet('allSelected', true)->assertViewHas('selectedCount', 17)
+            ->call('toggleNotification', $excludedId)->assertViewHas('selectedCount', 16);
+        $newId = DB::table('system_notifications')->insertGetId(array_replace($notification, ['event_key' => 'new-arrival:'.uniqid()]));
+        $component->call('refreshNotifications')->assertViewHas('selectedCount', 16)->call('act', 'archive');
+        $this->assertSame(16, $service->inbox($this->admin, $this->branch, 'archived')->count());
+        $this->assertSame(2, $service->inbox($this->admin, $this->branch)->count());
+        $this->assertDatabaseHas('system_notifications', ['id' => $excludedId, 'archived_at' => null]);
+        $this->assertDatabaseHas('system_notifications', ['id' => $newId, 'archived_at' => null]);
+        $auditId = DB::table('system_notifications')->insertGetId(array_replace($notification, [
+            'event_key' => 'category-fixture:'.uniqid(), 'category' => 'audits', 'audience' => 'internal',
+        ]));
+        Livewire::test(Inbox::class)->set('category', 'repairs')->call('toggleAll')
+            ->assertViewHas('selectedCount', 2)->call('act', 'archive');
+        $this->assertDatabaseHas('system_notifications', ['id' => $auditId, 'archived_at' => null]);
+        Livewire::test(Inbox::class)->set('category', 'audits')->call('toggleAll')
+            ->assertViewHas('selectedCount', 1)->call('act', 'archive');
+        $this->assertSame(0, $service->inbox($this->admin, $this->branch)->count());
     }
 
     public function test_material_upload_and_stale_version_validation(): void
@@ -610,17 +1382,103 @@ class MaintenanceWorkflowTest extends TestCase
         $this->assertSame(2, (int) DB::table('maintenance_jobs')->where('id', $id)->value('version'));
     }
 
-    public function test_internal_roles_cannot_open_maintenance_even_with_a_legacy_permission(): void
+    public function test_confirmation_creates_a_separate_notice_and_preserves_the_original_request(): void
+    {
+        $job = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('final.jpg')]]))->assertSessionHasNoErrors();
+        $version = (int) DB::table('maintenance_jobs')->where('id', $job)->value('version');
+        $service = app(SystemNotifications::class);
+        $originalNotice = $service->inbox($this->admin, $this->branch)->where('n.job_id', $job)->first();
+        $this->travel(10)->minutes();
+        $this->actingAs($this->admin)->post(route('notifications.confirm', $job), ['version' => $version])->assertSessionHasNoErrors();
+        $this->get(route('notifications.repair', $job))->assertOk()->assertSee('Confirmada por')->assertSee($this->admin->username)
+            ->assertDontSee('Pendiente de revisión');
+        Livewire::test(Inbox::class)->set('category', 'repairs')->assertSee('Reparación confirmada')->assertSee($this->admin->username)
+            ->assertSee('Reparación pendiente de revisión')->assertSee('Por: '.$this->mechanic->username)
+            ->assertSee('Por: '.$this->admin->username)->assertSee('Se solicitó revisar la reparación del contenedor')
+            ->assertSee('Se confirmó la reparación del contenedor');
+        Livewire::test(NotificationBell::class)->assertSee('Reparación confirmada')->assertSee('Por: '.$this->admin->username)
+            ->assertSee('Reparación pendiente de revisión')->assertSee('Por: '.$this->mechanic->username);
+        $this->assertEquals($originalNotice, DB::table('system_notifications')->find($originalNotice->id));
+        $confirmation = $service->inbox($this->admin, $this->branch)->where('n.event_key', 'like', 'review-confirmed:%')->first();
+        $this->assertNotNull($confirmation);
+        $this->assertNotSame($originalNotice->id, $confirmation->id);
+        $this->assertNotSame($originalNotice->created_at, $confirmation->created_at);
+        $this->assertSame($this->admin->username, json_decode($confirmation->details, true)['actor']);
+        $this->assertNull($confirmation->read_at);
+        $this->assertNull($confirmation->archived_at);
+        $service->reviewConfirmed($job, $this->admin);
+        $this->assertSame(2, $service->inbox($this->admin, $this->branch)->where('n.job_id', $job)->count());
+        $this->post(route('notifications.open', $originalNotice->id))->assertRedirect(route('notifications.repair', $job));
+        $this->post(route('notifications.open', $confirmation->id))->assertRedirect(route('notifications.repair', $job));
+        $this->actingAs($this->mechanic);
+        Livewire::test(Inbox::class)->set('category', 'repairs')->assertSee('Reparación confirmada')
+            ->assertSee('Por: '.$this->admin->username)->assertSee('Se confirmó la reparación del contenedor');
+    }
+
+    public function test_notifications_display_guatemala_time_without_changing_the_stored_utc_time(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-22 16:31:00', 'UTC'));
+        app(SystemNotifications::class)->activity('containers', 'Registro actualizado', 'Equipo horario', [], [$this->branch], $this->admin);
+        $this->actingAs($this->admin);
+        Livewire::test(Inbox::class)->assertSee('22/10/2026 10:31')->assertDontSee('22/10/2026 16:31');
+        Livewire::test(NotificationBell::class)->assertSee('22/10/2026 · 10:31');
+        $this->assertSame('2026-10-22 16:31:00', DB::table('system_notifications')->where('user_id', $this->admin->id)
+            ->where('branch_id', $this->branch)->value('created_at'));
+        $this->travelTo(Carbon::parse('2026-10-23 02:15:00', 'UTC'));
+        app(SystemNotifications::class)->activity('containers', 'Registro actualizado', 'Equipo nocturno', [], [$this->branch], $this->admin);
+        Livewire::test(Inbox::class)->assertSee('22/10/2026 20:15');
+        Livewire::test(NotificationBell::class)->assertSee('22/10/2026 · 20:15');
+    }
+
+    public function test_external_corrections_preserve_the_original_and_lock_each_submitted_round(): void
+    {
+        $job = $this->start();
+        $this->patch('/mantenimiento/ordenes/'.$job, $this->payload(['action' => 'submit', 'evidence_after' => [UploadedFile::fake()->image('original-final.jpg')]]))->assertSessionHasNoErrors();
+        $original = DB::table('maintenance_jobs')->find($job);
+        $originalMaterials = DB::table('maintenance_materials')->where('job_id', $job)->get()->toJson();
+        $originalEvidence = DB::table('maintenance_evidence')->where('job_id', $job)->get()->toJson();
+        $this->actingAs($this->admin)->post(route('notifications.confirm', $job), ['version' => $original->version])->assertSessionHasNoErrors();
+        $confirmed = DB::table('maintenance_jobs')->find($job);
+        $this->assertSame('completed', $confirmed->status);
+        DB::table('contenedores')->where('id', $this->container)->update(['estatus_ipsa_id' => 1]);
+        $this->post(route('notifications.confirm', $job), ['version' => $original->version])->assertSessionHasErrors('work');
+        $verdict = ['estatus_pyp' => 'Rechazado', 'informacion_adicional' => 'Corregir el sellado de la puerta.', 'maintenance_version' => $confirmed->version];
+        $this->actingAs($this->auditor)->patch(route('pyp-audits.update', $this->container), $verdict)->assertSessionHasNoErrors();
+        $round = DB::table('maintenance_corrections')->where('job_id', $job)->first();
+        $this->assertSame('draft', $round->status);
+        $this->assertDatabaseHas('maintenance_jobs', ['id' => $job, 'status' => 'returned_for_repair']);
+        $this->get(route('corrections.photo', ['job' => $job, 'round' => $round->id, 'photo' => 0]))->assertNotFound();
+        $data = ['round_id' => $round->id, 'version' => 1, 'action' => 'submit', 'work_performed' => 'Se reemplazó y selló el empaque.'];
+        $this->actingAs($this->other)->patch(route('corrections.update', $job), $data)->assertForbidden();
+        $this->actingAs($this->mechanic)->patch(route('corrections.update', $job), $data)->assertSessionHasErrors('work');
+        $this->patch(route('corrections.update', $job), $data + ['photos' => [UploadedFile::fake()->image('correccion.jpg')]])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('maintenance_corrections', ['id' => $round->id, 'status' => 'submitted', 'version' => 2]);
+        $this->patch(route('corrections.update', $job), $data)->assertStatus(409);
+        $this->assertSame($original->diagnosis, DB::table('maintenance_jobs')->find($job)->diagnosis);
+        $this->assertSame($original->work_performed, DB::table('maintenance_jobs')->find($job)->work_performed);
+        $this->assertSame($originalMaterials, DB::table('maintenance_materials')->where('job_id', $job)->get()->toJson());
+        $this->assertSame($originalEvidence, DB::table('maintenance_evidence')->where('job_id', $job)->get()->toJson());
+        $this->actingAs($this->auditor)->patch(route('pyp-audits.update', $this->container), $verdict)->assertSessionHasErrors('pyp');
+        $verdict['maintenance_version'] = DB::table('maintenance_jobs')->find($job)->version;
+        $this->patch(route('pyp-audits.update', $this->container), $verdict)->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('maintenance_corrections', ['id' => $round->id, 'status' => 'rejected', 'work_performed' => $data['work_performed']]);
+        $this->assertDatabaseHas('maintenance_corrections', ['job_id' => $job, 'number' => 2, 'status' => 'draft']);
+        $this->assertSame(1, DB::table('maintenance_jobs')->where('container_id', $this->container)->count());
+    }
+
+    public function test_internal_review_permissions_do_not_grant_access_to_the_mechanic_workspace(): void
     {
         $id = $this->start();
         $this->patch('/mantenimiento/ordenes/'.$id, $this->payload(['evidence_before' => [UploadedFile::fake()->image('privada.jpg')]]))->assertSessionHasNoErrors();
         $file = DB::table('maintenance_evidence')->where('job_id', $id)->first();
-        $this->assertNotContains('maintenance.view', AccessPermissions::keys());
-        $this->assertArrayNotHasKey('maintenance', AccessPermissions::modules());
+        $this->assertContains('maintenance.view', AccessPermissions::keys());
+        $this->assertContains('maintenance.confirm', AccessPermissions::keys());
+        $this->assertSame('Revisiones de reparaciones', AccessPermissions::modules()['maintenance'][0]);
         foreach ([1, 2, 3] as $role) {
             $this->admin->update(['rol_id' => $role, 'permissions' => null]);
             $this->actingAs($this->admin)->get('/')->assertOk()->assertDontSee(route('maintenance.orders'), false);
-            $this->admin->update(['permissions' => ['maintenance.view']]);
+            $this->admin->update(['permissions' => ['maintenance.view', 'maintenance.confirm']]);
             foreach (['/mantenimiento/ordenes', '/mantenimiento/trabajos', '/mantenimiento/contenedores/'.$this->container, '/mantenimiento/ordenes.php', '/mantenimiento/ordenes/nueva',
                 '/mantenimiento/ordenes/'.$id, '/mantenimiento/ordenes/'.$id.'/evidencias/'.$file->id] as $url) {
                 $this->get($url)->assertForbidden();
@@ -809,7 +1667,7 @@ class MaintenanceWorkflowTest extends TestCase
         $this->assertDatabaseHas('maintenance_jobs', ['id' => $id, 'version' => 1, 'status' => 'in_progress']);
         $this->assertDatabaseMissing('maintenance_materials', ['job_id' => $id]);
         $this->assertDatabaseMissing('maintenance_review_requests', ['job_id' => $id]);
-        $this->get('/mantenimiento/ordenes/'.$id)->assertOk()->assertSee('Consulta solamente')->assertDontSee('name="action"', false);
+        $this->get('/mantenimiento/ordenes/'.$id)->assertOk()->assertSee('Solo lectura: el contenedor no está habilitado para reparación')->assertDontSee('name="action"', false);
     }
 
     public function test_work_column_and_external_audit_filters_remain_independent(): void
@@ -849,7 +1707,9 @@ class MaintenanceWorkflowTest extends TestCase
             DB::table('maintenance_jobs')->where('id', $id)->update(['status' => $status]);
             $table->call('$refresh')->assertSee($record->nombre)
                 ->assertViewHas('containers', fn (array $containers): bool => $containers[0]->maintenance_status === 'Reparado')
-                ->assertSee(route('maintenance.show', $id), false)->assertSee('Ver reparación')->assertDontSee('Continuar reparación')
+                ->assertSee('Reparaciones')->assertDontSee('Ver reparación')->assertDontSee('Continuar reparación')
+                ->assertViewHas('containers', fn (array $containers): bool => $containers[0]->maintenance_actions['maintenance'] === null
+                    && str_contains($containers[0]->maintenance_actions['history'], '/reparaciones/'.$id.'/historial'))
                 ->assertDontSee('>Reparar</a>', false);
             $this->get('/mantenimiento/ordenes/'.$id)->assertOk()->assertViewHas('job', fn (object $job): bool => $job->status === $status);
         }
@@ -857,6 +1717,28 @@ class MaintenanceWorkflowTest extends TestCase
         $table->set('maintenanceStatusFilter', 'Por atender')->assertSee($record->nombre)
             ->assertViewHas('containers', fn (array $containers): bool => (bool) $containers[0]->maintenance_can_start)
             ->assertDontSee('Regularizar ingreso')->assertSee('>Reparar</a>', false);
+    }
+
+    public function test_mechanic_menu_separates_corrections_and_history_and_hides_other_owners_actions(): void
+    {
+        $id = $this->start();
+        DB::table('maintenance_jobs')->where('id', $id)->update(['status' => 'returned_for_repair']);
+        $record = DB::table('contenedores')->find($this->container);
+        $block = DB::table('bloques')->find($record->bloque_id);
+        $table = Livewire::test(InventoryTable::class, ['maintenanceMode' => true])
+            ->call('selectPatio', $block->patio_id)->call('selectBlock', $block->id)
+            ->assertSee('Atender corrección')->assertSee('Reparaciones')->assertDontSee('Ver reparación')
+            ->assertViewHas('containers', fn (array $rows): bool => str_contains($rows[0]->maintenance_actions['maintenance'], '/reparaciones/'.$id.'/correcciones'));
+        $table->call('setViewMode', 'yard3d')->assertViewHas('yardScene', function (array $scene) use ($id): bool {
+            $item = collect($scene['blocks'])->flatMap(fn (array $block): array => $block['containers'])->firstWhere('id', $this->container);
+
+            return $item['actions']['maintenance_label'] === 'Atender corrección'
+                && str_contains($item['actions']['history'], '/reparaciones/'.$id.'/historial');
+        });
+        DB::table('maintenance_jobs')->where('id', $id)->update(['mechanic_id' => $this->other->id]);
+        $table->call('setViewMode', 'table')->assertDontSee('Atender corrección')->assertDontSee('>Reparaciones</a>', false)
+            ->assertViewHas('containers', fn (array $rows): bool => $rows[0]->maintenance_actions['maintenance'] === null
+                && $rows[0]->maintenance_actions['history'] === null);
     }
 
     public function test_legacy_repair_preserves_evidence_and_links_to_the_regularized_ingress(): void

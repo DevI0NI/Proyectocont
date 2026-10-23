@@ -87,7 +87,12 @@ class ContainerAuditAssignment
             }
         }
         $this->resetAudit($user, $container, $assignment);
+        app(SystemNotifications::class)->auditAssigned($container, $branchId);
         $this->event($user, $container, $reentry ? 'reentry' : 'ingress', $assignment['reason'] ?: ($reentry ? 'Nuevo ciclo de ingreso; no hereda aprobaciones.' : 'Asignacion inicial del ingreso.'), $before);
+        if (! $container->wasRecentlyCreated && ! $reentry && ! $before['cycle']) {
+            app(SystemNotifications::class)->activity('audits', 'Asignación del ingreso regularizada', $container->nombre,
+                app(SystemNotifications::class)->changes([], $assignment, ['shipping_line_name' => 'Naviera', 'audit_company_name' => 'Auditora', 'audit_reference' => 'Referencia']), [$branchId], $user);
+        }
     }
 
     public function change(User $user, Contenedor $container, int $branchId, array $data): ?string
@@ -114,8 +119,14 @@ class ContainerAuditAssignment
             DB::table('container_ingress_cycles')->where('id', $cycle->id)->update($this->cycleFields($assignment) + ['updated_at' => now()]);
             if ($changed) {
                 $this->resetAudit($user, $container, $assignment);
+                app(SystemNotifications::class)->auditAssigned($container, $branchId);
             }
             $this->event($user, $container, $changed ? 'reassignment' : 'instruction', $assignment['reason'] ?: 'Actualizacion de referencia de la instruccion.', $before);
+            $changes = app(SystemNotifications::class)->changes((array) $cycle, $assignment, [
+                'shipping_line_name' => 'Naviera', 'audit_company_name' => 'Auditora', 'audit_reference' => 'Referencia de la instrucción',
+            ]);
+            app(SystemNotifications::class)->activity('audits', $changed ? 'Asignación de auditoría modificada' : 'Instrucción de auditoría modificada',
+                $container->nombre, $changes, [$branchId], $user);
         }
 
         return $assignment['shipping_line_name'];

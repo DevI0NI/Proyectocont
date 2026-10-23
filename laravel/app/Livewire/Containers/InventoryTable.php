@@ -54,6 +54,7 @@ class InventoryTable extends Component
 
     public string $viewMode = 'table';
 
+    #[Locked]
     public bool $pypMode = false;
 
     #[Locked]
@@ -82,12 +83,9 @@ class InventoryTable extends Component
     public function mount(bool $pypMode = false, bool $maintenanceMode = false): void
     {
         $this->maintenanceMode = $maintenanceMode;
-        $this->pypMode = $pypMode;
+        $this->pypMode = (int) auth()->user()->rol_id === 5 || $pypMode;
         $this->normalizeTableState();
 
-        if ($this->pypMode) {
-            $this->viewMode = 'table';
-        }
     }
 
     public function updatedSearch(): void
@@ -213,7 +211,7 @@ class InventoryTable extends Component
 
     public function setViewMode(string $mode): void
     {
-        if ($this->pypMode || ! in_array($mode, ['table', 'yard3d'], true)) {
+        if (! in_array($mode, ['table', 'yard3d'], true)) {
             return;
         }
 
@@ -231,6 +229,9 @@ class InventoryTable extends Component
 
     public function render()
     {
+        if ((int) auth()->user()->rol_id === 5) {
+            $this->pypMode = true;
+        }
         abort_if(! $this->maintenanceMode && (int) auth()->user()->rol_id === 4, 403);
         if ($this->maintenanceMode) {
             app(MaintenanceWorkflow::class)->authorize(auth()->user(), (int) session('sucursal_activa'));
@@ -250,19 +251,34 @@ class InventoryTable extends Component
             ->orderBy('nombre')
             ->get();
 
+        $assignedCounts = $this->pypMode
+            ? $this->containersQuery($branch->id)->reorder()->select('b.id as block_id', 'p.id as patio_id')
+                ->selectRaw('COUNT(DISTINCT c.id) as total')->groupBy('b.id', 'p.id')->get()
+            : collect();
+        if ($this->pypMode) {
+            foreach ($patios as $patio) {
+                $patio->assigned_count = (int) $assignedCounts->where('patio_id', $patio->id)->sum('total');
+            }
+        }
+
         $selectedPatio = $this->resolveSelectedPatio($patios);
         $blocks = $selectedPatio
             ? Bloque::active()
                 ->where('patio_id', $selectedPatio->id)
-                ->withCount('contenedoresActivos')
+                ->when(! $this->pypMode, fn ($query) => $query->withCount('contenedoresActivos'))
                 ->orderBy('numero')
                 ->get()
             : collect();
+        if ($this->pypMode) {
+            foreach ($blocks as $block) {
+                $block->contenedores_activos_count = (int) $assignedCounts->where('block_id', $block->id)->sum('total');
+            }
+        }
         $selectedBlock = $this->resolveSelectedBlock($blocks);
         $hasActiveBlocks = $patios->isNotEmpty() && Bloque::active()->whereIn('patio_id', $patios->modelKeys())->exists();
 
         $baseQuery = $this->containersQuery($branch->id);
-        $globalSearch = $this->pypMode && trim($this->search) !== '';
+        $globalSearch = $this->pypMode && $this->viewMode === 'table' && trim($this->search) !== '';
 
         if ($globalSearch) {
             if (in_array((int) auth()->user()->rol_id, [4, 5], true)) {
@@ -296,11 +312,17 @@ class InventoryTable extends Component
             foreach ($containers->items() as $container) {
                 $container->maintenance_actions = $this->maintenanceActions($container, (int) $container->patio_id, (int) $container->bloque_id);
             }
+        } elseif (! $this->pypMode && in_array((int) auth()->user()->rol_id, [1, 2, 3], true)) {
+            foreach ($containers->items() as $container) {
+                $container->repair_history_url = $this->containerHistoryUrl((int) $container->id);
+            }
         }
 
         return view('livewire.containers.inventory-table', [
             'patios' => $patios,
             'branchName' => $branch->nombre,
+            'externalCompanyName' => (int) auth()->user()->rol_id === 5
+                ? DB::table('external_audit_companies')->where('id', auth()->user()->external_audit_company_id)->value('name') : null,
             'hasActiveBlocks' => $hasActiveBlocks,
             'blocks' => $blocks,
             'selectedPatio' => $selectedPatio,
@@ -320,13 +342,14 @@ class InventoryTable extends Component
             'statusOptions' => $statusOptions,
             'globalSearch' => $globalSearch,
             'viewMode' => $this->viewMode,
-            'yardScene' => ! $this->pypMode && $selectedPatio ? $this->yardSceneData($branch->id, $selectedPatio->id, $selectedBlock?->id) : null,
+            'yardScene' => $selectedPatio ? $this->yardSceneData($branch->id, $selectedPatio->id, $selectedBlock?->id) : null,
         ]);
     }
 
     private function normalizeTableState(): void
     {
         $this->search = mb_substr($this->search, 0, 255);
+        $this->viewMode = in_array($this->viewMode, ['table', 'yard3d'], true) ? $this->viewMode : 'table';
         $this->nameFilter = mb_substr($this->nameFilter, 0, 255);
         $this->perPage = in_array($this->perPage, self::PER_PAGE_OPTIONS, true) ? $this->perPage : 10;
         $this->page = max(1, $this->page);
@@ -450,46 +473,67 @@ class InventoryTable extends Component
             ->get()
             ->groupBy('bloque_id');
 
+        // External accounts receive only slot coordinates for equipment outside their scope.
+        $occupancy = $this->pypMode
+            ? DB::table('contenedores as c')->join('bloques as b', 'b.id', '=', 'c.bloque_id')
+                ->join('patios as p', 'p.id', '=', 'b.patio_id')
+                ->where('p.sucursal_id', $branchId)->where('p.id', $patioId)
+                ->where('b.estado_id', 1)->where('c.estado_id', 1)
+                ->select('c.bloque_id', 'c.posicion')->orderBy('c.posicion')->get()->groupBy('bloque_id')
+            : collect();
+
         return [
             'selected_block_id' => $selectedBlockId,
-            'fit_to_viewport' => $this->maintenanceMode,
+            'fit_to_viewport' => $this->maintenanceMode || $this->pypMode,
             'has_visual_filters' => $hasVisualFilters,
             'blocks' => $blocks->map(fn (Bloque $block): array => [
                 'id' => $block->id,
                 'numero' => $block->numero,
                 'capacidad' => (int) $block->capacidad_maxima,
-                'ocupados' => (int) $block->contenedores_activos_count,
+                'ocupados' => $this->pypMode ? $containers->get($block->id, collect())->count() : (int) $block->contenedores_activos_count,
                 'selected' => $selectedBlockId === (int) $block->id,
-                'containers' => $containers->get($block->id, collect())->map(fn (object $container): array => [
-                    'id' => $container->id,
-                    'nombre' => $container->nombre,
-                    'posicion' => (int) $container->posicion,
-                    'estatus_unidad' => $container->estatus,
-                    'estatus_box' => $container->estatus_box,
-                    'estatus_ipsa' => $container->estatus_ipsa,
-                    'estatus_ipsa_id' => (int) $container->estatus_ipsa_id,
-                    'pyp' => $container->estatus_pyp,
-                    'matches' => ! $hasVisualFilters || $matchingIds->has((int) $container->id),
-                    'actions' => $this->maintenanceMode ? $this->maintenanceActions($container, $patioId, (int) $block->id) : ($canOperate ? [
-                        'info' => route('containers.show', [
+                'containers' => ($this->pypMode
+                    ? $occupancy->get($block->id, collect())->map(function (object $slot) use ($containers, $block): object {
+                        return $containers->get($block->id, collect())->firstWhere('posicion', $slot->posicion)
+                            ?? (object) ['anonymous' => true, 'posicion' => (int) $slot->posicion];
+                    })
+                    : $containers->get($block->id, collect()))->map(fn (object $container): array => isset($container->anonymous) ? [
+                        'anonymous' => true,
+                        'posicion' => (int) $container->posicion,
+                        'matches' => false,
+                    ] : [
+                        'id' => $container->id,
+                        'nombre' => $container->nombre,
+                        'posicion' => (int) $container->posicion,
+                        'estatus_unidad' => $container->estatus,
+                        'estatus_box' => $container->estatus_box,
+                        'estatus_ipsa' => $container->estatus_ipsa,
+                        'estatus_ipsa_id' => (int) $container->estatus_ipsa_id,
+                        'pyp' => $container->estatus_pyp,
+                        'matches' => ! $hasVisualFilters || $matchingIds->has((int) $container->id),
+                        'actions' => $this->pypMode ? [
+                            'info' => route('pyp-audits.edit', ['container' => $container->id, 'patio_id' => $patioId, 'bloque_id' => $block->id]),
+                        ] : ($this->maintenanceMode ? $this->maintenanceActions($container, $patioId, (int) $block->id) : ($canOperate ? [
+                            'info' => route('containers.show', [
+                                'container' => $container->id,
+                                'patio_id' => $patioId,
+                                'bloque_id' => $block->id,
+                            ]),
+                            'transfer' => auth()->user()->hasPermission('transfers.operate') ? route('transfers.create', ['contenedor_id' => $container->id]) : null,
+                            'dispatch' => auth()->user()->hasPermission('dispatches.operate') ? route('dispatches.create', ['contenedor_id' => $container->id]) : null,
+                            'ticket' => route('documents.ingress.ticket', [
+                                'contenedor_id' => $container->id,
+                                'patio_id' => $patioId,
+                                'bloque_id' => $block->id,
+                            ]),
+                            'history' => $this->containerHistoryUrl((int) $container->id),
+                        ] : [])),
+                        'url' => route($this->pypMode ? 'pyp-audits.edit' : ($this->maintenanceMode ? 'maintenance.container' : 'containers.show'), [
                             'container' => $container->id,
                             'patio_id' => $patioId,
                             'bloque_id' => $block->id,
                         ]),
-                        'transfer' => auth()->user()->hasPermission('transfers.operate') ? route('transfers.create', ['contenedor_id' => $container->id]) : null,
-                        'dispatch' => auth()->user()->hasPermission('dispatches.operate') ? route('dispatches.create', ['contenedor_id' => $container->id]) : null,
-                        'ticket' => route('documents.ingress.ticket', [
-                            'contenedor_id' => $container->id,
-                            'patio_id' => $patioId,
-                            'bloque_id' => $block->id,
-                        ]),
-                    ] : []),
-                    'url' => route($this->maintenanceMode ? 'maintenance.container' : 'containers.show', [
-                        'container' => $container->id,
-                        'patio_id' => $patioId,
-                        'bloque_id' => $block->id,
-                    ]),
-                ])->values()->all(),
+                    ])->values()->all(),
             ])->values()->all(),
         ];
     }
@@ -523,6 +567,18 @@ class InventoryTable extends Component
         return $columns;
     }
 
+    private function containerHistoryUrl(int $containerId): string
+    {
+        $back = [];
+        foreach ($this->queryString as $property => $options) {
+            if ($this->{$property} !== $options['except']) {
+                $back[$options['as'] ?? $property] = $this->{$property};
+            }
+        }
+
+        return route('corrections.container-history', ['container' => $containerId, 'return_to' => route('containers.index', $back, false)]);
+    }
+
     private function maintenanceActions(object $container, int $patioId, int $blockId): array
     {
         $back = [];
@@ -536,13 +592,27 @@ class InventoryTable extends Component
             && (int) $container->maintenance_mechanic_id === (int) auth()->id()
             && strtoupper(trim((string) $container->estatus_ipsa)) === 'OOS'
             && (int) $container->ipsa_status_active === self::ACTIVE;
+        $canCorrect = $container->maintenance_job_status === 'returned_for_repair'
+            && (int) $container->maintenance_mechanic_id === (int) auth()->id();
+        $returnUrl = route('maintenance.orders', $back, false);
+        $maintenanceUrl = null;
+        $label = 'Reparar';
+        if ($canContinue) {
+            $maintenanceUrl = route('maintenance.show', ['job' => $container->maintenance_job_id, 'back' => $back]);
+            $label = 'Continuar reparación';
+        } elseif ($canCorrect) {
+            $maintenanceUrl = route('corrections.show', ['job' => $container->maintenance_job_id, 'return_to' => $returnUrl]);
+            $label = 'Atender corrección';
+        } elseif ($container->maintenance_can_start) {
+            $maintenanceUrl = route('maintenance.create', ['container_id' => $container->id] + $params);
+        }
 
         return [
             'info' => route('maintenance.container', ['container' => $container->id] + $params),
-            'maintenance' => $container->maintenance_job_id
-                ? route('maintenance.show', ['job' => $container->maintenance_job_id, 'back' => $back])
-                : ($container->maintenance_can_start ? route('maintenance.create', ['container_id' => $container->id] + $params) : null),
-            'maintenance_label' => $container->maintenance_job_id ? ($canContinue ? 'Continuar reparación' : 'Ver reparación') : 'Reparar',
+            'maintenance' => $maintenanceUrl,
+            'maintenance_label' => $label,
+            'history' => $container->maintenance_history_job_id
+                ? route('corrections.history', ['job' => $container->maintenance_history_job_id, 'return_to' => $returnUrl]) : null,
         ];
     }
 
@@ -588,8 +658,13 @@ class InventoryTable extends Component
                 ->addSelect(['c.current_ingress_cycle_id', 'mj.id as maintenance_job_id', 'mj.status as maintenance_job_status',
                     'mj.mechanic_id as maintenance_mechanic_id', 'ei.estado_id as ipsa_status_active',
                     'mechanic.username as mechanic_name', 'ic.audit_company_name'])
+                ->selectSub(function ($history) use ($branchId): void {
+                    $history->from('maintenance_jobs as history')->select('history.id')
+                        ->whereColumn('history.container_id', 'c.id')->where('history.branch_id', $branchId)
+                        ->where('history.mechanic_id', auth()->id())->orderByDesc('history.id')->limit(1);
+                }, 'maintenance_history_job_id')
                 ->selectRaw($this->maintenanceStatusSql().' as maintenance_status')
-                ->selectRaw("CASE WHEN ((c.current_ingress_cycle_id IS NULL AND c.fecha_ingreso IS NOT NULL) OR (ic.id IS NOT NULL AND ic.closed_at IS NULL AND ic.branch_id = p.sucursal_id)) AND UPPER(TRIM(ei.nombre)) = 'OOS' AND ei.estado_id = 1 AND mj.id IS NULL THEN 1 ELSE 0 END as maintenance_can_start")
+                ->selectRaw("CASE WHEN ((c.current_ingress_cycle_id IS NULL AND c.fecha_ingreso IS NOT NULL) OR (ic.id IS NOT NULL AND ic.closed_at IS NULL AND ic.branch_id = p.sucursal_id)) AND UPPER(TRIM(ei.nombre)) = 'OOS' AND ei.estado_id = 1 AND mj.id IS NULL AND UPPER(TRIM(COALESCE(eu.nombre, ''))) NOT LIKE 'PENDIENT%' AND UPPER(TRIM(COALESCE(eb.nombre, ''))) NOT LIKE 'PENDIENT%' THEN 1 ELSE 0 END as maintenance_can_start")
                 ->selectRaw(ContainerAuditAssignment::statusSql().' as audit_status')
                 ->selectRaw(ContainerAuditAssignment::noticeSql().' as audit_assignment_notice')
                 ->selectRaw('NULL as estatus_pyp, NULL as informacion_adicional, NULL as es_asignado');

@@ -6,7 +6,7 @@
         ['estado_unidad', 'status_box', 'estatus_ipsa', 'observaciones_estado', 'observaciones_box'],
         ['shipping_line_id', 'audit_company_id', 'audit_reference', 'assignment_reason', 'transportista', 'conductor', 'placa_cabezal', 'placa_chasis'],
     ];
-    $initialStep = 0;
+    $initialStep = max(0, min(3, request()->integer('step', 0)));
     foreach ($errorSteps as $step => $fields) {
         if ($errors->hasAny($fields)) {
             $initialStep = $step;
@@ -39,6 +39,7 @@
         <form method="POST" action="{{ route('containers.update', ['container' => $container->id]) }}" class="record-form wide-form container-form has-steps" id="containerEditForm" novalidate>
             @csrf
             @method('PATCH')
+            @if(!empty($returnUrl))<input type="hidden" name="return_to" value="{{ $returnUrl }}">@endif
 
             <input type="hidden" name="patio_id" value="{{ $backParams['patio_id'] ?? $container->patio_id }}">
             <input type="hidden" name="bloque_id" value="{{ $backParams['bloque_id'] ?? $container->bloque_id }}">
@@ -238,7 +239,7 @@
                 <button type="button" class="button container-edit-button previous" id="editPreviousButton">Anterior</button>
                 <button type="button" class="button container-edit-button next" id="editNextButton">Siguiente</button>
                 <button type="submit" class="button container-edit-button save" id="editSaveButton">Guardar cambios</button>
-                <a href="{{ route('containers.show', ['container' => $container->id] + $backParams) }}" class="button container-edit-button cancel" id="editCancelButton">Cancelar</a>
+                <a href="{{ $returnUrl ?? route('containers.show', ['container' => $container->id] + $backParams) }}" class="button container-edit-button cancel" id="editCancelButton">Cancelar</a>
             </div>
         </form>
     </section>
@@ -249,7 +250,7 @@
         <p id="editCancelDescription">Los cambios realizados en este contenedor se perderán.</p>
         <div class="container-exit-dialog-actions">
             <button type="button" class="button container-exit-stay" id="editStayButton">Seguir editando</button>
-            <a href="{{ route('containers.show', ['container' => $container->id] + $backParams) }}" class="button container-exit-leave">Salir sin guardar</a>
+            <a href="{{ $returnUrl ?? route('containers.show', ['container' => $container->id] + $backParams) }}" class="button container-exit-leave">Salir sin guardar</a>
         </div>
     </dialog>
 

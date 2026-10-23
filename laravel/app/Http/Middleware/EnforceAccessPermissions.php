@@ -25,14 +25,17 @@ class EnforceAccessPermissions
                 if ($request->routeIs('dashboard', 'containers.index', 'pyp-audits.index') || $request->is('index.php', 'bloques/bloques.php', 'bloques/contenedor.php')) {
                     return redirect()->route('maintenance.orders');
                 }
-                abort_unless($request->routeIs('maintenance.*', '*livewire.update') || $request->is('mantenimiento/ordenes.php'), 403, 'Esta vista no pertenece a la interfaz de mantenimiento.');
+                abort_unless($request->routeIs('maintenance.*', 'corrections.*', 'notifications.index', 'notifications.detail', 'notifications.open', 'notifications.read', 'notifications.read-all', '*livewire.update') || $request->is('mantenimiento/ordenes.php'), 403, 'Esta vista no pertenece a la interfaz de mantenimiento.');
             }
             if ((int) $user->rol_id === 5) {
                 app(ExternalAuditAccess::class)->authorizeBranch($user, (int) session('sucursal_activa'));
-                if ($request->routeIs('dashboard', 'containers.index') || $request->is('index.php', 'bloques/bloques.php', 'bloques/contenedor.php')) {
+                if ($request->routeIs('dashboard') || $request->is('index.php')) {
+                    return redirect()->route(app(ExternalAuditAccess::class)->isSupervisor($user) ? 'external-audits.dashboard' : 'pyp-audits.index');
+                }
+                if ($request->routeIs('containers.index') || $request->is('bloques/bloques.php', 'bloques/contenedor.php')) {
                     return redirect()->route('pyp-audits.index');
                 }
-                abort_unless($request->routeIs('pyp-audits.index', 'pyp-audits.edit', 'pyp-audits.update', 'branches.active.update', '*livewire.update') || $request->is('cambiar_sucursal.php'), 403, 'Esta vista no pertenece a la interfaz de tu empresa auditora.');
+                abort_unless($request->routeIs('external-audits.dashboard', 'corrections.history', 'corrections.detail', 'corrections.show', 'corrections.photo', 'corrections.original-photo', 'pyp-audits.index', 'pyp-audits.edit', 'pyp-audits.update', 'branches.active.update', 'notifications.index', 'notifications.open', 'notifications.read', 'notifications.read-all', '*livewire.update') || $request->is('cambiar_sucursal.php'), 403, 'Esta vista no pertenece a la interfaz de tu empresa auditora.');
             }
         }
         if ($user && in_array((int) $user->rol_id, [2, 3], true)) {

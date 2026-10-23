@@ -10,6 +10,11 @@ use Illuminate\Support\Facades\DB;
 
 class ExternalAuditAccess
 {
+    public function isSupervisor(User $user): bool
+    {
+        return (int) $user->rol_id === 5 && $user->external_access_level === 'supervisor' && $this->configured($user);
+    }
+
     public function eligibleBranchMap(): array
     {
         return DB::table('shipping_line_branch_auditor as authorization')

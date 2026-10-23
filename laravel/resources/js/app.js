@@ -6,6 +6,9 @@ import './container-assignment';
 import './transport-plate-input';
 import './maintenance';
 import '../css/maintenance.css';
+import '../css/notifications.css';
+import '../css/external-audits.css';
+import './notifications';
 import './parking';
 import './operational-catalogs';
 import './sidebar-groups';
@@ -457,6 +460,10 @@ function parseYardScene(canvas) {
 }
 
 function containerColor(container) {
+    if (container.anonymous) {
+        return 0x68777d;
+    }
+
     const status = String(container.estatus_ipsa || '').toUpperCase();
 
     if (status.includes('DISP')) {
@@ -534,6 +541,7 @@ function initYard3d(canvas) {
     const actionTransfer = actionPanel?.querySelector('[data-yard-action-transfer]');
     const actionDispatch = actionPanel?.querySelector('[data-yard-action-dispatch]');
     const actionMaintenance = actionPanel?.querySelector('[data-yard-action-maintenance]');
+    const actionHistory = actionPanel?.querySelector('[data-yard-action-history]');
 
     if (!stage || !blocks.length) {
         return;
@@ -739,6 +747,11 @@ function initYard3d(canvas) {
     }
 
     function showActions(item, event) {
+        hideActions();
+        if (item.anonymous) {
+            return;
+        }
+
         if (!actionPanel) {
             return;
         }
@@ -758,6 +771,7 @@ function initYard3d(canvas) {
             [actionTransfer, actions.transfer],
             [actionDispatch, actions.dispatch],
             [actionMaintenance, actions.maintenance],
+            [actionHistory, actions.history],
         ].forEach(([link, url]) => {
             if (!link) return;
             if (url) {
@@ -780,16 +794,16 @@ function initYard3d(canvas) {
         const rect = canvas.getBoundingClientRect();
         tooltip.replaceChildren();
         const title = document.createElement('strong');
-        title.textContent = item.nombre || 'Sin nombre';
+        title.textContent = item.anonymous ? 'Ocupado' : (item.nombre || 'Sin nombre');
         const position = document.createElement('span');
         position.textContent = `Posicion ${item.posicion}`;
         const statusGroup = document.createElement('div');
         statusGroup.className = 'yard-tooltip-statuses';
-        [
+        (item.anonymous ? [] : [
             ['Estado IPSA', item.estatus_ipsa],
             ['Unidad', item.estatus_unidad],
             ['Estructura', item.estatus_box],
-        ].forEach(([labelText, value]) => {
+        ]).forEach(([labelText, value]) => {
             const row = document.createElement('span');
             const label = document.createElement('small');
             label.textContent = labelText;
@@ -824,7 +838,7 @@ function initYard3d(canvas) {
         }
 
         hovered = hit;
-        canvas.style.cursor = hovered ? 'pointer' : 'grab';
+        canvas.style.cursor = hovered && !hovered.userData.container.anonymous ? 'pointer' : 'grab';
 
         if (!hovered) {
             if (tooltip) tooltip.hidden = true;

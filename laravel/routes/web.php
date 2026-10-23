@@ -10,6 +10,8 @@ use App\Http\Controllers\DispatchController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\IngresoController;
 use App\Http\Controllers\MaintenanceController;
+use App\Http\Controllers\MaintenanceCorrectionController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OperationalCatalogController;
 use App\Http\Controllers\ParameterController;
 use App\Http\Controllers\PypAuditController;
@@ -30,6 +32,27 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::middleware('auth')->group(function (): void {
+    Route::get('/auditoria-externa/resumen', [PypAuditController::class, 'dashboard'])->middleware('role:5')->name('external-audits.dashboard');
+    Route::controller(NotificationController::class)->prefix('notificaciones')->name('notifications.')->group(function (): void {
+        Route::get('/', 'index')->name('index');
+        Route::post('/leidas', 'readAll')->name('read-all');
+        Route::post('/{notification}/leer', 'read')->whereNumber('notification')->name('read');
+        Route::post('/{notification}/abrir', 'open')->whereNumber('notification')->name('open');
+        Route::get('/{notification}/detalle', 'detail')->whereNumber('notification')->name('detail');
+        Route::get('/reparaciones/{job}', 'repair')->whereNumber('job')->name('repair');
+        Route::post('/reparaciones/{job}/confirmar', 'confirm')->whereNumber('job')->name('confirm');
+        Route::get('/reparaciones/{job}/evidencias/{evidence}', 'evidence')->whereNumber(['job', 'evidence'])->name('evidence');
+    });
+    Route::get('/reparaciones/{job}/historial', [MaintenanceCorrectionController::class, 'history'])->whereNumber('job')->name('corrections.history');
+    Route::get('/contenedores/{container}/reparaciones', [MaintenanceCorrectionController::class, 'containerHistory'])->whereNumber('container')->middleware('role:1,2,3')->name('corrections.container-history');
+    Route::get('/reparaciones/{job}/detalle', [MaintenanceCorrectionController::class, 'detail'])->whereNumber('job')->name('corrections.detail');
+    Route::post('/reparaciones/{job}/confirmar', [MaintenanceCorrectionController::class, 'confirm'])->whereNumber('job')->middleware('role:1,2,3')->name('corrections.confirm');
+    Route::controller(MaintenanceCorrectionController::class)->prefix('reparaciones/{job}/correcciones')->whereNumber('job')->name('corrections.')->group(function (): void {
+        Route::get('/', 'show')->name('show');
+        Route::patch('/', 'update')->middleware('role:4')->name('update');
+        Route::get('/original/{photo}', 'originalPhoto')->whereNumber('photo')->name('original-photo');
+        Route::get('/{round}/fotos/{photo}', 'photo')->whereNumber(['round', 'photo'])->name('photo');
+    });
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::redirect('/index.php', '/', 302);
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');

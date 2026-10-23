@@ -67,6 +67,8 @@ class IngresoService
                 $container = Contenedor::create($payload);
             }
             $assignmentService->start($user, $container, (int) $block->patio->sucursal_id, $assignment, $isReentry, $previousShippingLine);
+            app(SystemNotifications::class)->containerIngress($container, (int) $block->patio->sucursal_id, $user, $isReentry);
+            app(SystemNotifications::class)->damagedIngress($container, (int) $block->patio->sucursal_id);
 
             $operationId = DB::table('tipos_operacion')->where('nombre', 'INGRESO')->value('id') ?: 1;
             $eventId = DB::table('logs_eventos')->insertGetId([

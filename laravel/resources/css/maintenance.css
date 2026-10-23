@@ -83,6 +83,13 @@
 .mw-assessment-section { align-content: start; display: grid; gap: 16px; min-width: 0; }
 .dashboard-body .main-panel:has(> .mw-repair-board) { padding: 12px 22px; }
 .dashboard-body .mw-repair-heading { padding: 8px 20px; margin-bottom: 10px; align-items: center; }
+.mw-heading-status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; color: var(--shell-muted); font-size: 12px; }
+.mw-work-status { display: inline-flex; align-items: center; gap: 7px; color: #087f70; font-weight: 650; }
+.mw-work-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.mw-work-status[data-state=pending_review], .mw-work-status[data-state=returned_for_repair] { color: #ad6d08; }
+[data-theme=dark] .mw-work-status { color: #80cbc4; }
+[data-theme=dark] .mw-work-status[data-state=pending_review], [data-theme=dark] .mw-work-status[data-state=returned_for_repair] { color: #f6c25b; }
+.dashboard-body .mw-repair-heading .mw-heading-readonly { margin: 7px 0 0; font-size: 12px; color: var(--shell-muted); }
 .dashboard-body .mw-repair-heading h1 { font-size: 24px; line-height: 1.2; margin: 2px 0 0; }
 .dashboard-body .mw-repair-board { padding: 12px 20px; }
 .mw-repair-form [data-photo-panel] > .container-form-section-head { display: grid; }

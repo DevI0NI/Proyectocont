@@ -7,15 +7,24 @@
     $beforePhotos = $evidence->where('stage', 'before');
     $initialStep = $errors->hasAny(['diagnosis', 'evidence_before', 'evidence_before.*']) ? 0 : ($errors->hasAny(['work_performed', 'evidence', 'evidence_after', 'evidence_after.*']) ? 2 : max(0, min(2, (int) old('active_step', request()->integer('step', $starting ? 0 : 1)))));
 @endphp
-<section class="page-heading mw-repair-heading"><div><span class="eyebrow">Mantenimiento interno @if(!$starting) · OT-{{ str_pad($job->id, 6, '0', STR_PAD_LEFT) }} @endif</span><h1>{{ $starting ? 'Reparar ' : '' }}{{ $job->container_name }}</h1></div><a class="mw-button" href="{{ route('maintenance.orders', $backParams ?? []) }}"><span data-catalog-icon="arrow-left" aria-hidden="true"></span>Volver</a></section>
+<section class="page-heading mw-repair-heading"><div><span class="eyebrow">Mantenimiento interno</span><h1>{{ $starting ? 'Reparar ' : '' }}{{ $job->container_name }}</h1>
+<div class="mw-heading-status">
+    <span class="mw-work-status" @if(!$starting) data-state="{{ $job->status }}" @endif>{{ $starting ? 'Por atender' : match($job->status) { 'pending_review' => 'Pendiente de revisión', 'completed' => 'Reparación finalizada', 'returned_for_repair' => 'Devuelto a reparación', default => 'En reparación' } }}</span>
+    @if($review)<span>Solicitud {{ str_pad((string) $review->folio, 3, '0', STR_PAD_LEFT) }}</span><time datetime="{{ \Carbon\Carbon::parse($review->created_at)->toIso8601String() }}">{{ \Carbon\Carbon::parse($review->created_at)->format('d/m/Y H:i') }}</time>@endif
+</div>
+@if(!$editable && !empty($readonlyReason))<p class="mw-heading-readonly">{{ $readonlyReason }}</p>@endif
+</div><a class="mw-button" href="{{ $returnUrl ?? route('maintenance.orders', $backParams ?? []) }}"><span data-catalog-icon="arrow-left" aria-hidden="true"></span>Volver</a></section>
 <section class="workboard mw-board mw-repair-board">
-@if($review)<p class="mw-notice" role="status">Solicitud #{{ $review->id }} pendiente de revisión interna desde {{ \Carbon\Carbon::parse($review->created_at)->format('d/m/Y H:i') }}.</p>@endif
+@if(!$starting && $job->status !== 'in_progress')
+    <div class="mw-actions"><a class="mw-button" href="{{ route('corrections.history', ['job' => $job->id, 'return_to' => request()->getRequestUri()]) }}">Reparaciones<span data-catalog-icon="arrow-right" aria-hidden="true"></span></a>@if($job->status === 'returned_for_repair')<a class="mw-button mw-primary" href="{{ route('corrections.show', ['job' => $job->id, 'return_to' => request()->getRequestUri()]) }}">Atender corrección de la auditora<span data-catalog-icon="arrow-right" aria-hidden="true"></span></a>@endif</div>
+@endif
 @if($errors->any())<div class="mw-errors" role="alert"><strong>No se pudo guardar el trabajo</strong><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul><p>Los archivos nuevos deben seleccionarse otra vez.</p></div>@endif
 <form method="POST" action="{{ $starting ? route('maintenance.store') : route('maintenance.update', $job->id) }}" enctype="multipart/form-data" class="mw-form mw-repair-form record-select-fields" data-maintenance-form data-initial-step="{{ $initialStep }}" data-exchange-rate="{{ $exchangeQuote['rate'] ?? '' }}" data-exchange-date="{{ $exchangeQuote['date'] ?? '' }}" data-restored-changes="{{ $errors->any() ? 'true' : 'false' }}" novalidate>@csrf
 @if(!empty($exchangeQuote['token']))<input type="hidden" name="exchange_quote" value="{{ $exchangeQuote['token'] }}">@endif
 @if($starting)<input type="hidden" name="container_id" value="{{ $container->id }}">@else @method('PATCH') @endif
 <input type="hidden" name="version" value="{{ $job->version }}">
 <input type="hidden" name="active_step" value="{{ $initialStep }}">
+@if(!empty($returnUrl))<input type="hidden" name="return_to" value="{{ $returnUrl }}">@endif
 @foreach($backParams ?? [] as $key => $value)<input type="hidden" name="back[{{ $key }}]" value="{{ $value }}">@endforeach
 @include('maintenance.timeline')
 <section role="tabpanel" id="mw-panel-0" aria-labelledby="mw-tab-0" data-maintenance-panel="0" data-photo-panel hidden>
@@ -72,7 +81,6 @@
     <button type="button" class="mw-button mw-primary" data-maintenance-next>Siguiente<span data-catalog-icon="arrow-right" aria-hidden="true"></span></button>
     @if($editable)<button class="mw-button mw-primary" name="action" value="submit" type="submit" data-maintenance-submit hidden><span data-catalog-icon="send" aria-hidden="true"></span>Solicitar revisión</button>@endif
 </footer>
-@if(!$editable)<p class="mw-notice">{{ $job->status === 'returned_for_repair' ? 'Este trabajo fue devuelto a reparación.' : 'Consulta solamente. El trabajo no admite modificaciones en su estado actual o por otro mecánico.' }}</p>@endif
 </form></section>
 @include('maintenance.photo-viewer')
 <dialog class="container-exit-dialog" data-maintenance-exit role="alertdialog" aria-labelledby="maintenanceExitTitle" aria-describedby="maintenanceExitDescription">
@@ -81,7 +89,7 @@
     <p id="maintenanceExitDescription">Los cambios realizados en esta reparación se perderán.</p>
     <div class="container-exit-dialog-actions">
         <button type="button" class="button container-exit-stay" data-maintenance-stay>Seguir editando</button>
-        <a href="{{ route('maintenance.orders', $backParams ?? []) }}" class="button container-exit-leave" data-maintenance-leave>Salir sin guardar</a>
+        <a href="{{ $returnUrl ?? route('maintenance.orders', $backParams ?? []) }}" class="button container-exit-leave" data-maintenance-leave>Salir sin guardar</a>
     </div>
 </dialog>
 @endsection
