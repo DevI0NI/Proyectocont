@@ -1,0 +1,2 @@
+@props(['icon', 'label', 'showLabel' => false])
+<button type="button" wire:key="notification-action-{{ sha1($icon.'|'.$label.'|'.$attributes->get('wire:click', '')) }}" {{ $attributes->class(['mw-button', 'mw-icon' => !$showLabel, 'notification-labeled-action' => $showLabel]) }} title="{{ $label }}" aria-label="{{ $label }}"><span data-notification-icon="{{ $icon }}" wire:ignore aria-hidden="true"></span>@if($showLabel)<span>{{ $label }}</span>@endif</button>

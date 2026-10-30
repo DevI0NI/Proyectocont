@@ -1,0 +1,6 @@
+<div class="mw-material-row" data-material-row>
+<label class="mw-field"><span>Material</span><select name="materials[{{ $index }}][part_id]" data-admin-select data-admin-search required @disabled(!$editable)><option value="">Selecciona un material</option>@foreach($parts as $part)<option value="{{ $part->id }}" data-cost="{{ $part->reference_cost }}" data-currency="{{ $part->currency }}" data-unit="{{ $part->unit }}" @selected((int)($material['part_id'] ?? 0) === (int)$part->id)>{{ $part->name }} ({{ $part->unit }})@if((int)$part->status !== 1) · Inactivo @endif</option>@endforeach</select></label>
+<label class="mw-field"><span>Cantidad</span><input name="materials[{{ $index }}][quantity]" type="number" min="0.001" max="100000" step="0.001" required value="{{ $material['quantity'] ?? '' }}" @disabled(!$editable)></label>
+<div class="mw-field mw-price"><span>Valor unitario</span><output data-material-cost>—</output></div>
+<div class="mw-field mw-price"><span>Subtotal</span><output data-material-subtotal>—</output></div>
+@if($editable)<button type="button" class="mw-button mw-icon" data-material-remove aria-label="Quitar material" title="Quitar material"><span data-maintenance-remove-icon aria-hidden="true"></span></button>@endif</div>
