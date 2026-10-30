@@ -9,7 +9,7 @@
             <div class="reports-option-group">
                 <label><span class="reports-option-heading"><span>01</span>Tipo de reporte</span>
                     <select name="tipo" data-admin-select data-report-type>
-                        @foreach(['inventario' => 'Inventario actual', 'ingresos' => 'Ingresos por ciclo', 'despachos' => 'Despachos con EIR de salida', 'movimientos' => 'Bitacora de movimientos', 'auditorias' => 'Auditorias PYP', 'reparaciones' => 'Reparaciones y correcciones', 'costos' => 'Costos de mantenimiento', 'traslados' => 'Traslados', 'cambios' => 'Detalle de cambios', 'historial' => 'Historial de contenedor'] as $value => $label)
+                        @foreach(['inventario' => 'Inventario actual', 'ingresos' => 'Ingresos por ciclo', 'despachos' => 'Despachos con EIR de salida', 'movimientos' => 'Bitacora de movimientos', 'auditorias' => 'Auditorias externas', 'reparaciones' => 'Reparaciones y correcciones', 'costos' => 'Costos de mantenimiento', 'traslados' => 'Traslados', 'cambios' => 'Detalle de cambios', 'historial' => 'Historial de contenedor'] as $value => $label)
                             <option value="{{ $value }}" @selected($type === $value)>{{ $label }}</option>
                         @endforeach
                     </select>

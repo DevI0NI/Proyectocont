@@ -78,7 +78,7 @@
         <article class="panel-card pyp-panel">
             <div class="panel-header">
                 <div>
-                    <h2>Seguimiento PYP</h2>
+                    <h2>Seguimiento de auditoría externa</h2>
                     <p>Cobertura sobre inventario activo</p>
                 </div>
             </div>
@@ -87,7 +87,7 @@
                 <div class="pyp-chart-canvas-wrap" wire:ignore>
                     <canvas
                         class="pyp-chart-canvas"
-                        aria-label="Gráfica de cobertura PYP"
+                        aria-label="Gráfica de cobertura de auditoría externa"
                         role="img"
                         data-audited="{{ $stats['auditados'] }}"
                         data-total="{{ $stats['activos'] }}"

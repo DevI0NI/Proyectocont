@@ -158,7 +158,7 @@ class ReportController extends Controller
             ]);
 
         return [
-            ['Patio', 'Bloque', 'Posicion', 'Contenedor', 'Tipo', 'Modelo', 'Unidad', 'Box', 'IPSA', 'PYP', 'Ingreso'],
+            ['Patio', 'Bloque', 'Posicion', 'Contenedor', 'Tipo', 'Modelo', 'Unidad', 'Box', 'IPSA', 'Auditoria externa', 'Ingreso'],
             $rows->map(fn ($row) => [
                 $row->patio,
                 $row->bloque,
@@ -542,7 +542,7 @@ class ReportController extends Controller
         return match ($type) {
             'movimientos' => 'Bitacora de Movimientos',
             'despachos' => 'Contenedores Despachados',
-            'auditorias' => 'Auditorias PYP',
+            'auditorias' => 'Auditorias externas',
             'traslados' => 'Reporte de Traslados',
             'cambios' => 'Detalle de Cambios',
             'historial' => 'Historial de Contenedor',

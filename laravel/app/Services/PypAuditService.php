@@ -95,7 +95,7 @@ class PypAuditService
                 'estado_id' => self::ACTIVE,
             ]);
 
-            $this->logEvent($record->id, $user->id, 'Contenedor asignado para auditoria PYP');
+            $this->logEvent($record->id, $user->id, 'Contenedor asignado para auditoria externa');
             app(SystemNotifications::class)->activity('audits', 'Contenedor asignado a revisión externa', $container->nombre,
                 [['field' => 'Seguimiento de auditoría', 'before' => null, 'after' => 'Asignado']], [$branchId], $user);
         });
@@ -201,7 +201,7 @@ class PypAuditService
                 if ($newStatus === 'Rechazado' && ! $job) {
                     app(SystemNotifications::class)->auditRepairRequested($container, $branchId);
                 }
-                $this->logEvent($record->id, $user->id, 'Auditoria PYP actualizada. Estatus: '.$newStatus.'.');
+                $this->logEvent($record->id, $user->id, 'Auditoria externa actualizada. Estatus: '.$newStatus.'.');
                 $changes = app(SystemNotifications::class)->changes(['status' => $record->estatus_pyp, 'notes' => $record->informacion_adicional],
                     ['status' => $newStatus, 'notes' => $newInfo], ['status' => 'Dictamen', 'notes' => 'Observaciones']);
                 app(SystemNotifications::class)->activity('audits', 'Auditoría externa actualizada', $container->nombre, $changes, [$branchId], $user);
