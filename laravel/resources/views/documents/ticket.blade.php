@@ -15,7 +15,7 @@
             <p>Vista imprimible de la constancia operativa.</p>
         </div>
         <div class="toolbar-actions ticket-document-actions">
-            <a href="{{ route('containers.index', $returnParams) }}" class="ticket-document-button secondary">
+            <a href="{{ request()->filled('cycle_id') ? route('containers.history.show', ['container' => $data['container_id']]) : route('containers.index', $returnParams) }}" class="ticket-document-button secondary">
                 <span aria-hidden="true">←</span>
                 Salir
             </a>
@@ -55,10 +55,13 @@
                     <strong>{{ $sucursal->nombre }}</strong>.
                 </p>
                 <p>
-                    Actividad registrada: <strong>{{ $activity }}</strong>. El contenedor queda asignado al
+                    Actividad registrada: <strong>{{ $activity }}</strong>. {{ $operation === 'salida' ? 'El contenedor se retira del' : 'El contenedor queda asignado al' }}
                     <strong>{{ $data['patio'] }}</strong>, en el <strong>Bloque {{ $data['bloque'] }}</strong>,
                     posicion <strong>{{ $data['posicion'] }}</strong>.
                 </p>
+                @if($operation === 'salida')
+                    <p>Auditora: <strong>{{ $data['auditora'] }}</strong>. Dictamen: <strong>{{ $data['auditoria'] }}</strong>. Registrado por: <strong>{{ $data['usuario'] }}</strong>.</p>
+                @endif
                 <p class="ticket-formal-warning">CONSTANCIA INTERNA DE INVENTARIO Y CONTROL DE PATIO</p>
             </div>
         </section>
@@ -81,8 +84,13 @@
                 <tr>
                     <th>Naviera</th>
                     <td>{{ $data['naviera'] }}</td>
-                    <th>Marchamo</th>
-                    <td>{{ $data['marchamo'] }}</td>
+                    @if($operation === 'salida')
+                        <th>Auditoria</th>
+                        <td>{{ $data['auditoria'] }}</td>
+                    @else
+                        <th>Marchamo</th>
+                        <td>{{ $data['marchamo'] }}</td>
+                    @endif
                 </tr>
                 <tr>
                     <th>Estado Unidad</th>
@@ -120,7 +128,7 @@
         </table>
 
         <section class="ticket-formal-reference">
-            <strong>Referencia</strong>
+            <strong>{{ $operation === 'salida' ? 'Observaciones de salida' : 'Referencia' }}</strong>
             <p>{{ $data['referencia'] }}</p>
         </section>
 

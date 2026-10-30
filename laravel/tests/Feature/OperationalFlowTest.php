@@ -17,17 +17,7 @@ class OperationalFlowTest extends TestCase
     {
         parent::setUp();
 
-        config([
-            'database.default' => 'mysql',
-            'database.connections.mysql.host' => '127.0.0.1',
-            'database.connections.mysql.port' => '3306',
-            'database.connections.mysql.database' => 'proyectocont_v2.1',
-            'database.connections.mysql.username' => 'root',
-            'database.connections.mysql.password' => '',
-        ]);
-
-        DB::purge('mysql');
-        DB::reconnect('mysql');
+        $this->useIsolatedMysql();
         DB::beginTransaction();
     }
 
@@ -84,14 +74,15 @@ class OperationalFlowTest extends TestCase
             'iso_code' => '22G1',
             'marca' => 'QA',
             'estado_unidad' => $catalog['unit_status_id'],
-            'observaciones_estado' => str_repeat('a', 255),
+            'observaciones_estado' => 'La unidad fue inspeccionada y no presenta fallas de funcionamiento.',
             'status_box' => $catalog['box_status_id'],
-            'observaciones_box' => str_repeat('b', 255),
+            'observaciones_box' => 'La estructura fue inspeccionada y no presenta deformaciones visibles.',
             'estatus_ipsa' => $catalog['available_ipsa_id'],
             'shipping_line_id' => $shippingLineId,
             'audit_company_id' => $auditCompanyId,
             'audit_reference' => 'Instruccion QA',
             'transportista' => 'Transportista QA',
+            'conductor' => 'Carlos Rodas',
             'placa_cabezal' => '123456',
             'placa_chasis' => 'TC-12ABC',
             'bloque' => $originBlockId,
@@ -139,7 +130,7 @@ class OperationalFlowTest extends TestCase
         foreach (['/ingresos', "/contenedores/{$containerId}/editar", "/contenedores/{$containerId}"] as $path) {
             $this->get($path)->assertOk()->assertDontSee('name="placa_anio"', false)->assertDontSee('Anio placa');
         }
-        foreach ([['c-123abc', 'tc 12abc'], ['ABC-1234', '123456'], ['123ABC', ''], ['C123456', 'RE123456'], ['123456', '123456']] as [$headPlate, $chassisPlate]) {
+        foreach ([['c-123abc', 'tc 12abc'], ['ABC-1234', '123456'], ['123ABC', 'TC123ABC'], ['C123456', 'RE123456'], ['123456', '123456']] as [$headPlate, $chassisPlate]) {
             $this->patch("/contenedores/{$containerId}", array_replace($ingressData, [
                 'placa_cabezal' => $headPlate,
                 'placa_chasis' => $chassisPlate,
@@ -288,17 +279,13 @@ class OperationalFlowTest extends TestCase
         $this->actingAs($admin)
             ->withSession(['sucursal_activa' => $branchId])
             ->get("/seguimiento-pyp?patio_id={$patioId}&bloque_id={$destinationBlockId}")
-            ->assertOk()
-            ->assertSee('Seguimiento PYP')
-            ->assertSee('Estado PYP del bloque')
-            ->assertSee('data-pyp-dialog="assign"', false)
-            ->assertSee($containerCode);
+            ->assertRedirect(route('containers.index', ['patio_id' => $patioId, 'bloque_id' => $destinationBlockId]));
 
         $this->actingAs($admin)
             ->withSession(['sucursal_activa' => $branchId])
-            ->get("/seguimiento-pyp?patio_id={$patioId}&bloque_id={$originBlockId}&search={$containerCode}")
+            ->get("/contenedores?patio_id={$patioId}&bloque_id={$destinationBlockId}&search={$containerCode}")
             ->assertOk()
-            ->assertSee('Resultados en la sucursal')
+            ->assertSee('Inventario del Bloque')
             ->assertSee($containerCode)
             ->assertSee('Bloque 102');
 
@@ -327,7 +314,7 @@ class OperationalFlowTest extends TestCase
 
         $this->actingAs($admin)
             ->withSession(['sucursal_activa' => $branchId])
-            ->post('/despachos', ['contenedor_id' => $containerId])
+            ->post('/despachos', ['contenedor_id' => $containerId] + $ingressData)
             ->assertRedirect()
             ->assertSessionHasErrors('dispatch');
         $this->assertSame(1, (int) DB::table('contenedores')->where('id', $containerId)->value('estado_id'));
@@ -337,28 +324,26 @@ class OperationalFlowTest extends TestCase
             ->withSession(['sucursal_activa' => $branchId])
             ->get("/seguimiento-pyp?patio_id={$patioId}&bloque_id={$destinationBlockId}")
             ->assertOk()
-            ->assertSee('Estatus PYP')
+            ->assertSee('Auditoría externa')
             ->assertSee('data-pyp-dialog="info"', false);
 
-        $this->actingAs($pyp)
-            ->withSession(['sucursal_activa' => $branchId])
-            ->patch("/contenedores/{$containerId}/pyp", [
-                'estatus_pyp' => 'Rechazado',
-                'informacion_adicional' => 'Requiere reparacion',
-            ])
-            ->assertRedirect('/seguimiento-pyp')
-            ->assertSessionHasNoErrors();
+        $revision = fn (): int => (int) DB::table('container_assignment_events')->where('container_id', $containerId)->max('id');
+        $this->post(route('pyp-audits.begin', $containerId), ['audit_version' => $revision()])->assertSessionHasNoErrors();
+        $this->patch("/contenedores/{$containerId}/pyp", [
+            'audit_version' => $revision(), 'estatus_pyp' => 'Rechazado',
+            'informacion_adicional' => 'Se requiere reparar el sello de la puerta lateral del contenedor.',
+        ])->assertSessionHasErrors('photos');
 
         $this->actingAs($admin)
             ->withSession(['sucursal_activa' => $branchId])
             ->get('/despachos/contenedores?query='.$containerCode)
             ->assertOk()
-            ->assertJsonPath('0.estatus_pyp', 'Rechazado')
+            ->assertJsonPath('0.estatus_pyp', 'En revision')
             ->assertJsonPath('0.puede_despachar', false);
 
         $this->actingAs($admin)
             ->withSession(['sucursal_activa' => $branchId])
-            ->post('/despachos', ['contenedor_id' => $containerId])
+            ->post('/despachos', ['contenedor_id' => $containerId] + $ingressData)
             ->assertRedirect()
             ->assertSessionHasErrors('dispatch');
 
@@ -366,9 +351,10 @@ class OperationalFlowTest extends TestCase
             ->withSession(['sucursal_activa' => $branchId])
             ->patch("/contenedores/{$containerId}/pyp", [
                 'estatus_pyp' => 'Aprobado',
-                'informacion_adicional' => 'Auditoria QA aprobada',
+                'audit_version' => $revision(),
+                'informacion_adicional' => 'La inspeccion confirma que el equipo cumple las condiciones operativas.',
             ])
-            ->assertRedirect('/seguimiento-pyp')
+            ->assertRedirect(route('pyp-audits.history', ['container' => $containerId]))
             ->assertSessionHasNoErrors();
 
         $this->actingAs($admin)
@@ -394,7 +380,7 @@ class OperationalFlowTest extends TestCase
 
         $this->actingAs($admin)
             ->withSession(['sucursal_activa' => $branchId])
-            ->post('/despachos', ['contenedor_id' => $containerId])
+            ->post('/despachos', ['contenedor_id' => $containerId] + $ingressData)
             ->assertRedirect()
             ->assertSessionHasErrors('dispatch');
 
@@ -404,9 +390,9 @@ class OperationalFlowTest extends TestCase
             ->withSession(['sucursal_activa' => $branchId])
             ->post('/despachos', [
                 'contenedor_id' => $containerId,
-                'observaciones' => 'Despacho QA',
-            ])
-            ->assertRedirect('/despachos')
+                'observaciones' => 'El contenedor se entrega en las condiciones verificadas durante la inspeccion.',
+            ] + $ingressData)
+            ->assertRedirect()
             ->assertSessionHasNoErrors();
 
         $this->assertSame(2, (int) DB::table('contenedores')->where('id', $containerId)->value('estado_id'));

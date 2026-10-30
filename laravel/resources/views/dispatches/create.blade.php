@@ -7,10 +7,6 @@
             <h1>Despachos</h1>
             <p>Revisa las condiciones del contenedor antes de registrar su salida.</p>
         </div>
-        <div class="toolbar-actions">
-            <a href="{{ route('documents.dispatch.eir') }}" class="button secondary">EIR salida</a>
-            <a href="{{ route('documents.dispatch.ticket') }}" class="button secondary">Ticket salida</a>
-        </div>
     </section>
 
     @if ($errors->any())
@@ -18,14 +14,15 @@
     @endif
 
     <section class="form-panel transfer-panel">
-        <form method="POST" action="{{ route('dispatches.store') }}" class="container-form transfer-form dispatch-form" id="dispatchForm">
+        <form method="POST" action="{{ route('dispatches.store') }}" class="container-form transfer-form dispatch-form" id="dispatchForm" data-unsaved-form="dispatchExitDialog" data-restored-changes="{{ $errors->any() ? 'true' : 'false' }}">
             @csrf
             <input type="hidden" id="contenedor_id" name="contenedor_id" value="{{ old('contenedor_id', $selectedContainer?->id) }}" required>
 
-            <div class="container-form-timeline transfer-timeline" aria-label="Pasos del despacho">
+            <div class="container-form-timeline transfer-timeline dispatch-timeline" aria-label="Pasos del despacho">
                 <button type="button" class="timeline-step active" data-dispatch-step="0"><span>01</span><strong>Seleccionar</strong></button>
                 <button type="button" class="timeline-step" data-dispatch-step="1" disabled><span>02</span><strong>Revisar</strong></button>
-                <button type="button" class="timeline-step" data-dispatch-step="2" disabled><span>03</span><strong>Confirmar</strong></button>
+                <button type="button" class="timeline-step" data-dispatch-step="2" disabled><span>03</span><strong>Transporte</strong></button>
+                <button type="button" class="timeline-step" data-dispatch-step="3" disabled><span>04</span><strong>Confirmar</strong></button>
             </div>
 
             <div class="transfer-workspace dispatch-workspace">
@@ -37,6 +34,15 @@
                     <div class="transfer-search">
                         <label for="buscar_contenedor">Buscar en la sucursal</label>
                         <input type="search" id="buscar_contenedor" value="{{ old('buscar_contenedor') }}" maxlength="255" autocomplete="off" placeholder="Numero de equipo">
+                    </div>
+                    <div class="record-form transfer-fields record-select-fields" data-dispatch-location>
+                        <label><span>Patio origen</span><select id="dispatchPatio" name="patio_id" data-admin-select>
+                            <option value="">Selecciona un patio</option>
+                            @foreach ($dispatchLocations as $patio)
+                                <option value="{{ $patio['id'] }}">{{ $patio['nombre'] }}</option>
+                            @endforeach
+                        </select></label>
+                        <label><span>Bloque origen</span><select id="dispatchBlock" name="bloque_id" data-admin-select disabled><option value="">Selecciona un bloque</option></select></label>
                     </div>
                     <div class="transfer-list dispatch-list" id="dispatchResults" aria-label="Contenedores encontrados" aria-live="polite">
                         <p class="empty-cell">Escribe al menos 2 caracteres para buscar un contenedor activo.</p>
@@ -67,30 +73,56 @@
                         </div>
                     </div>
                     <p class="dispatch-eligibility" id="dispatchEligibility" role="status"></p>
-                    <label class="record-form dispatch-observations" for="observaciones">
-                        <span>Observaciones de salida <small>(opcional)</small></span>
-                        <textarea id="observaciones" name="observaciones" rows="3" maxlength="150">{{ old('observaciones') }}</textarea>
-                        <small id="charCount">0 / 150</small>
-                    </label>
                 </div>
 
-                <div class="transfer-phase transfer-confirm dispatch-phase dispatch-confirm" data-dispatch-phase="2" hidden>
+                <div class="transfer-phase dispatch-phase dispatch-transport" data-dispatch-phase="2" hidden>
+                    <div class="transfer-section-heading"><span class="transfer-step">03</span><div><span class="eyebrow">Transporte</span><h2 class="section-title">Datos del retiro</h2></div></div>
+                    <div class="container-form-grid">
+                        <div class="dispatch-field"><span id="dispatchShippingLineLabel">Naviera</span><input id="dispatchShippingLine" aria-labelledby="dispatchShippingLineLabel" readonly></div>
+                        <div class="dispatch-field"><span id="dispatchAuditCompanyLabel">Auditora indicada por la naviera</span><input id="dispatchAuditCompany" aria-labelledby="dispatchAuditCompanyLabel" readonly></div>
+                        <div class="dispatch-field"><div class="plate-field-title"><span id="dispatchTransportLabel">Quien lo retira</span>@include('partials.field-help', ['helpId' => 'dispatchCarrierHelp', 'helpLabel' => 'Ayuda de transportista', 'helpText' => 'Empresa o transportista responsable de retirar el contenedor. No es el nombre del piloto. Maximo 100 caracteres.'])</div><input name="transportista" aria-labelledby="dispatchTransportLabel" maxlength="100" placeholder="Transportista o empresa" value="{{ old('transportista') }}" required></div>
+                        <div class="dispatch-field"><div class="plate-field-title"><span id="dispatchDriverLabel">Piloto</span>@include('partials.field-help', ['helpId' => 'dispatchDriverHelp', 'helpLabel' => 'Ayuda de piloto', 'helpText' => 'Nombre y apellidos de quien conduce el cabezal. Obligatorio, maximo 80 caracteres.'])</div><input name="conductor" aria-labelledby="dispatchDriverLabel" maxlength="80" placeholder="Nombre y apellidos" value="{{ old('conductor') }}" required></div>
+                        <div class="dispatch-field"><div class="plate-field-title"><span id="dispatchTruckPlateLabel">Placa cabezal</span>@include('partials.field-help', ['helpId' => 'dispatchTruckHelp', 'helpLabel' => 'Ayuda de placa cabezal', 'helpText' => 'Placa del vehiculo tractor. Obligatoria: 6 a 8 letras o numeros, incluyendo al menos un numero; espacios o guiones permitidos. Ejemplo: C123ABC.'])</div><input name="placa_cabezal" aria-labelledby="dispatchTruckPlateLabel" maxlength="15" data-plate-max="8" pattern="{{ \App\Services\TransportPlate::PATTERN }}" value="{{ old('placa_cabezal') }}" required></div>
+                        <div class="dispatch-field"><div class="plate-field-title"><span id="dispatchChassisPlateLabel">Placa chasis</span>@include('partials.field-help', ['helpId' => 'dispatchChassisHelp', 'helpLabel' => 'Ayuda de placa chasis', 'helpText' => 'Placa del remolque que transporta el contenedor, no de su estructura. Obligatoria: 6 a 8 letras o numeros, incluyendo al menos un numero. Ejemplo: RE123456.'])</div><input name="placa_chasis" aria-labelledby="dispatchChassisPlateLabel" maxlength="15" data-plate-max="8" pattern="{{ \App\Services\TransportPlate::PATTERN }}" value="{{ old('placa_chasis') }}" required></div>
+                    </div>
+                    <div class="record-form dispatch-observations">
+                        <div class="plate-field-title"><span id="dispatchObservationsLabel">Observaciones de salida <small>(opcional)</small></span>@include('partials.field-help', ['helpId' => 'dispatchNotesHelp', 'helpLabel' => 'Ayuda de observaciones de salida', 'helpText' => 'Anota detalles relevantes de la entrega. Puedes dejarlo vacio; si escribes, utiliza entre 40 y 150 caracteres.'])</div>
+                        <textarea id="observaciones" name="observaciones" rows="3" minlength="40" maxlength="150" aria-labelledby="dispatchObservationsLabel" aria-describedby="dispatchObservationsHint charCount">{{ old('observaciones') }}</textarea>
+                        <small id="dispatchObservationsHint" class="technical-field-hint" role="alert" hidden></small>
+                        <small id="charCount">Minimo 40 al escribir · 0 / 150</small>
+                    </div>
+                </div>
+
+                <div class="transfer-phase transfer-confirm dispatch-phase dispatch-confirm" data-dispatch-phase="3" hidden>
                     <div class="transfer-section-heading">
-                        <span class="transfer-step">03</span>
+                        <span class="transfer-step">04</span>
                         <div><span class="eyebrow">Confirmacion</span><h2 class="section-title">Confirmar salida</h2></div>
                     </div>
                     <div class="transfer-confirm-content">
-                        <p class="transfer-confirm-intro">Comprueba los datos antes de retirar el contenedor del inventario activo.</p>
-                        <div class="transfer-confirm-equipment">
-                            <span>Contenedor a despachar</span>
-                            <strong id="dispatchConfirmName">-</strong>
-                        </div>
-                        <dl class="dispatch-confirm-details">
-                            <div><dt>Ubicacion actual</dt><dd id="dispatchConfirmLocation">-</dd></div>
-                            <div><dt>Validaciones</dt><dd>IPSA disponible · PYP aprobado · Salida libre</dd></div>
-                            <div><dt>Observaciones</dt><dd id="dispatchConfirmObservations">Sin observaciones.</dd></div>
+                        <header class="dispatch-summary-head">
+                            <div class="dispatch-summary-equipment"><span>Contenedor</span><strong id="dispatchConfirmName">-</strong></div>
+                            <div class="dispatch-summary-location"><span>Ubicacion de retiro</span><strong id="dispatchConfirmLocation">-</strong></div>
+                        </header>
+                        <dl class="dispatch-summary-checks" aria-label="Condiciones de salida">
+                            <div><dt>Estado IPSA</dt><dd><span class="status-badge badge-success">Disponible</span></dd></div>
+                            <div><dt>Auditoria externa</dt><dd><span class="status-badge badge-success">Aprobada</span></dd></div>
+                            <div><dt>Acceso fisico</dt><dd><span class="status-badge badge-success">Salida libre</span></dd></div>
                         </dl>
-                        <p class="transfer-confirm-note">La disponibilidad se comprobara de nuevo al registrar el despacho.</p>
+                        <section class="dispatch-summary-section" aria-labelledby="dispatchTransportHeading">
+                            <h3 id="dispatchTransportHeading">Datos de la entrega</h3>
+                            <dl class="dispatch-confirm-details">
+                                <div><dt>Naviera</dt><dd id="dispatchConfirmShippingLine">-</dd></div>
+                                <div><dt>Auditora</dt><dd id="dispatchConfirmAuditCompany">-</dd></div>
+                                <div><dt>Transportista / empresa</dt><dd id="dispatchConfirmTransport">-</dd></div>
+                                <div><dt>Piloto</dt><dd id="dispatchConfirmDriver">-</dd></div>
+                                <div><dt>Placa cabezal</dt><dd id="dispatchConfirmPlates">-</dd></div>
+                                <div><dt>Placa chasis</dt><dd id="dispatchConfirmChassis">-</dd></div>
+                            </dl>
+                        </section>
+                        <section class="dispatch-summary-section dispatch-summary-notes" aria-labelledby="dispatchNotesHeading">
+                            <h3 id="dispatchNotesHeading">Observaciones de salida</h3>
+                            <p id="dispatchConfirmObservations">Sin observaciones.</p>
+                        </section>
                     </div>
                 </div>
 
@@ -115,7 +147,10 @@
         </form>
     </section>
 
+    @include('partials.unsaved-changes', ['exitDialogId' => 'dispatchExitDialog', 'exitDialogKicker' => 'Confirmar salida', 'exitDialogTitle' => '¿Seguro que quieres salir?', 'exitDialogDescription' => 'Los cambios se perderán.'])
+
     <script>
+        document.addEventListener('DOMContentLoaded', function () {
         const preselectedContainer = @json($selectedContainer);
         let pendingContainerId = @json((string) old('contenedor_id', $selectedContainer?->id));
         const searchInput = document.getElementById('buscar_contenedor');
@@ -142,6 +177,51 @@
         let searchRequestId = 0;
         let previewRequestId = 0;
         let searchTimer;
+        let searchController;
+        const locations = @json($dispatchLocations);
+        const patioSelect = document.getElementById('dispatchPatio');
+        const blockSelect = document.getElementById('dispatchBlock');
+        const locationGate = window.createInteractionGate((busy) => {
+            patioSelect.disabled = busy;
+            blockSelect.disabled = busy || !patioSelect.value;
+            patioSelect.dispatchEvent(new Event('options-updated'));
+            blockSelect.dispatchEvent(new Event('options-updated'));
+            if (results.length) renderResults();
+        });
+        function fillBlocks(selected = '') {
+            const patio = locations.find((item) => String(item.id) === patioSelect.value);
+            blockSelect.replaceChildren(new Option('Selecciona un bloque', ''));
+            (patio?.blocks || []).forEach((block) => blockSelect.add(new Option(`Bloque ${block.numero} (${block.count}/${block.capacity})`, block.id)));
+            blockSelect.value = String(selected);
+            blockSelect.disabled = locationGate.busy || !patio;
+            blockSelect.dispatchEvent(new Event('options-updated'));
+        }
+        function loadLocation() {
+            return locationGate.run(async () => {
+                clearTimeout(searchTimer);
+                pendingContainerId = '';
+                searchInput.value = '';
+                results = [];
+                clearSelection();
+                const requestId = ++searchRequestId;
+                if (blockSelect.value) {
+                    resultsWrap.innerHTML = '<p class="empty-cell">Cargando contenedores...</p>';
+                    await searchContainers('', requestId, blockSelect.value);
+                } else {
+                    searchController?.abort();
+                    results = [];
+                    resultsWrap.innerHTML = '<p class="empty-cell">Selecciona un bloque de origen.</p>';
+                }
+            });
+        }
+        patioSelect.addEventListener('change', () => { fillBlocks(); loadLocation(); });
+        blockSelect.addEventListener('change', loadLocation);
+        const selectionGate = window.createInteractionGate((busy) => {
+            resultsWrap.setAttribute('aria-busy', String(busy));
+            resultsWrap.querySelectorAll('[data-id]').forEach((button) => {
+                button.disabled = busy || locationGate.busy || (!previewFailed && button.dataset.id === String(selectedItem?.id));
+            });
+        });
 
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, function (character) {
@@ -158,6 +238,7 @@
             if (!item.ipsa_disponible) reasons.push('IPSA no esta disponible');
             if (!item.auditoria_aprobada) reasons.push(item.situacion_auditoria || (item.estatus_pyp ? 'PYP: ' + item.estatus_pyp : 'Falta auditoria PYP'));
             if (item.bloqueado_fisicamente) reasons.push(item.bloqueadores + ' contenedor(es) delante');
+            if (item.mantenimiento_pendiente) reasons.push('Mantenimiento o confirmacion interna pendiente');
             return reasons;
         }
 
@@ -169,7 +250,7 @@
             resultsWrap.innerHTML = results.map(function (item) {
                 const selected = String(item.id) === String(selectedItem?.id);
                 const detail = item.puede_despachar ? 'Listo para despacho' : blockingReasons(item).join(' · ');
-                return `<button type="button" class="transfer-item ${item.puede_despachar ? '' : 'blocked'} ${selected ? 'selected' : ''}" data-id="${item.id}" aria-pressed="${selected}">
+                return `<button type="button" class="transfer-item ${item.puede_despachar ? '' : 'blocked'} ${selected ? 'selected' : ''}" data-id="${item.id}" aria-pressed="${selected}" ${selectionGate.busy || locationGate.busy || selected ? 'disabled' : ''}>
                     <span class="transfer-item-position">P${item.posicion}</span>
                     <span class="transfer-item-body"><strong>${escapeHtml(item.nombre)}</strong><small>${escapeHtml(detail)}</small></span>
                     <span class="transfer-item-status ${item.puede_despachar ? '' : 'blocked'}">${item.puede_despachar ? 'Listo' : 'Revisar'}</span>
@@ -202,7 +283,8 @@
         }
 
         function refreshPreview() {
-            previewPanel.hidden = currentStep === 2;
+            previewPanel.hidden = currentStep >= 2;
+            document.querySelector('.dispatch-workspace').classList.toggle('is-document-step', currentStep >= 2);
             const hasScene = Boolean(selectedItem && blockPreview);
             previewEmpty.hidden = hasScene;
             previewEmpty.textContent = previewFailed ? 'No se pudo cargar la vista 3D.' : 'Selecciona un contenedor para ver el bloque.';
@@ -251,11 +333,23 @@
             document.getElementById('dispatchConfirmName').textContent = selectedItem.nombre;
             document.getElementById('dispatchConfirmLocation').textContent = locationLabel(selectedItem);
             document.getElementById('dispatchConfirmObservations').textContent = observations.value.trim() || 'Sin observaciones.';
+            const fieldValue = (name) => document.querySelector(`#dispatchForm [name="${name}"]`).value.trim();
+            document.getElementById('dispatchConfirmTransport').textContent = fieldValue('transportista');
+            document.getElementById('dispatchConfirmDriver').textContent = fieldValue('conductor');
+            document.getElementById('dispatchConfirmPlates').textContent = fieldValue('placa_cabezal');
+            document.getElementById('dispatchConfirmChassis').textContent = fieldValue('placa_chasis');
+            document.getElementById('dispatchConfirmShippingLine').textContent = selectedItem.naviera || 'Sin naviera registrada';
+            document.getElementById('dispatchConfirmAuditCompany').textContent = selectedItem.auditora || 'Sin auditora registrada';
         }
 
         function setStep(step) {
             if (step > 0 && !selectedItem) return;
             if (step > 1 && !selectedItem?.puede_despachar) return;
+            if (step > 2) {
+                if (!validateObservations()) return;
+                const invalid = [...phases[2].querySelectorAll('input, textarea')].find((field) => !field.checkValidity());
+                if (invalid) { setStep(2); invalid.reportValidity(); return; }
+            }
             currentStep = step;
             phases.forEach((phase, index) => { phase.hidden = index !== step; });
             steps.forEach((button, index) => {
@@ -264,12 +358,12 @@
                 button.setAttribute('aria-current', index === step ? 'step' : 'false');
             });
             previousButton.hidden = step === 0;
-            nextButton.hidden = step === 2;
-            nextButton.disabled = step === 0 ? !selectedItem : step === 1 ? !selectedItem?.puede_despachar : true;
-            dispatchButton.hidden = step !== 2;
+            nextButton.hidden = step === 3;
+            nextButton.disabled = step === 0 ? !selectedItem : !selectedItem?.puede_despachar;
+            dispatchButton.hidden = step !== 3;
             dispatchButton.disabled = !selectedItem?.puede_despachar;
-            (step === 2 ? phases[2] : previewPanel).appendChild(actions);
-            if (step === 2) updateConfirmation();
+            (step >= 2 ? phases[step] : previewPanel).appendChild(actions);
+            if (step === 3) updateConfirmation();
             refreshPreview();
         }
 
@@ -278,19 +372,29 @@
             if (!selectedItem && currentStep > 0) setStep(0);
             steps[1].disabled = !selectedItem;
             steps[2].disabled = !selectedItem?.puede_despachar;
+            steps[3].disabled = !selectedItem?.puede_despachar;
             nextButton.disabled = currentStep === 0 ? !selectedItem : !selectedItem?.puede_despachar;
             dispatchButton.disabled = !selectedItem?.puede_despachar;
-            if (currentStep === 2 && !selectedItem?.puede_despachar) setStep(1);
+            if (currentStep >= 2 && !selectedItem?.puede_despachar) setStep(1);
+            document.getElementById('dispatchShippingLine').value = selectedItem?.naviera || '';
+            document.getElementById('dispatchAuditCompany').value = selectedItem?.auditora || '';
             if (selectedItem) updateValidation();
             renderResults();
             refreshPreview();
         }
 
         function selectContainer(item) {
-            selectedItem = item;
-            searchInput.value = item.nombre;
-            updateSelection();
-            loadPreview(item);
+            if (locationGate.busy) return;
+            if (String(selectedItem?.id) === String(item.id) && !previewFailed) return;
+            return selectionGate.run(async () => {
+                selectedItem = item;
+                patioSelect.value = String(item.patio_id);
+                patioSelect.dispatchEvent(new Event('options-updated'));
+                fillBlocks(item.bloque_id);
+                searchInput.value = item.nombre;
+                updateSelection();
+                await loadPreview(item);
+            });
         }
 
         function clearSelection() {
@@ -301,9 +405,13 @@
             updateSelection();
         }
 
-        async function searchContainers(query, requestId) {
+        async function searchContainers(query, requestId, blockId = '') {
+            searchController?.abort();
+            searchController = new AbortController();
             try {
-                const response = await fetch('{{ route('dispatches.search') }}?query=' + encodeURIComponent(query));
+                const params = new URLSearchParams({ query });
+                if (blockId) params.set('bloque_id', blockId);
+                const response = await fetch('{{ route('dispatches.search') }}?' + params, { signal: searchController.signal });
                 if (!response.ok) throw new Error();
                 const matches = await response.json();
                 if (requestId !== searchRequestId) return;
@@ -329,6 +437,11 @@
             if (selectedItem && query.toUpperCase() !== selectedItem.nombre) clearSelection();
             const requestId = ++searchRequestId;
             if (query.length < 2) {
+                if (blockSelect.value) {
+                    searchTimer = setTimeout(() => searchContainers('', requestId, blockSelect.value), 220);
+                    return;
+                }
+                searchController?.abort();
                 results = [];
                 resultsWrap.innerHTML = '<p class="empty-cell">Escribe al menos 2 caracteres para buscar un contenedor activo.</p>';
                 return;
@@ -348,19 +461,41 @@
         steps.forEach((button, index) => button.addEventListener('click', () => setStep(index)));
 
         observations.addEventListener('input', function () {
-            charCount.textContent = observations.value.length + ' / 150';
-            if (currentStep === 2) updateConfirmation();
+            charCount.textContent = 'Minimo 40 al escribir · ' + observations.value.length + ' / 150';
+            if (observations.getAttribute('aria-invalid') === 'true') validateObservations(false);
+            if (currentStep === 3) updateConfirmation();
         });
-        charCount.textContent = observations.value.length + ' / 150';
+        charCount.textContent = 'Minimo 40 al escribir · ' + observations.value.length + ' / 150';
+        document.querySelectorAll('#dispatchForm input[data-plate-max]').forEach((input) => {
+            input.addEventListener('input', () => { input.value = input.value.toUpperCase(); });
+        });
 
         document.getElementById('dispatchForm').addEventListener('submit', function (event) {
-            if (!selectedItem?.puede_despachar || currentStep !== 2) {
+            if (!validateObservations()) {
+                event.preventDefault();
+                return;
+            }
+            if (!selectedItem?.puede_despachar || currentStep !== 3) {
                 event.preventDefault();
                 return;
             }
             dispatchButton.disabled = true;
             dispatchButton.textContent = 'Registrando...';
         });
+        document.getElementById('dispatchForm').addEventListener('invalid', () => setStep(2), true);
+
+        function validateObservations(focus = true) {
+            const message = window.dispatchObservationsError(observations.value);
+            const hint = document.getElementById('dispatchObservationsHint');
+            hint.textContent = message;
+            hint.hidden = !message;
+            observations.setAttribute('aria-invalid', String(Boolean(message)));
+            if (message && focus) {
+                if (currentStep !== 2) setStep(2);
+                observations.focus();
+            }
+            return !message;
+        }
 
         if (preselectedContainer) {
             searchInput.value = preselectedContainer.nombre;
@@ -368,5 +503,6 @@
         } else if (searchInput.value.trim().length >= 2) {
             searchContainers(searchInput.value.trim(), ++searchRequestId);
         }
+        });
     </script>
 @endsection

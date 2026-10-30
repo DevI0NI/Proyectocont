@@ -15,6 +15,18 @@ class AdministrationTable
         $column = fn (string $key, string $label, string|array $fields, ?Builder $relation = null, int $scale = 1): array => compact('key', 'label', 'fields', 'relation', 'scale');
 
         return match ($scope) {
+            'correction-history' => [
+                $column('number', 'Corrección', 'correction_history.number') + ['numeric' => true],
+                $column('date', 'Fecha de solicitud', ['correction_history.created_at', 'correction_history.display_date']),
+                $column('requester', 'Solicitada por', 'correction_history.requester_name') + ['filter_field' => 'correction_history.requested_by'],
+                $column('status', 'Estado', 'correction_history.status_label') + ['filter_field' => 'correction_history.status'],
+            ],
+            'audit-history' => [
+                $column('date', 'Fecha', ['audit_history.created_at', 'audit_history.display_date']),
+                $column('inspector', 'Inspector', 'audit_history.inspector_name') + ['filter_field' => 'audit_history.inspector_id'],
+                $column('status', 'Resultado', 'audit_history.status') + ['filter_field' => 'audit_history.status'],
+                $column('notes', 'Observaciones', 'audit_history.notes'),
+            ],
             'repair-history' => [
                 $column('date', 'Fecha de inicio', ['repair_history.created_at', 'repair_history.display_date']),
                 $column('name', 'Reparación', 'repair_history.repair_type') + ['filter_field' => 'repair_history.repair_type'],
@@ -94,9 +106,10 @@ class AdministrationTable
             }
         }
         $sortableColumns = collect($columns)->filter(fn (array $column) => $column['sortable'] ?? true);
-        $defaultSort = $scope === 'repair-history' ? 'date' : 'name';
+        $history = in_array($scope, ['repair-history', 'audit-history', 'correction-history'], true);
+        $defaultSort = $history ? 'date' : 'name';
         $sort = $sortableColumns->firstWhere('key', $request->query('sort')) ?? $sortableColumns->firstWhere('key', $defaultSort);
-        $direction = $request->query('order', $scope === 'repair-history' ? 'desc' : 'asc') === 'desc' ? 'desc' : 'asc';
+        $direction = $request->query('order', $history ? 'desc' : 'asc') === 'desc' ? 'desc' : 'asc';
         $field = (array) $sort['fields'];
         $query->reorder()->orderBy($sort['relation'] ? (clone $sort['relation'])->select($field[0])->orderBy($field[0])->limit(1) : $field[0], $direction);
         $table = $tableAlias ?? ($query instanceof EloquentBuilder ? $query->getModel()->getTable() : $query->from);

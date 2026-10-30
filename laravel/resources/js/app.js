@@ -8,13 +8,24 @@ import './maintenance';
 import '../css/maintenance.css';
 import '../css/notifications.css';
 import '../css/external-audits.css';
+import './external-audit-charts';
+import './reports';
+import './container-history';
 import './notifications';
+import './unsaved-changes';
+import './technical-form-validation';
+import './documentary-validation';
+import './interaction-gate';
 import './parking';
 import './operational-catalogs';
 import './sidebar-groups';
 import './administration';
 import './branch-modals';
 import './user-modals';
+import './account-password';
+import './account-recovery-dialog';
+import './account-flash';
+import './account-review-modal';
 import './unit-types';
 import './shipping-lines';
 import './container-statuses';
@@ -27,6 +38,7 @@ const yardScenes = new WeakMap();
 const ingressLocationScenes = new WeakMap();
 
 document.addEventListener('DOMContentLoaded', () => {
+    if (document.querySelector('[data-dispatch-location]')) initializeRecordSelects();
     document.querySelectorAll('.container-form').forEach((form) => {
         [['estado_unidad', 'observaciones_estado'], ['status_box', 'observaciones_box']].forEach(([statusName, notesName]) => {
             const status = form.elements.namedItem(statusName);
@@ -48,7 +60,31 @@ document.addEventListener('DOMContentLoaded', () => {
             sync();
         });
     });
-    if (document.querySelector('[data-external-audit-form]')) initializeRecordSelects();
+    if (document.querySelector('[data-external-audit-form]')) {
+        initializeRecordSelects();
+        document.querySelectorAll('[data-external-audit-form]').forEach((form) => {
+            const notes = form.querySelector('[data-audit-notes]');
+            const count = form.querySelector('[data-audit-count]');
+            if (notes && count) notes.addEventListener('input', () => { count.textContent = String(Array.from(notes.value).length); });
+            const photos = form.querySelector('.external-audit-assessment [data-correction-photo-group]');
+            if (notes && photos) {
+                const desktop = matchMedia('(min-width: 961px)');
+                const alignNotes = () => {
+                    const carousel = photos.querySelector('[data-photo-carousel]');
+                    if (!desktop.matches || carousel.hidden || !carousel.querySelector('figure')) {
+                        notes.style.removeProperty('height');
+                        return;
+                    }
+                    const navigation = carousel.querySelector('[data-photo-navigation]');
+                    const navigationHeight = navigation.hidden ? 0 : navigation.getBoundingClientRect().height + parseFloat(getComputedStyle(carousel).rowGap);
+                    const height = photos.getBoundingClientRect().bottom - notes.getBoundingClientRect().top - navigationHeight;
+                    notes.style.height = `${Math.max(220, Math.round(height))}px`;
+                };
+                new ResizeObserver(alignNotes).observe(photos);
+                desktop.addEventListener('change', alignNotes);
+            }
+        });
+    }
     document.querySelectorAll('[data-field-help]').forEach((button) => {
         button.replaceChildren(createElement(CircleHelp, { 'aria-hidden': 'true' }));
         const tooltip = document.getElementById(button.getAttribute('aria-describedby'));
@@ -527,6 +563,8 @@ function disposeYardScene(canvas) {
 }
 
 function initYard3d(canvas) {
+    const signature = JSON.stringify([canvas.dataset.yardScene, document.documentElement.getAttribute('data-theme')]);
+    if (yardScenes.get(canvas)?.signature === signature) return;
     const data = parseYardScene(canvas);
     const blocks = Array.isArray(data.blocks) ? data.blocks : [];
     const hasVisualFilters = Boolean(data.has_visual_filters);
@@ -542,8 +580,10 @@ function initYard3d(canvas) {
     const actionDispatch = actionPanel?.querySelector('[data-yard-action-dispatch]');
     const actionMaintenance = actionPanel?.querySelector('[data-yard-action-maintenance]');
     const actionHistory = actionPanel?.querySelector('[data-yard-action-history]');
+    const actionAuditForm = actionPanel?.querySelector('[data-yard-audit-start]');
 
     if (!stage || !blocks.length) {
+        disposeYardScene(canvas);
         return;
     }
 
@@ -764,6 +804,10 @@ function initYard3d(canvas) {
         if (actionName) actionName.textContent = item.nombre || 'Sin nombre';
         if (actionMeta) actionMeta.textContent = `Posicion ${item.posicion}`;
         if (actionMaintenance) actionMaintenance.textContent = actions.maintenance_label || 'Iniciar trabajo';
+        if (actionAuditForm && actions.maintenance) {
+            actionAuditForm.action = actions.maintenance;
+            actionAuditForm.elements.namedItem('audit_version').value = String(actions.audit_version);
+        }
 
         [
             [actionInfo, actions.info],
@@ -911,12 +955,22 @@ function initYard3d(canvas) {
     canvas.addEventListener('pointerleave', handlePointerLeave);
     canvas.addEventListener('pointerup', handlePointerUp);
     actionClose?.addEventListener('click', hideActions);
+    const beginAudit = (event) => {
+        if (!actionAuditForm) return;
+        event.preventDefault();
+        actionAuditForm.requestSubmit();
+    };
+    actionMaintenance?.addEventListener('click', beginAudit);
 
     resize();
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(stage);
 
     function animate() {
+        if (!canvas.isConnected) {
+            disposeYardScene(canvas);
+            return;
+        }
         controls.update();
         renderer.render(scene, camera);
         const state = yardScenes.get(canvas);
@@ -931,10 +985,11 @@ function initYard3d(canvas) {
         canvas.removeEventListener('pointerleave', handlePointerLeave);
         canvas.removeEventListener('pointerup', handlePointerUp);
         actionClose?.removeEventListener('click', hideActions);
+        actionMaintenance?.removeEventListener('click', beginAudit);
         cancelAnimationFrame(hoverFrame);
     };
 
-    yardScenes.set(canvas, { scene, renderer, camera, controls, resizeObserver, cleanup, frame: 0 });
+    yardScenes.set(canvas, { signature, scene, renderer, camera, controls, resizeObserver, cleanup, frame: 0 });
     animate();
 }
 
@@ -976,6 +1031,8 @@ function disposeIngressLocationScene(canvas) {
 }
 
 function initIngressLocation3d(canvas) {
+    const signature = JSON.stringify([canvas.dataset.scene, document.documentElement.getAttribute('data-theme')]);
+    if (ingressLocationScenes.get(canvas)?.signature === signature) return;
     const data = parseIngressLocationScene(canvas);
     const block = data.block || null;
     const containers = Array.isArray(data.containers) ? data.containers : [];
@@ -1359,12 +1416,17 @@ function initIngressLocation3d(canvas) {
     };
     let frame = 0;
     function animate() {
+        if (!canvas.isConnected) {
+            disposeIngressLocationScene(canvas);
+            return;
+        }
         frame = requestAnimationFrame(animate);
         controls.update();
         renderer.render(scene, camera);
     }
 
     ingressLocationScenes.set(canvas, {
+        signature,
         scene,
         renderer,
         camera,
@@ -1393,9 +1455,15 @@ document.addEventListener('livewire:navigated', initIngressLocation3dScenes);
 window.addEventListener('ingress-location3d:update', initIngressLocation3dScenes);
 
 document.addEventListener('livewire:init', () => {
+    let pendingFrame = false;
     window.Livewire?.hook?.('morph.updated', () => {
-        requestAnimationFrame(initYard3dScenes);
-        requestAnimationFrame(initIngressLocation3dScenes);
+        if (pendingFrame) return;
+        pendingFrame = true;
+        requestAnimationFrame(() => {
+            pendingFrame = false;
+            initYard3dScenes();
+            initIngressLocation3dScenes();
+        });
     });
 });
 

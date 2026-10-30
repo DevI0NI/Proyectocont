@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class EstatusIpsa extends Model
@@ -15,5 +16,10 @@ class EstatusIpsa extends Model
     public function scopeActive($query)
     {
         return $query->where('estado_id', 1);
+    }
+
+    public function scopeAvailable(Builder $query): Builder
+    {
+        return $query->where('estado_id', 1)->whereRaw("UPPER(TRIM(nombre)) = 'DISPONIBLE'");
     }
 }

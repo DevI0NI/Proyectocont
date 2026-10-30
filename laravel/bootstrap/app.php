@@ -2,6 +2,8 @@
 
 use App\Http\Middleware\EnforceAccessPermissions;
 use App\Http\Middleware\EnsureUserHasRole;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\ValidateCredentialSession;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,13 +16,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->web(append: [EnforceAccessPermissions::class]);
+        $middleware->append(SecurityHeaders::class);
+        $middleware->web(append: [ValidateCredentialSession::class, EnforceAccessPermissions::class]);
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
         ]);
         $middleware->validateCsrfTokens(except: [
-            'authenticate.php',
-            'cambiar_sucursal.php',
             'parametros/usuarios/verificar_usuario.php',
             'parametros/sucursales/verificar_sucursal.php',
             'parametros/tiposunidad/verificar_nombre.php',

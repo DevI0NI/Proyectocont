@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\Bloque;
 use App\Models\Contenedor;
+use App\Models\EstatusIpsa;
 use App\Models\User;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 class DispatchService
@@ -13,16 +15,18 @@ class DispatchService
 
     private const INACTIVE = 2;
 
-    private const AVAILABLE_IPSA = 1;
-
     public static function isAuditApproved(?string $status): bool
     {
         return strtoupper(trim((string) $status)) === 'APROBADO';
     }
 
-    public function dispatch(User $user, int $branchId, array $data): string
+    /** @return array{name: string, event_id: int} */
+    public function dispatch(User $user, int $branchId, array $data): array
     {
-        return DB::transaction(function () use ($user, $branchId, $data): string {
+        abort_unless((int) $user->estado_id === 1 && $user->hasPermission('dispatches.operate'), 403);
+        app(ExternalAuditAccess::class)->authorizeBranch($user, $branchId);
+
+        return DB::transaction(function () use ($user, $branchId, $data): array {
             $container = $this->dispatchableContainerQuery($branchId)
                 ->where('c.id', $data['contenedor_id'])
                 ->lockForUpdate()
@@ -36,7 +40,7 @@ class DispatchService
                 throw new \RuntimeException('El contenedor tiene mantenimiento o revision interna pendiente.');
             }
 
-            if ((int) $container->estatus_ipsa_id !== self::AVAILABLE_IPSA) {
+            if (! EstatusIpsa::available()->whereKey($container->estatus_ipsa_id)->exists()) {
                 throw new \RuntimeException("Error: El contenedor no tiene estatus IPSA 'Disponible'.");
             }
 
@@ -46,7 +50,7 @@ class DispatchService
                 throw new \RuntimeException('Confirma la naviera y auditora del ingreso actual y solicita su aprobacion antes de despachar.');
             }
 
-            if (! self::isAuditApproved($container->estatus_pyp)) {
+            if (! self::isAuditApproved($container->audit_status)) {
                 throw new \RuntimeException('La auditoria PYP debe tener estatus Aprobado para despachar el contenedor.');
             }
 
@@ -58,6 +62,27 @@ class DispatchService
             if ($blockers > 0) {
                 throw new \RuntimeException('Error Fisico: Hay contenedores delante de este equipo. Debe moverlos primero.');
             }
+
+            $issuedAt = now('America/Guatemala');
+            $snapshot = [
+                'numero' => 'EIR-OUT-'.$issuedAt->format('Ymd').'-'.str_pad((string) $container->current_ingress_cycle_id, 6, '0', STR_PAD_LEFT),
+                'fecha' => $issuedAt->format('d/m/Y'), 'hora' => $issuedAt->format('H:i').' hrs',
+                'equipo' => $container->nombre, 'tipo' => $container->tipo, 'modelo' => $container->modelo,
+                'iso_code' => $container->iso_code, 'marca' => $container->marca, 'naviera' => $container->shipping_line_name,
+                'estado_unidad' => $container->estado_unidad, 'estado_box' => $container->estado_box, 'ipsa' => $container->estatus_ipsa,
+                'patio' => $container->patio_nombre, 'bloque' => $container->bloque_numero, 'posicion' => $container->posicion,
+                'auditora' => $container->audit_company_name, 'auditoria' => $container->estatus_pyp,
+                'transportista' => trim($data['transportista'] ?? '') ?: 'No registrado', 'conductor' => trim($data['conductor'] ?? '') ?: 'No registrado',
+                'placa_cabezal' => strtoupper(trim($data['placa_cabezal'] ?? '')) ?: 'No registrada',
+                'placa_chasis' => strtoupper(trim($data['placa_chasis'] ?? '')) ?: 'No registrada',
+                'cliente' => 'No registrado', 'referencia' => trim($data['observaciones'] ?? '') ?: 'Sin observaciones de salida.',
+                'usuario' => $user->username, 'sucursal' => DB::table('sucursales')->where('id', $branchId)->value('nombre'),
+            ];
+            $eventId = DB::table('container_assignment_events')->insertGetId([
+                'container_id' => $container->id, 'ingress_cycle_id' => $container->current_ingress_cycle_id, 'user_id' => $user->id,
+                'event_type' => 'dispatch', 'reason' => $snapshot['referencia'], 'before_data' => null,
+                'after_data' => json_encode(['document' => $snapshot], JSON_THROW_ON_ERROR), 'created_at' => now(),
+            ]);
 
             $operationId = DB::table('tipos_operacion')->where('nombre', 'RETIRO')->value('id') ?: 5;
             DB::table('logs_eventos')->insert([
@@ -88,16 +113,20 @@ class DispatchService
                 ['field' => 'Observaciones', 'before' => null, 'after' => trim((string) ($data['observaciones'] ?? ''))],
             ], [$branchId], $user);
 
-            return $container->nombre;
+            return ['name' => $container->nombre, 'event_id' => $eventId];
         });
     }
 
-    private function dispatchableContainerQuery(int $branchId)
+    private function dispatchableContainerQuery(int $branchId): Builder
     {
         $query = DB::table('contenedores as c')
             ->join('bloques as b', 'c.bloque_id', '=', 'b.id')
             ->join('patios as p', 'b.patio_id', '=', 'p.id')
             ->leftJoin('estatus_ipsa as ei', 'c.estatus_ipsa_id', '=', 'ei.id')
+            ->leftJoin('tipos_unidad as t', 't.id', '=', 'c.tipo_unidad_id')
+            ->leftJoin('modelos as m', 'm.id', '=', 'c.modelo_id')
+            ->leftJoin('estatus_contenedores as eu', 'eu.id', '=', 'c.estatus_unidad_id')
+            ->leftJoin('estatus_contenedores as eb', 'eb.id', '=', 'c.estatus_box_id')
             ->leftJoin('pyp_auditoria as pa', function ($join): void {
                 $join->on('c.id', '=', 'pa.contenedor_id')->where('pa.estado_id', self::ACTIVE);
             })
@@ -105,6 +134,7 @@ class DispatchService
             ->where('p.sucursal_id', $branchId)
             ->select([
                 'c.id',
+                'c.iso_code', 'c.marca', 't.nombre as tipo', 'm.nombre as modelo', 'eu.nombre as estado_unidad', 'eb.nombre as estado_box',
                 'c.nombre',
                 'c.posicion',
                 'c.bloque_id',

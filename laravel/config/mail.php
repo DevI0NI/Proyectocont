@@ -37,6 +37,17 @@ return [
 
     'mailers' => [
 
+        'account_credentials' => [
+            'transport' => 'smtp',
+            'scheme' => 'smtp',
+            'host' => 'smtp.gmail.com',
+            'port' => 587,
+            'username' => env('ACCOUNT_MAIL_USERNAME'),
+            'password' => env('ACCOUNT_MAIL_PASSWORD'),
+            'timeout' => 15,
+            'require_tls' => true,
+        ],
+
         'smtp' => [
             'transport' => 'smtp',
             'scheme' => env('MAIL_SCHEME'),

@@ -1,4 +1,4 @@
-<div wire:poll.5s data-notification-surface x-data="proportsaNotificationSelection($wire)">
+<div wire:poll.60s data-notification-surface x-data="proportsaNotificationSelection($wire)">
 <section class="page-heading notification-heading">
     <div><span class="eyebrow">{{ \App\Models\Sucursal::find(session('sucursal_activa'))?->nombre }}</span><h1>Notificaciones</h1></div>
     <div class="notification-unread-total"><strong>{{ $unread }}</strong><span>sin leer</span></div>
@@ -6,7 +6,7 @@
 <section class="workboard notification-board">
     <nav class="notification-tabs" aria-label="Apartados de notificaciones">
         <button type="button" wire:click="$set('category', '')" @if($category === '') aria-current="page" @endif>Todas<span>{{ $counts->sum() }}</span></button>
-        @foreach(['repairs' => 'Reparaciones', 'audits' => 'Auditorías'] as $key => $label)
+        @foreach(['repairs' => 'Reparaciones', 'audits' => 'Auditorías', 'account-recovery' => 'Recuperación de contraseñas'] as $key => $label)
             @if(isset($categories[$key]))<button type="button" wire:click="$set('category', '{{ $key }}')" @if($category === $key) aria-current="page" @endif>{{ $label }}<span>{{ $counts[$key] ?? 0 }}</span></button>@endif
         @endforeach
     </nav>
@@ -32,7 +32,7 @@
         <article class="notification-row @if(!$notification->read_at) is-unread @endif" :class="{ 'is-selected': isSelected({{ $notification->id }}) }" wire:key="notification-row-{{ $folder }}-{{ $notification->id }}">
             <input class="notification-checkbox" type="checkbox" wire:ignore @change="toggle({{ $notification->id }})" :checked="isSelected({{ $notification->id }})" wire:loading.attr="disabled" wire:target="act" aria-label="Seleccionar {{ $notification->title }}">
             <span class="notification-category-icon" data-notification-icon="{{ match($notification->category) { 'repairs' => 'wrench', 'audits' => 'shield-check', default => 'inbox' } }}" wire:ignore aria-hidden="true"></span>
-            <form class="notification-open" method="POST" data-notification-open action="{{ route('notifications.open', $notification->id) }}">@csrf<input type="hidden" name="return_to" value=""><input type="hidden" name="folder" value="{{ $folder }}">
+            <form class="notification-open" @if($notification->category === 'account-recovery') @submit.prevent="$dispatch('account-review-open', { id: {{ $notification->id }} })" @else method="POST" data-notification-open action="{{ route('notifications.open', $notification->id) }}" @endif>@csrf<input type="hidden" name="return_to" value=""><input type="hidden" name="folder" value="{{ $folder }}">
                 <button type="submit"><span class="notification-row-meta">{{ $categories[$notification->category] }}<span>{{ $notification->read_at ? 'Leída' : 'Sin leer' }}</span></span><strong>{{ $notification->title }}</strong><span class="notification-body">{{ $preview['description'] }}</span><span class="notification-author">{{ $preview['actor'] ? 'Por: '.$preview['actor'] : 'Autor no registrado' }}</span></button>
             </form>
             <div class="notification-row-end"><time datetime="{{ \Carbon\Carbon::parse($notification->created_at, 'UTC')->toIso8601String() }}">{{ \Carbon\Carbon::parse($notification->created_at, 'UTC')->timezone('America/Guatemala')->format('d/m/Y H:i') }}</time>@if($folder === 'archived')<small>Vence {{ \Carbon\Carbon::parse($notification->expires_at, 'UTC')->timezone('America/Guatemala')->format('d/m/Y') }}</small>@endif</div>
@@ -51,4 +51,23 @@
         </nav>
     </footer>
 </section>
+@if(isset($categories['account-recovery']))
+    <dialog class="account-review-dialog" wire:ignore.self x-data="proportsaAccountReview($wire)" x-effect="sync($wire.recoveryModalOpen)" @account-review-open.window="open($event.detail.id)" @cancel.prevent="close()" @pointerdown="outsideStarted = isOutside($event)" @click="if (outsideStarted && isOutside($event)) close(); outsideStarted = false" aria-labelledby="accountReviewTitle" :aria-busy="loading">
+        <header><div class="account-review-heading"><span class="account-review-icon" data-notification-icon="shield-check" wire:ignore aria-hidden="true"></span><div><span class="eyebrow">Recuperación de contraseña</span><h2 id="accountReviewTitle">Solicitud de acceso</h2></div></div><button type="button" @click="close()" aria-label="Cerrar" title="Cerrar"><span data-notification-icon="x" wire:ignore></span></button></header>
+        <p class="account-review-loading" x-show="loading" x-cloak role="status">Cargando solicitud…</p>
+        <p class="account-review-failure" x-show="failure" x-text="failure" x-cloak role="alert"></p>
+        <div x-show="!loading && !failure" x-cloak>
+        @if($recoveryRequest)
+        <div class="account-review-summary"><time datetime="{{ \Carbon\Carbon::parse($recoveryRequest->created_at, 'UTC')->toIso8601String() }}">{{ \Carbon\Carbon::parse($recoveryRequest->created_at, 'UTC')->timezone('America/Guatemala')->format('d/m/Y · H:i') }}</time><span class="account-review-status" data-state="{{ $recoveryRequest->status }}">{{ ['pending' => 'Pendiente', 'approved' => 'Aprobada', 'rejected' => 'Rechazada', 'obsolete' => 'Sin vigencia'][$recoveryRequest->status] ?? $recoveryRequest->status }}</span></div>
+        <dl><div><dt>Usuario</dt><dd>{{ $recoveryRequest->username }}</dd></div><div><dt>Correo registrado</dt><dd>{{ $recoveryRequest->email }}</dd></div></dl>
+        <section class="account-review-details"><h3>Motivo de la solicitud</h3><p class="account-review-reason">{{ $recoveryRequest->reason }}</p></section>
+        @if($recoveryRequest->status === 'pending')
+            <footer class="container-exit-dialog-actions"><button class="button container-exit-leave" type="button" wire:click="reviewRecovery('rejected')" wire:loading.attr="disabled" wire:target="reviewRecovery"><span data-notification-icon="x" wire:ignore aria-hidden="true"></span>Rechazar</button><button class="button container-exit-stay" type="button" wire:click="reviewRecovery('approved')" wire:loading.attr="disabled" wire:target="reviewRecovery"><span data-notification-icon="check-check" wire:ignore aria-hidden="true"></span>Aprobar solicitud</button></footer>
+        @else
+            <div class="account-review-resolution"><span data-notification-icon="{{ $recoveryRequest->status === 'approved' ? 'check-check' : 'inbox' }}" wire:ignore aria-hidden="true"></span><div><span>Revisada por <strong>{{ $recoveryRequest->reviewer ?? 'Sistema' }}</strong></span><time>{{ \Carbon\Carbon::parse($recoveryRequest->updated_at, 'UTC')->timezone('America/Guatemala')->format('d/m/Y · H:i') }}</time></div></div>
+        @endif
+        @endif
+        </div>
+    </dialog>
+@endif
 </div>

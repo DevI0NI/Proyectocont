@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Notifications;
 
+use App\Livewire\Shell\NotificationBell;
+use App\Services\AccountRecovery;
 use App\Services\SystemNotifications;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -49,6 +51,61 @@ class Inbox extends Component
     public int $selectionTotal = 0;
 
     public string $feedback = '';
+
+    #[Locked]
+    public ?int $recoveryRequestId = null;
+
+    public bool $recoveryModalOpen = false;
+
+    public function mount(): void
+    {
+        if (request()->integer('recovery_notification') > 0) {
+            $this->openRecovery(request()->integer('recovery_notification'));
+        }
+    }
+
+    public function openRecovery(int $notification): void
+    {
+        abort_unless((int) auth()->user()->rol_id === 1 && app(AccountRecovery::class)->enabled(), 403);
+        $query = app(SystemNotifications::class)->inbox(auth()->user(), (int) session('sucursal_activa'), $this->folder)
+            ->where('n.id', $notification)->where('n.category', 'account-recovery');
+        $notice = (clone $query)->first();
+        abort_unless($notice && preg_match('/^account-recovery:(\d+)$/', $notice->event_key, $matches), 404);
+        abort_unless(DB::table('account_recovery_requests')->where('id', $matches[1])->exists(), 404);
+        $this->recoveryRequestId = (int) $matches[1];
+        $this->recoveryModalOpen = true;
+        $query->whereNull('n.read_at')->update(['read_at' => now()]);
+        $this->dispatch('notifications-changed')->to(NotificationBell::class);
+    }
+
+    public function closeRecovery(): void
+    {
+        $this->recoveryModalOpen = false;
+    }
+
+    public function reviewRecovery(string $decision): void
+    {
+        abort_unless($this->recoveryModalOpen && $this->recoveryRequestId !== null, 404);
+        abort_unless(app(AccountRecovery::class)->enabled(), 403);
+        app(AccountRecovery::class)->review($this->recoveryRequestId, auth()->user(), $decision);
+        $this->feedback = $decision === 'approved' ? 'Solicitud aprobada. El envío de la clave quedó en cola.' : 'Solicitud rechazada.';
+        $this->recoveryModalOpen = false;
+        $this->dispatch('notifications-changed');
+        $this->dispatch('notification-feedback');
+    }
+
+    private function recoveryRequest(): ?object
+    {
+        if ($this->recoveryRequestId === null) {
+            return null;
+        }
+        abort_unless((int) auth()->user()->rol_id === 1 && (int) auth()->user()->estado_id === 1, 403);
+
+        return DB::table('account_recovery_requests as r')->join('users as u', 'u.id', '=', 'r.user_id')
+            ->leftJoin('users as reviewer', 'reviewer.id', '=', 'r.reviewed_by')
+            ->where('r.id', $this->recoveryRequestId)
+            ->select('r.*', 'u.username', 'u.email', 'reviewer.username as reviewer')->first();
+    }
 
     public function updated(string $property): void
     {
@@ -190,7 +247,7 @@ class Inbox extends Component
         $service = app(SystemNotifications::class);
         $base = $service->inbox(auth()->user(), (int) session('sucursal_activa'), $this->folder);
         $unread = $service->inbox(auth()->user(), (int) session('sucursal_activa'))->whereNull('n.read_at')->count();
-        $counts = $base->select('n.category')->selectRaw('COUNT(*) as total')->groupBy('n.category')->pluck('total', 'category');
+        $counts = $base->whereNull('n.read_at')->select('n.category')->selectRaw('COUNT(*) as total')->groupBy('n.category')->pluck('total', 'category');
         $this->notificationTotal = (clone $query)->count();
         if (! $this->allSelected && ($this->selectionScope !== $this->scopeKey() || $this->selectionMaxId === 0)) {
             $this->selectionMaxId = (int) (clone $query)->max('n.id');
@@ -212,7 +269,7 @@ class Inbox extends Component
             : in_array((string) $notification->id, $this->selected, true))->pluck('id')->map(fn ($id): string => (string) $id)->all();
 
         return view('livewire.notifications.inbox', ['categories' => $service->categories(auth()->user()),
-            'counts' => $counts, 'unread' => $unread, 'notifications' => $notifications,
+            'counts' => $counts, 'unread' => $unread, 'notifications' => $notifications, 'recoveryRequest' => $this->recoveryRequest(),
             'previews' => $notifications->getCollection()->mapWithKeys(fn ($notification): array => [
                 $notification->id => $service->bellPreview($notification),
             ]),

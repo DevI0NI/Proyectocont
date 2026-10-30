@@ -2,6 +2,8 @@
 
 @php
     $mechanicMode = $mechanicMode ?? false;
+    $externalMode = $externalMode ?? false;
+    $restrictedMode = $mechanicMode || $externalMode;
     $infoSections = [
         [
             'tab' => 'Equipo',
@@ -19,7 +21,7 @@
         [
             'tab' => 'Estados',
             'title' => 'Estados tecnicos',
-            'columns' => $mechanicMode ? 'two-columns' : 'three-columns',
+            'columns' => $restrictedMode ? 'two-columns' : 'three-columns',
             'fields' => [
                 ['label' => 'Estado de la unidad', 'value' => $container->estatus_unidad ?: 'N/D'],
                 ['label' => 'Estado estructura', 'value' => $container->estatus_box ?: 'N/D'],
@@ -31,7 +33,7 @@
                 ['label' => 'Observaciones estructura', 'value' => $container->observaciones_box ?: 'Sin observaciones registradas.'],
             ],
         ],
-        ...($mechanicMode ? [] : [[
+        ...($restrictedMode ? [] : [[
             'tab' => 'Transporte',
             'title' => 'Documentacion y transporte',
             'columns' => 'three-columns',
@@ -49,9 +51,9 @@
             'columns' => 'two-columns',
             'fields' => [
                 ['label' => 'Naviera del ingreso', 'value' => $container->shipping_line_name ?: ($container->naviera ?: 'Sin registrar')],
-                ['label' => 'Empresa auditora', 'value' => $container->audit_company_name ?: ($mechanicMode ? 'Sin auditora asignada' : 'Pendiente de confirmacion')],
+                ['label' => 'Empresa auditora', 'value' => $container->audit_company_name ?: ($restrictedMode ? 'Sin auditora asignada' : 'Pendiente de confirmacion')],
                 ['label' => 'Estado de auditoria', 'value' => $container->audit_status ?: 'Sin resultado'],
-                ...($mechanicMode ? [] : [
+                ...($restrictedMode ? [] : [
                     ['label' => 'Asignacion del ingreso', 'value' => $container->audit_assignment_notice ?: 'Auditora asignada'],
                     ['label' => 'Observaciones de la asignacion', 'value' => $container->audit_reference ?: 'Sin observaciones registradas'],
                 ]),
@@ -79,8 +81,9 @@
             <span class="eyebrow">Informacion del contenedor</span>
             <h1>Contenedor {{ $container->nombre }}</h1>
         </div>
-        <div class="toolbar-actions container-info-actions @if($mechanicMode) is-read-only @endif">
-            @if(!$mechanicMode)
+        <div class="toolbar-actions container-info-actions @if($restrictedMode) is-read-only @endif">
+            @if(!$restrictedMode)
+            <a href="{{ route('containers.history.show', $container->id) }}" class="container-info-action back">Historial</a>
             <a href="{{ route('documents.ingress.ticket', ['contenedor_id' => $container->id] + $backParams) }}" class="container-info-action ticket">
                 Constancia ingreso
             </a>
@@ -89,7 +92,7 @@
             </a>
             @endif
             @endif
-            <a href="{{ route($mechanicMode ? 'maintenance.orders' : 'containers.index', $backParams) }}" class="container-info-action back">
+            <a href="{{ $externalMode ? $returnUrl : route($mechanicMode ? 'maintenance.orders' : 'containers.index', $backParams) }}" class="container-info-action back">
                 Volver
             </a>
         </div>

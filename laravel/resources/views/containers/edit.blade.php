@@ -36,7 +36,7 @@
             <button type="button" class="timeline-step" data-edit-step-target="3"><span>04</span><strong>Ubicacion</strong></button>
         </div>
 
-        <form method="POST" action="{{ route('containers.update', ['container' => $container->id]) }}" class="record-form wide-form container-form has-steps" id="containerEditForm" novalidate>
+        <form method="POST" action="{{ route('containers.update', ['container' => $container->id]) }}" class="record-form wide-form container-form has-steps" id="containerEditForm" data-unsaved-form="editCancelDialog" data-restored-changes="{{ $errors->any() ? 'true' : 'false' }}" novalidate>
             @csrf
             @method('PATCH')
             @if(!empty($returnUrl))<input type="hidden" name="return_to" value="{{ $returnUrl }}">@endif
@@ -105,7 +105,7 @@
 
                     <label>
                         <span>Marca</span>
-                        <input type="text" name="marca" value="{{ old('marca', $container->marca) }}" maxlength="80" required>
+                        <input type="text" name="marca" value="{{ old('marca', $container->marca) }}" maxlength="40" required>
                     </label>
                 </div>
             </div>
@@ -154,12 +154,12 @@
 
                     <label class="status-note">
                         <span>Observaciones unidad</span>
-                        <textarea name="observaciones_estado" rows="3" maxlength="255">{{ old('observaciones_estado', $container->observaciones_unidad) }}</textarea>
+                        <textarea name="observaciones_estado" rows="3" minlength="40" maxlength="255">{{ old('observaciones_estado', $container->observaciones_unidad) }}</textarea>
                     </label>
 
                     <label class="status-note">
                         <span>Observaciones estructura</span>
-                        <textarea name="observaciones_box" rows="3" maxlength="255">{{ old('observaciones_box', $container->observaciones_box) }}</textarea>
+                        <textarea name="observaciones_box" rows="3" minlength="40" maxlength="255">{{ old('observaciones_box', $container->observaciones_box) }}</textarea>
                     </label>
                 </div>
             </div>
@@ -176,13 +176,13 @@
                     @include('partials.container-assignment-fields')
 
                     <label>
-                        <span>Quien lo trajo</span>
-                        <input type="text" name="transportista" value="{{ old('transportista', $container->transportista) }}" maxlength="120" required>
+                        <span class="plate-field-title">Quien lo trajo @include('partials.field-help', ['helpId' => 'editCarrierHelp', 'helpLabel' => 'Ayuda de transportista', 'helpText' => 'Empresa o transportista responsable de traer el contenedor. No es el nombre del piloto. Maximo 100 caracteres.'])</span>
+                        <input type="text" name="transportista" value="{{ old('transportista', $container->transportista) }}" maxlength="100" required>
                     </label>
 
                     <label>
-                        <span>Piloto</span>
-                        <input type="text" name="conductor" value="{{ old('conductor', $container->conductor) }}" maxlength="120" placeholder="Opcional">
+                        <span class="plate-field-title">Piloto @include('partials.field-help', ['helpId' => 'editDriverHelp', 'helpLabel' => 'Ayuda de piloto', 'helpText' => 'Nombre y apellidos de quien conduce el cabezal. Obligatorio, maximo 80 caracteres.'])</span>
+                        <input type="text" name="conductor" value="{{ old('conductor', $container->conductor) }}" maxlength="80" placeholder="Nombre y apellidos" required>
                     </label>
 
                     <div class="plate-field">
@@ -204,7 +204,7 @@
                                 <span class="plate-help-tooltip" id="chassisPlateHelp" role="tooltip" hidden>6 a 8 letras o numeros, sin contar espacios o guiones. Prefijo opcional. Ejemplos: TC-12ABC, RE123456 o 123456.</span>
                             </span>
                         </div>
-                        <input type="text" id="placa_chasis" name="placa_chasis" value="{{ old('placa_chasis', $container->placa_chasis) }}" maxlength="15" data-plate-max="{{ \App\Services\TransportPlate::MAX_ALPHANUMERIC_LENGTH }}" pattern="{{ \App\Services\TransportPlate::PATTERN }}" class="container-code-input">
+                        <input type="text" id="placa_chasis" name="placa_chasis" value="{{ old('placa_chasis', $container->placa_chasis) }}" maxlength="15" data-plate-max="{{ \App\Services\TransportPlate::MAX_ALPHANUMERIC_LENGTH }}" pattern="{{ \App\Services\TransportPlate::PATTERN }}" required class="container-code-input">
                     </div>
                     @include('partials.container-assignment-details')
                 </div>
@@ -249,8 +249,8 @@
         <h2 id="editCancelTitle">¿Salir de la modificación?</h2>
         <p id="editCancelDescription">Los cambios realizados en este contenedor se perderán.</p>
         <div class="container-exit-dialog-actions">
-            <button type="button" class="button container-exit-stay" id="editStayButton">Seguir editando</button>
-            <a href="{{ $returnUrl ?? route('containers.show', ['container' => $container->id] + $backParams) }}" class="button container-exit-leave">Salir sin guardar</a>
+            <button type="button" class="button container-exit-stay" data-unsaved-stay>Seguir editando</button>
+            <button type="button" class="button container-exit-leave" data-unsaved-leave>Salir sin guardar</button>
         </div>
     </dialog>
 
@@ -261,12 +261,6 @@
         const editPreviousButton = document.getElementById('editPreviousButton');
         const editNextButton = document.getElementById('editNextButton');
         const editSaveButton = document.getElementById('editSaveButton');
-        const editCancelButton = document.getElementById('editCancelButton');
-        const editCancelDialog = document.getElementById('editCancelDialog');
-        const editStayButton = document.getElementById('editStayButton');
-        const initialFieldValues = new Map(Array.from(editForm.elements)
-            .filter((field) => field.name && field.type !== 'hidden')
-            .map((field) => [field, field.value]));
         const tipoSelect = document.getElementById('tipo_unidad');
         const modeloSelect = document.getElementById('modelo');
         const selectedModel = @json((string) old('modelo', $container->modelo_id));
@@ -492,17 +486,6 @@
         });
         editPreviousButton.addEventListener('click', () => showStep(currentStep - 1));
         editNextButton.addEventListener('click', () => goToStep(currentStep + 1));
-        editCancelButton.addEventListener('click', (event) => {
-            const hasChanges = Array.from(initialFieldValues).some(([field, value]) => field.value !== value);
-            if (!hasChanges) return;
-            event.preventDefault();
-            editCancelDialog.showModal();
-            editStayButton.focus();
-        });
-        editStayButton.addEventListener('click', () => editCancelDialog.close());
-        editCancelDialog.addEventListener('click', (event) => {
-            if (event.target === editCancelDialog) editCancelDialog.close();
-        });
         editTimeline.forEach((button) => button.addEventListener('click', () => goToStep(Number(button.dataset.editStepTarget))));
         editForm.addEventListener('input', (event) => {
             if (event.target.matches('input, textarea')) clearFieldError(event.target);
@@ -519,12 +502,13 @@
                 showStep(step);
                 if (!await validateStep(step)) return;
             }
+            editForm.dispatchEvent(new Event('unsaved:submit'));
             HTMLFormElement.prototype.submit.call(editForm);
         });
 
 
         if (String(tipoSelect.value) !== originalType) {
-            loadModels(selectedModel).then(() => initialFieldValues.set(modeloSelect, modeloSelect.value));
+            loadModels(selectedModel);
         }
 
         queueCodeCheck();

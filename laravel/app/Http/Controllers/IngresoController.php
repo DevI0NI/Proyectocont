@@ -11,6 +11,7 @@ use App\Models\Patio;
 use App\Models\Sucursal;
 use App\Models\TipoEstatus;
 use App\Models\TipoUnidad;
+use App\Rules\DocumentaryText;
 use App\Services\ContainerAuditAssignment;
 use App\Services\IngresoService;
 use App\Services\IsoCodeCatalog;
@@ -59,16 +60,16 @@ class IngresoController extends Controller
             'tipo_unidad' => ['required', 'integer', Rule::exists('tipos_unidad', 'id')->where('estado_id', self::ACTIVE)],
             'modelo' => ['required', 'integer', Rule::exists('modelos', 'id')->where('estado_id', self::ACTIVE)],
             'iso_code' => ['required', 'string', Rule::in(array_keys(IsoCodeCatalog::records()))],
-            'marca' => ['required', 'string', 'max:80'],
+            'marca' => ['required', 'string', 'max:40', new DocumentaryText('brand')],
             'estado_unidad' => ['required', 'integer', Rule::exists('estatus_contenedores', 'id')->where('estado_id', self::ACTIVE)],
-            'observaciones_estado' => [Rule::requiredIf(fn (): bool => EstatusContenedor::active()->find($request->integer('estado_unidad'))?->requiresObservations() ?? false), 'nullable', 'string', 'max:255'],
+            'observaciones_estado' => [Rule::requiredIf(fn (): bool => EstatusContenedor::active()->find($request->integer('estado_unidad'))?->requiresObservations() ?? false), 'nullable', 'string', 'min:40', 'max:255'],
             'status_box' => ['required', 'integer', Rule::exists('estatus_contenedores', 'id')->where('estado_id', self::ACTIVE)],
-            'observaciones_box' => [Rule::requiredIf(fn (): bool => EstatusContenedor::active()->find($request->integer('status_box'))?->requiresObservations() ?? false), 'nullable', 'string', 'max:255'],
+            'observaciones_box' => [Rule::requiredIf(fn (): bool => EstatusContenedor::active()->find($request->integer('status_box'))?->requiresObservations() ?? false), 'nullable', 'string', 'min:40', 'max:255'],
             'estatus_ipsa' => ['required', 'integer', Rule::exists('estatus_ipsa', 'id')->where('estado_id', self::ACTIVE)],
-            'transportista' => ['required', 'string', 'max:120'],
-            'conductor' => ['nullable', 'string', 'max:120'],
+            'transportista' => ['required', 'string', 'max:100', new DocumentaryText('company')],
+            'conductor' => ['required', 'string', 'max:80', new DocumentaryText('driver')],
             'placa_cabezal' => ['required', 'string', 'max:15', 'regex:'.TransportPlate::REGEX],
-            'placa_chasis' => ['nullable', 'string', 'max:15', 'regex:'.TransportPlate::REGEX],
+            'placa_chasis' => ['required', 'string', 'max:15', 'regex:'.TransportPlate::REGEX],
             'bloque' => ['required', 'integer', Rule::exists('bloques', 'id')->where('estado_id', self::ACTIVE)],
             'posicion' => ['required', 'integer', 'min:1'],
         ], [
@@ -85,10 +86,14 @@ class IngresoController extends Controller
             'estado_unidad.required' => 'Selecciona un estado de unidad.',
             'observaciones_estado.required' => 'Describe la falla y su ubicacion en la unidad danada.',
             'observaciones_box.required' => 'Describe el dano y su ubicacion en la estructura.',
+            'observaciones_estado.min' => 'Escribe al menos 40 caracteres.',
+            'observaciones_box.min' => 'Escribe al menos 40 caracteres.',
             'status_box.required' => 'Selecciona un estado de estructura.',
             'estatus_ipsa.required' => 'Selecciona un estatus IPSA.',
             'naviera.required' => 'Ingresa la naviera.',
             'transportista.required' => 'Ingresa quien trajo el contenedor.',
+            'conductor.required' => 'Ingresa el nombre del piloto.',
+            'placa_chasis.required' => 'Ingresa la placa del chasis.',
             'placa_cabezal.required' => 'Ingresa la placa del cabezal.',
             'placa_cabezal.regex' => TransportPlate::MESSAGE,
             'placa_chasis.regex' => TransportPlate::MESSAGE,

@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\AccountRecoveryController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\BranchManagementController;
+use App\Http\Controllers\ContainerHistoryController;
 use App\Http\Controllers\ContainerInventoryController;
 use App\Http\Controllers\ContainerStatusController;
 use App\Http\Controllers\DashboardController;
@@ -29,9 +31,15 @@ Route::middleware('guest')->group(function (): void {
     Route::redirect('/login.php', '/login', 302);
     Route::post('/login', [AuthController::class, 'login'])->name('login.store');
     Route::post('/authenticate.php', [AuthController::class, 'login']);
+    Route::post('/recuperar-contrasena', [AccountRecoveryController::class, 'request'])->name('account.recovery');
+    Route::get('/definir-contrasena', [AccountRecoveryController::class, 'password'])->name('account.password');
+    Route::post('/definir-contrasena', [AccountRecoveryController::class, 'finish'])->middleware('throttle:10,1')->name('account.password.store');
 });
 
 Route::middleware('auth')->group(function (): void {
+    Route::get('/notificaciones/recuperacion', [AccountRecoveryController::class, 'index'])->middleware('role:1')->name('notifications.recovery.index');
+    Route::post('/notificaciones/recuperacion/{recoveryRequest}', [AccountRecoveryController::class, 'review'])->whereNumber('recoveryRequest')->middleware('role:1')->name('notifications.recovery.review');
+    Route::post('/usuarios/{user}/clave-temporal', [AccountRecoveryController::class, 'send'])->middleware('role:1')->name('users.send-credential');
     Route::get('/auditoria-externa/resumen', [PypAuditController::class, 'dashboard'])->middleware('role:5')->name('external-audits.dashboard');
     Route::controller(NotificationController::class)->prefix('notificaciones')->name('notifications.')->group(function (): void {
         Route::get('/', 'index')->name('index');
@@ -46,17 +54,18 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/reparaciones/{job}/historial', [MaintenanceCorrectionController::class, 'history'])->whereNumber('job')->name('corrections.history');
     Route::get('/contenedores/{container}/reparaciones', [MaintenanceCorrectionController::class, 'containerHistory'])->whereNumber('container')->middleware('role:1,2,3')->name('corrections.container-history');
     Route::get('/reparaciones/{job}/detalle', [MaintenanceCorrectionController::class, 'detail'])->whereNumber('job')->name('corrections.detail');
+    Route::get('/reparaciones/{job}/correcciones/historial', [MaintenanceCorrectionController::class, 'rounds'])->whereNumber('job')->name('corrections.rounds');
     Route::post('/reparaciones/{job}/confirmar', [MaintenanceCorrectionController::class, 'confirm'])->whereNumber('job')->middleware('role:1,2,3')->name('corrections.confirm');
     Route::controller(MaintenanceCorrectionController::class)->prefix('reparaciones/{job}/correcciones')->whereNumber('job')->name('corrections.')->group(function (): void {
         Route::get('/', 'show')->name('show');
         Route::patch('/', 'update')->middleware('role:4')->name('update');
         Route::get('/original/{photo}', 'originalPhoto')->whereNumber('photo')->name('original-photo');
         Route::get('/{round}/fotos/{photo}', 'photo')->whereNumber(['round', 'photo'])->name('photo');
+        Route::get('/{round}/fotos-auditora/{photo}', 'auditPhoto')->whereNumber(['round', 'photo'])->name('audit-photo');
     });
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::redirect('/index.php', '/', 302);
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-    Route::get('/logout.php', [AuthController::class, 'legacyLogout']);
     Route::post('/sucursal-activa', [BranchController::class, 'update'])
         ->middleware('role:1,5')
         ->name('branches.active.update');
@@ -137,6 +146,9 @@ Route::middleware('auth')->group(function (): void {
     });
 
     Route::middleware('role:1,2,3')->group(function (): void {
+        Route::get('/historial-contenedores', [ContainerHistoryController::class, 'index'])->name('containers.history.index');
+        Route::get('/historial-contenedores/{container}', [ContainerHistoryController::class, 'show'])->whereNumber('container')->name('containers.history.show');
+        Route::get('/historial-contenedores/{container}/auditorias/{event}/fotos/{photo}', [ContainerHistoryController::class, 'photo'])->whereNumber(['container', 'event', 'photo'])->name('containers.history.photo');
         Route::get('/ingresos', [IngresoController::class, 'create'])->name('ingresos.create');
         Route::redirect('/ingresos/ingresos.php', '/ingresos', 302);
         Route::post('/ingresos', [IngresoController::class, 'store'])->name('ingresos.store');
@@ -175,6 +187,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/documentos/ingreso/ticket/pdf', [DocumentController::class, 'ingressTicketPdf'])->name('documents.ingress.ticket.pdf');
         Route::redirect('/ingresos/ticket_ingreso.php', '/documentos/ingreso/ticket', 302);
         Route::get('/documentos/salida/eir', [DocumentController::class, 'dispatchEir'])->name('documents.dispatch.eir');
+        Route::get('/documentos/salida/eir/pdf', [DocumentController::class, 'dispatchEirPdf'])->name('documents.dispatch.eir.pdf');
         Route::redirect('/despachos/eir_salida.php', '/documentos/salida/eir', 302);
         Route::get('/documentos/salida/ticket', [DocumentController::class, 'dispatchTicket'])->name('documents.dispatch.ticket');
         Route::get('/documentos/salida/ticket/pdf', [DocumentController::class, 'dispatchTicketPdf'])->name('documents.dispatch.ticket.pdf');
@@ -202,6 +215,7 @@ Route::middleware('auth')->group(function (): void {
     Route::middleware('role:4')->group(function (): void {
         Route::get('/mantenimiento/trabajos', [MaintenanceController::class, 'jobs'])->name('maintenance.jobs');
         Route::get('/mantenimiento/contenedores/{container}', [MaintenanceController::class, 'container'])->whereNumber('container')->name('maintenance.container');
+        Route::get('/mantenimiento/contenedores/{container}/solicitud/{event}/fotos/{photo}', [MaintenanceController::class, 'auditPhoto'])->whereNumber(['container', 'event', 'photo'])->name('maintenance.audit-photo');
         Route::get('/mantenimiento/ordenes/nueva', [MaintenanceController::class, 'create'])->name('maintenance.create');
         Route::post('/mantenimiento/ordenes', [MaintenanceController::class, 'store'])->name('maintenance.store');
         Route::get('/mantenimiento/ordenes/{job}', [MaintenanceController::class, 'show'])->whereNumber('job')->name('maintenance.show');
@@ -273,6 +287,11 @@ Route::middleware('auth')->group(function (): void {
         ->name('pyp-audits.index');
 
     Route::middleware('role:5')->group(function (): void {
+        Route::post('/contenedores/{container}/auditorias/iniciar', [PypAuditController::class, 'begin'])->whereNumber('container')->name('pyp-audits.begin');
+        Route::get('/contenedores/{container}/auditorias', [PypAuditController::class, 'history'])->whereNumber('container')->name('pyp-audits.history');
+        Route::get('/contenedores/{container}/auditorias/{audit}', [PypAuditController::class, 'show'])->whereNumber(['container', 'audit'])->name('pyp-audits.show');
+        Route::get('/contenedores/{container}/auditorias/{audit}/fotos/{photo}', [PypAuditController::class, 'photo'])->whereNumber(['container', 'audit', 'photo'])->name('pyp-audits.photo');
+        Route::get('/contenedores/{container}/informacion-auditoria', [PypAuditController::class, 'information'])->whereNumber('container')->name('pyp-audits.information');
         Route::get('/contenedores/{container}/pyp', [PypAuditController::class, 'edit'])->name('pyp-audits.edit');
         Route::patch('/contenedores/{container}/pyp', [PypAuditController::class, 'update'])->name('pyp-audits.update');
     });

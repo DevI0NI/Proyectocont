@@ -14,7 +14,7 @@
 </div>
 @if(!$editable && !empty($readonlyReason))<p class="mw-heading-readonly">{{ $readonlyReason }}</p>@endif
 </div><a class="mw-button" href="{{ $returnUrl ?? route('maintenance.orders', $backParams ?? []) }}"><span data-catalog-icon="arrow-left" aria-hidden="true"></span>Volver</a></section>
-<section class="workboard mw-board mw-repair-board">
+<section class="workboard mw-board mw-repair-board" @if(!empty($auditRequest)) data-correction-history @endif>
 @if(!$starting && $job->status !== 'in_progress')
     <div class="mw-actions"><a class="mw-button" href="{{ route('corrections.history', ['job' => $job->id, 'return_to' => request()->getRequestUri()]) }}">Reparaciones<span data-catalog-icon="arrow-right" aria-hidden="true"></span></a>@if($job->status === 'returned_for_repair')<a class="mw-button mw-primary" href="{{ route('corrections.show', ['job' => $job->id, 'return_to' => request()->getRequestUri()]) }}">Atender corrección de la auditora<span data-catalog-icon="arrow-right" aria-hidden="true"></span></a>@endif</div>
 @endif
@@ -22,15 +22,23 @@
 <form method="POST" action="{{ $starting ? route('maintenance.store') : route('maintenance.update', $job->id) }}" enctype="multipart/form-data" class="mw-form mw-repair-form record-select-fields" data-maintenance-form data-initial-step="{{ $initialStep }}" data-exchange-rate="{{ $exchangeQuote['rate'] ?? '' }}" data-exchange-date="{{ $exchangeQuote['date'] ?? '' }}" data-restored-changes="{{ $errors->any() ? 'true' : 'false' }}" novalidate>@csrf
 @if(!empty($exchangeQuote['token']))<input type="hidden" name="exchange_quote" value="{{ $exchangeQuote['token'] }}">@endif
 @if($starting)<input type="hidden" name="container_id" value="{{ $container->id }}">@else @method('PATCH') @endif
+@if($starting && !empty($auditRequest))<input type="hidden" name="audit_request_version" value="{{ $auditRequest->id }}">@endif
 <input type="hidden" name="version" value="{{ $job->version }}">
 <input type="hidden" name="active_step" value="{{ $initialStep }}">
 @if(!empty($returnUrl))<input type="hidden" name="return_to" value="{{ $returnUrl }}">@endif
 @foreach($backParams ?? [] as $key => $value)<input type="hidden" name="back[{{ $key }}]" value="{{ $value }}">@endforeach
-@include('maintenance.timeline')
+@if(!empty($auditRequest))
+    <div class="notification-review-toolbar has-interventions">
+        @include('maintenance.timeline')
+        <div class="notification-review-options"><button type="button" class="mw-button" data-correction-observation-open aria-haspopup="dialog" aria-controls="maintenanceAuditRequest"><span data-notification-icon="shield-check" aria-hidden="true"></span>Observación de la auditora</button></div>
+    </div>
+@else
+    @include('maintenance.timeline')
+@endif
 <section role="tabpanel" id="mw-panel-0" aria-labelledby="mw-tab-0" data-maintenance-panel="0" data-photo-panel hidden>
     <div class="container-form-section-head"><span>01</span><div><h2>Evaluación inicial</h2></div></div>
     <div class="mw-assessment-columns">
-        <div class="mw-field"><label for="diagnosis">Diagnóstico y ubicación del daño</label><textarea id="diagnosis" name="diagnosis" maxlength="1000" rows="7" placeholder="Falla encontrada, ubicación y reparación necesaria" @disabled(!$editable)>{{ old('diagnosis', $job->diagnosis) }}</textarea></div>
+        <div class="mw-field"><label for="diagnosis">Diagnóstico y ubicación del daño</label><textarea id="diagnosis" name="diagnosis" maxlength="2000" rows="7" data-maintenance-text placeholder="Falla encontrada, ubicación y reparación necesaria" @disabled(!$editable)>{{ old('diagnosis', $job->diagnosis) }}</textarea><small class="mw-text-limit">Mínimo 30 al enviar · <span data-maintenance-text-count>{{ mb_strlen(old('diagnosis', $job->diagnosis) ?? '') }}</span> / 2000 caracteres</small></div>
         <section class="mw-assessment-section" aria-labelledby="beforePhotosTitle" data-maintenance-work-photos>
             <div class="mw-photo-heading"><h3 id="beforePhotosTitle" class="mw-photo-section-label">Fotos de evidencia inicial</h3><span class="plate-help"><button type="button" class="plate-help-trigger" aria-label="Requisitos de las fotos iniciales" aria-describedby="beforePhotosHelp" data-field-help data-help-touch></button><span class="plate-help-tooltip" id="beforePhotosHelp" role="tooltip" hidden>De 1 a 5 fotos. JPG, PNG o WEBP; máximo 2 MB por foto.</span></span></div>
             <div class="mw-photo-upload" @if(!$editable) hidden @endif>
@@ -62,8 +70,9 @@
 </section>
 <section role="tabpanel" id="mw-panel-2" aria-labelledby="mw-tab-2" data-maintenance-panel="2" data-photo-panel hidden>
 <div class="container-form-section-head"><span>03</span><div><h2>Resultado de la reparación</h2></div></div>
+@include('maintenance.calculated-cost')
 <div class="mw-assessment-columns">
-    <div class="mw-field"><label for="workPerformed">Trabajo realizado</label><textarea name="work_performed" id="workPerformed" maxlength="8000" rows="7" placeholder="Explica qué se reparó, cómo quedó y el resultado de las pruebas." @disabled(!$editable)>{{ old('work_performed', $job->work_performed) }}</textarea></div>
+    <div class="mw-field"><label for="workPerformed">Trabajo realizado</label><textarea name="work_performed" id="workPerformed" maxlength="2000" rows="7" data-maintenance-text placeholder="Explica qué se reparó, cómo quedó y el resultado de las pruebas." @disabled(!$editable)>{{ old('work_performed', $job->work_performed) }}</textarea><small class="mw-text-limit">Mínimo 30 al enviar · <span data-maintenance-text-count>{{ mb_strlen(old('work_performed', $job->work_performed) ?? '') }}</span> / 2000 caracteres</small></div>
     <section class="mw-assessment-section" aria-labelledby="finalPhotosTitle" data-maintenance-work-photos>
         <div class="mw-photo-heading"><h3 id="finalPhotosTitle" class="mw-photo-section-label">Fotos de evidencia final</h3><span class="plate-help"><button type="button" class="plate-help-trigger" aria-label="Requisitos de las fotos finales" aria-describedby="initialPhotosHelp" data-field-help data-help-touch></button><span class="plate-help-tooltip" id="initialPhotosHelp" role="tooltip" hidden>De 1 a 5 fotos. JPG, PNG o WEBP; máximo 2 MB por foto.</span></span></div>
         <div class="mw-photo-upload" @if(!$editable) hidden @endif>
@@ -81,7 +90,24 @@
     <button type="button" class="mw-button mw-primary" data-maintenance-next>Siguiente<span data-catalog-icon="arrow-right" aria-hidden="true"></span></button>
     @if($editable)<button class="mw-button mw-primary" name="action" value="submit" type="submit" data-maintenance-submit hidden><span data-catalog-icon="send" aria-hidden="true"></span>Solicitar revisión</button>@endif
 </footer>
-</form></section>
+</form>
+@if(!empty($auditRequest))
+    @php($auditObservation = json_decode($auditRequest->after_data, true)['audit'])
+    @include('maintenance.audit-observation', [
+        'dialogId' => 'maintenanceAuditRequest', 'statusLabel' => 'Solicitud de reparación técnica',
+        'inspector' => $auditObservation['inspector_name'] ?? 'Auditora externa', 'observedAt' => $auditRequest->created_at,
+        'notes' => $auditObservation['informacion_adicional'],
+        'shippingLine' => $container->shipping_line_name ?? $container->naviera ?? null,
+        'photos' => collect($auditObservation['photos'] ?? [])->map(fn ($photo, $index) => [
+            'name' => $photo['name'], 'url' => route('maintenance.audit-photo', ['container' => $container->id, 'event' => $auditRequest->id, 'photo' => $index]),
+        ])->all(),
+    ])
+    <dialog class="mw-photo-dialog notification-review-viewer" data-correction-viewer aria-labelledby="maintenanceAuditPhotoTitle">
+        <header><h2 id="maintenanceAuditPhotoTitle"></h2><button type="button" class="mw-button mw-icon" data-correction-viewer-close aria-label="Cerrar imagen" title="Cerrar imagen"><span data-notification-icon="x" aria-hidden="true"></span></button></header>
+        <div class="mw-photo-viewer-image"><img alt=""></div>
+    </dialog>
+@endif
+</section>
 @include('maintenance.photo-viewer')
 <dialog class="container-exit-dialog" data-maintenance-exit role="alertdialog" aria-labelledby="maintenanceExitTitle" aria-describedby="maintenanceExitDescription">
     <span class="container-exit-dialog-kicker">Cambios sin guardar</span>

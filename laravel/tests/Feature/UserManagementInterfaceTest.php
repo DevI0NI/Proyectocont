@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendAccountCredential;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -41,6 +43,9 @@ class UserManagementInterfaceTest extends TestCase
             $table->unsignedBigInteger('external_audit_company_id')->nullable();
             $table->string('external_access_level', 20)->nullable();
         });
+        (require database_path('migrations/2026_10_28_154733_create_account_recovery_tables.php'))->up();
+        config(['account-recovery.enabled' => true, 'cache.default' => 'array']);
+        Queue::fake([SendAccountCredential::class]);
         Schema::create('external_audit_companies', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
@@ -70,6 +75,12 @@ class UserManagementInterfaceTest extends TestCase
         $this->user(3, 1, 'Local');
         $this->user(4, 2, 'Otro');
         $this->user(3, 1, 'Inactivo', 2);
+        $this->withSession(['sucursal_activa' => 1]);
+        foreach (['2026_10_20_170939_create_system_notifications_table.php', '2026_10_20_172530_add_personal_folders_to_system_notifications.php',
+            '2026_10_20_175848_add_expiry_to_system_notifications.php', '2026_10_21_052602_add_activity_details_to_system_notifications.php',
+            '2026_10_21_060157_add_bell_dismissed_at_to_system_notifications.php'] as $file) {
+            (require database_path('migrations/'.$file))->up();
+        }
     }
 
     public function test_table_filters_and_states_respect_branch_administrator_visibility(): void
@@ -110,7 +121,9 @@ class UserManagementInterfaceTest extends TestCase
         $this->actingAs($super);
         $this->postJson('/usuarios', $this->payload('Nuevo'))->assertOk()->assertJsonPath('message', 'Usuario creado correctamente.');
         $user = User::where('username', 'Nuevo')->firstOrFail();
-        $this->assertTrue(Hash::check('Secret123!', $user->password));
+        $this->assertFalse(Hash::check('Secret123!', $user->password));
+        $this->assertTrue($user->requires_password_setup);
+        Queue::assertPushed(SendAccountCredential::class, fn ($job) => $job->userId === $user->id && $job->purpose === 'activation');
         $this->postJson('/usuarios', $this->payload('Nuevo'))->assertUnprocessable()->assertJsonValidationErrors(['username', 'email']);
         $this->postJson('/usuarios', $this->payload('Inactivo'))->assertUnprocessable()->assertJsonValidationErrors('username');
         $this->patchJson('/usuarios/'.$user->id, $this->payload('Nuevo', 4, 2))->assertOk();
@@ -120,7 +133,7 @@ class UserManagementInterfaceTest extends TestCase
         $this->deleteJson('/usuarios/'.$user->id)->assertOk();
         $this->assertSame(2, $user->fresh()->estado_id);
         $data = $this->payload('Nuevo', 3, 1) + ['reactivate' => 1];
-        $this->patchJson('/usuarios/'.$user->id, array_replace($data, ['password' => '']))->assertUnprocessable()->assertJsonValidationErrors('password');
+        $this->patchJson('/usuarios/'.$user->id, array_replace($data, ['password' => 'Manual123!']))->assertUnprocessable()->assertJsonValidationErrors('password');
         $this->patchJson('/usuarios/'.$user->id, $data)->assertOk()->assertJsonPath('message', 'Usuario reactivado correctamente.');
         $this->assertSame(1, $user->fresh()->estado_id);
         $this->postJson('/usuarios', $this->payload('Elevado', 1, 1))->assertUnprocessable()->assertJsonValidationErrors('rol_id');
@@ -133,16 +146,16 @@ class UserManagementInterfaceTest extends TestCase
 
     private function payload(string $name, int $role = 3, int $branch = 1): array
     {
-        return ['username' => $name, 'email' => strtolower($name).'@example.test', 'password' => 'Secret123!', 'password_confirmation' => 'Secret123!', 'rol_id' => $role, 'sucursal_id' => $branch];
+        return ['username' => $name, 'email' => strtolower($name).'@example.test', 'rol_id' => $role, 'sucursal_id' => $branch];
     }
 
-    public function test_password_policy_confirmation_email_and_availability(): void
+    public function test_manual_password_assignment_is_prohibited_and_email_availability_is_checked(): void
     {
         $this->actingAs(User::where('username', 'Super')->first());
         foreach (['Ab1!', 'secret123!', 'Secretabc!', 'Secret123'] as $password) {
             $this->postJson('/usuarios', array_replace($this->payload('Nuevo'), ['password' => $password, 'password_confirmation' => $password]))->assertUnprocessable()->assertJsonValidationErrors('password');
         }
-        $this->postJson('/usuarios', array_replace($this->payload('Nuevo'), ['password_confirmation' => 'Different123!']))->assertUnprocessable()->assertJsonValidationErrors('password');
+        $this->postJson('/usuarios', array_replace($this->payload('Nuevo'), ['password_confirmation' => 'Different123!']))->assertUnprocessable()->assertJsonValidationErrors('password_confirmation');
         $this->postJson('/usuarios', array_replace($this->payload('Nuevo'), ['email' => 'correo-invalido']))->assertUnprocessable()->assertJsonValidationErrors('email');
         $this->postJson(route('users.check'), ['username' => 'Local'])->assertOk()->assertJsonPath('status', 'exists');
         $this->postJson(route('users.check'), ['email' => 'inactivo@example.test'])->assertOk()->assertJsonPath('status', 'inactive');
@@ -161,7 +174,7 @@ class UserManagementInterfaceTest extends TestCase
         $this->patchJson('/usuarios/'.$target->id, $this->payload('Local') + ['permission_mode' => 'custom', 'permissions' => ['users.manage']])->assertOk();
         $this->assertEqualsCanonicalizing(['users.manage', 'users.view'], $target->fresh()->permissions);
         $this->actingAs($target->fresh());
-        $this->get('/usuarios')->assertOk()->assertSee('Nuevo usuario')->assertSee('Sin sucursal', false);
+        $this->get('/usuarios')->assertOk()->assertSee('Nuevo usuario')->assertSee('Sucursal A');
         $this->get('/reportes')->assertForbidden();
         $this->post('/traslados', [])->assertForbidden();
         $this->get('/usuarios/'.User::where('username', 'Admin')->value('id').'/edit')->assertForbidden();

@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Sucursal;
+use App\Services\ExternalAuditAccess;
 use Carbon\Carbon;
 use Dompdf\Dompdf;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -21,14 +24,31 @@ class DocumentController extends Controller
         return $this->documentView($request, 'documents.ticket', 'ingreso');
     }
 
-    public function ingressTicketPdf(Request $request)
+    public function ingressTicketPdf(Request $request): Response
     {
         return $this->ticketPdf($request, 'ingreso');
     }
 
     public function dispatchEir(Request $request): View
     {
-        return $this->documentView($request, 'documents.eir', 'salida');
+        $branch = $this->activeBranch($request);
+        abort_unless($branch, 404);
+        $request->validate(['event_id' => ['nullable', 'integer', 'min:1'], 'contenedor_id' => ['nullable', 'integer', 'min:1']]);
+
+        if ($request->filled('event_id') || $request->filled('contenedor_id')) {
+            return $this->documentView($request, 'documents.ticket', 'salida');
+        }
+
+        return view('documents.dispatch-eir', [
+            'sucursal' => $branch, 'sucursales' => Sucursal::activas()->orderBy('nombre')->get(),
+            'data' => null,
+            'documents' => $this->dispatchDocuments($branch->id)->orderByDesc('e.id')->paginate(20),
+        ]);
+    }
+
+    public function dispatchEirPdf(Request $request): Response
+    {
+        return $this->ticketPdf($request, 'salida');
     }
 
     public function dispatchTicket(Request $request): View
@@ -36,21 +56,20 @@ class DocumentController extends Controller
         return $this->documentView($request, 'documents.ticket', 'salida');
     }
 
-    public function dispatchTicketPdf(Request $request)
+    public function dispatchTicketPdf(Request $request): Response
     {
         return $this->ticketPdf($request, 'salida');
     }
 
-    private function ticketPdf(Request $request, string $operation)
+    private function ticketPdf(Request $request, string $operation): Response
     {
         $branch = $this->activeBranch($request);
         abort_if(! $branch, 404, 'No hay sucursal activa.');
 
-        if (! class_exists(Dompdf::class)) {
-            require_once base_path('../vendor/autoload.php');
-        }
-
         $data = $this->documentData($request, $branch->id, $operation);
+        if (isset($data['sucursal'])) {
+            $branch->nombre = $data['sucursal'];
+        }
         $logoPath = public_path('imagenes/IPSA.png');
         $logoData = file_exists($logoPath)
             ? 'data:image/png;base64,'.base64_encode((string) file_get_contents($logoPath))
@@ -72,7 +91,8 @@ class DocumentController extends Controller
 
         return response($dompdf->output(), 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="'.$filename.'"',
+            'Content-Disposition' => ($request->boolean('download') ? 'attachment' : 'inline').'; filename="'.$filename.'"',
+            'Cache-Control' => 'private, no-store',
         ]);
     }
 
@@ -81,16 +101,36 @@ class DocumentController extends Controller
         $branch = $this->activeBranch($request);
         abort_if(! $branch, 404, 'No hay sucursal activa.');
 
+        $data = $this->documentData($request, $branch->id, $operation);
+        if (isset($data['sucursal'])) {
+            $branch->nombre = $data['sucursal'];
+        }
+
         return view($view, [
             'sucursal' => $branch,
             'sucursales' => Sucursal::activas()->orderBy('nombre')->get(),
             'operation' => $operation,
-            'data' => $this->documentData($request, $branch->id, $operation),
+            'data' => $data,
         ]);
     }
 
     private function documentData(Request $request, int $branchId, string $operation): array
     {
+        if ($operation === 'salida') {
+            return $this->dispatchDocumentData($request, $branchId);
+        }
+        $request->validate(['cycle_id' => ['nullable', 'integer', 'min:1']]);
+        if ($request->filled('cycle_id')) {
+            $event = DB::table('container_assignment_events as e')
+                ->join('container_ingress_cycles as cycle', 'cycle.id', '=', 'e.ingress_cycle_id')
+                ->whereColumn('cycle.container_id', 'e.container_id')->where('cycle.branch_id', $branchId)
+                ->where('cycle.id', $request->integer('cycle_id'))->whereIn('e.event_type', ['ingress', 'reentry'])
+                ->orderBy('e.id')->first(['e.after_data', 'e.container_id']);
+            $document = json_decode($event?->after_data ?? '{}', true)['document'] ?? null;
+            abort_unless(is_array($document) && isset($document['numero'], $document['equipo']), 404, 'Este ingreso antiguo no conserva una constancia historica.');
+
+            return $document + ['container_id' => $event->container_id];
+        }
         $container = null;
         if ($request->integer('contenedor_id')) {
             $container = DB::table('contenedores as c')
@@ -162,9 +202,31 @@ class DocumentController extends Controller
         ];
     }
 
+    private function dispatchDocuments(int $branchId): Builder
+    {
+        return DB::table('container_assignment_events as e')->join('container_ingress_cycles as cycle', 'cycle.id', '=', 'e.ingress_cycle_id')
+            ->where('cycle.branch_id', $branchId)->whereColumn('cycle.container_id', 'e.container_id')->where('e.event_type', 'dispatch')
+            ->select('e.*')->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(e.after_data, '$.document.numero')) as folio")
+            ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(e.after_data, '$.document.equipo')) as equipo")
+            ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(e.after_data, '$.document.fecha')) as fecha");
+    }
+
+    private function dispatchDocumentData(Request $request, int $branchId): array
+    {
+        $request->validate(['event_id' => ['nullable', 'integer', 'min:1'], 'contenedor_id' => ['nullable', 'integer', 'min:1']]);
+        abort_unless($request->filled('event_id') || $request->filled('contenedor_id'), 404, 'Selecciona una constancia de salida registrada.');
+        $event = $this->dispatchDocuments($branchId)
+            ->when($request->filled('event_id'), fn ($query) => $query->where('e.id', $request->integer('event_id')))
+            ->when($request->filled('contenedor_id'), fn ($query) => $query->where('e.container_id', $request->integer('contenedor_id')))
+            ->latest('e.id')->firstOrFail();
+
+        return json_decode($event->after_data, true, 512, JSON_THROW_ON_ERROR)['document'] + ['event_id' => $event->id];
+    }
+
     private function activeBranch(Request $request): ?Sucursal
     {
         $branchId = (int) $request->session()->get('sucursal_activa');
+        app(ExternalAuditAccess::class)->authorizeBranch($request->user(), $branchId);
 
         return $branchId > 0 ? Sucursal::find($branchId) : null;
     }

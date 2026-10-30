@@ -1,24 +1,7 @@
 <fieldset class="user-editor-section" aria-label="Datos del usuario">
     <div class="user-field-grid">
         <label><span>Usuario</span><input type="text" name="username" value="{{ $values['username'] ?? '' }}" required maxlength="50" autocomplete="off" placeholder="Nombre de usuario" aria-describedby="usernameFeedback"><small id="usernameFeedback" data-field-feedback="username" aria-live="polite"></small></label>
-        <label><span>Correo electrónico</span><input type="email" name="email" value="{{ $values['email'] ?? '' }}" required maxlength="100" autocomplete="off" placeholder="usuario@empresa.com" aria-describedby="emailFeedback"><small id="emailFeedback" data-field-feedback="email" aria-live="polite"></small></label>
-    </div>
-</fieldset>
-<fieldset class="user-editor-section user-security-fields" aria-label="Seguridad">
-    <div class="user-field-grid">
-        <label>
-            <span class="user-field-title">Contraseña <small data-user-password-optional @if(!($editing ?? false)) hidden @endif>(opcional)</small></span>
-            <div class="user-password-control user-password-primary"><input type="password" name="password" autocomplete="new-password" minlength="8" maxlength="64" @required(!($editing ?? false)) aria-describedby="passwordFeedback passwordRules"><button type="button" data-user-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña"></button>
-                <ul class="user-password-rules" id="passwordRules">
-                    <li data-password-rule="length"><input type="checkbox" disabled aria-label="Mínimo 8 caracteres">Mínimo 8 caracteres</li>
-                    <li data-password-rule="uppercase"><input type="checkbox" disabled aria-label="Una mayúscula">Una mayúscula</li>
-                    <li data-password-rule="number"><input type="checkbox" disabled aria-label="Un número">Un número</li>
-                    <li data-password-rule="symbol"><input type="checkbox" disabled aria-label="Un símbolo">Un símbolo</li>
-                </ul>
-            </div>
-            <small id="passwordFeedback" data-field-feedback="password" aria-live="polite">{{ ($editing ?? false) ? 'Déjala vacía para conservar la actual.' : '' }}</small>
-        </label>
-        <label><span>Confirmar contraseña</span><div class="user-password-control"><input type="password" name="password_confirmation" autocomplete="new-password" maxlength="64" @required(!($editing ?? false)) aria-describedby="passwordConfirmationFeedback"><button type="button" data-user-password-toggle aria-label="Mostrar contraseña" title="Mostrar contraseña"></button></div><small id="passwordConfirmationFeedback" data-field-feedback="password_confirmation" aria-live="polite"></small></label>
+        <label><span>Correo electrónico</span><input type="email" name="email" value="{{ $values['email'] ?? '' }}" required maxlength="100" autocomplete="off" placeholder="usuario@empresa.com" aria-describedby="emailFeedback" @readonly(isset($userModel) && $userModel->exists && ((int) $userModel->rol_id === 1 || (int) $userModel->id === (int) auth()->id()))><small id="emailFeedback" data-field-feedback="email" aria-live="polite"></small></label>
     </div>
 </fieldset>
 <fieldset class="user-editor-section" aria-label="Acceso">

@@ -14,7 +14,7 @@
     @endif
 
     <section class="form-panel transfer-panel">
-        <form method="POST" action="{{ route('transfers.store') }}" id="transferForm" class="container-form transfer-form">
+        <form method="POST" action="{{ route('transfers.store') }}" id="transferForm" class="container-form transfer-form" data-unsaved-form="transferExitDialog" data-restored-changes="{{ $errors->any() ? 'true' : 'false' }}">
             @csrf
             <input type="hidden" id="contenedor_id" name="contenedor_id" value="{{ old('contenedor_id', $selectedContainer?->id) }}" required>
             <input type="hidden" id="origen_patio_hidden" name="origen_patio_id" value="{{ old('origen_patio_id', $selectedContainer?->patio_id) }}">
@@ -59,7 +59,7 @@
 
                         <label>
                             <span>Bloque origen</span>
-                            <select id="origen_bloque_id" data-selected="{{ old('origen_bloque_id', $selectedContainer?->bloque_id) }}">
+                            <select id="origen_bloque_id" data-selected="{{ old('origen_bloque_id', $selectedContainer?->bloque_id) }}" disabled>
                                 <option value="">Selecciona un bloque</option>
                             </select>
                         </label>
@@ -165,7 +165,10 @@
         </form>
     </section>
 
+    @include('partials.unsaved-changes', ['exitDialogId' => 'transferExitDialog', 'exitDialogKicker' => 'Confirmar salida', 'exitDialogTitle' => '¿Seguro que quieres salir?', 'exitDialogDescription' => 'Los cambios se perderán.'])
+
     <script>
+        document.addEventListener('DOMContentLoaded', function () {
         const preselectedContainer = @json($selectedContainer);
         const origenPatio = document.getElementById('origen_patio_id');
         const origenBloque = document.getElementById('origen_bloque_id');
@@ -205,6 +208,13 @@
         let searchResults = [];
         let searchRequestId = 0;
         let searchTimer;
+        const selectionGate = window.createInteractionGate((busy) => {
+            containerList.setAttribute('aria-busy', String(busy));
+            globalSearchResults.setAttribute('aria-busy', String(busy));
+            document.querySelectorAll('#containerList [data-id], #globalSearchResults [data-id]').forEach((button) => {
+                button.disabled = busy || button.dataset.id === String(selectedItem?.id);
+            });
+        });
 
         function escapeHtml(value) {
             return String(value).replace(/[&<>"']/g, function (character) {
@@ -219,7 +229,8 @@
         function updateSummary() {
             const canMove = Boolean(selectedItem?.puede_trasladar);
             destinoPatio.disabled = !canMove;
-            destinoBloque.disabled = !canMove || !destinoPatio.value;
+            syncBlockAvailability(origenPatio, origenBloque);
+            syncBlockAvailability(destinoPatio, destinoBloque, canMove);
             destinoPatio.dispatchEvent(new Event('options-updated'));
             destinoBloque.dispatchEvent(new Event('options-updated'));
 
@@ -409,11 +420,20 @@
             renderOptions();
         }
 
+        function syncBlockAvailability(patioSelect, blockSelect, allowed = true) {
+            blockSelect.disabled = !allowed || !patioSelect.value || blockSelect.dataset.loading === 'true'
+                || !Array.from(blockSelect.options).some((option) => option.value && !option.disabled);
+            blockSelect.dispatchEvent(new Event('options-updated'));
+        }
+
         async function loadBlocks(patioSelect, blockSelect, callback) {
             const patioId = patioSelect.value;
             const selected = blockSelect.dataset.selected || blockSelect.value;
+            blockSelect.dataset.loading = 'true';
+            blockSelect.disabled = true;
             fillSelect(blockSelect, [], 'Selecciona un bloque');
             if (!patioId) {
+                blockSelect.dataset.loading = 'false';
                 if (callback) await callback();
                 updateSummary();
                 return;
@@ -436,8 +456,12 @@
                 }
             } catch (error) {
                 (blockSelect === origenBloque ? originMessage : destinationMessage).textContent = error.message;
+            } finally {
+                if (patioSelect.value === patioId) {
+                    blockSelect.dataset.loading = 'false';
+                    updateSummary();
+                }
             }
-            updateSummary();
         }
 
         async function loadContainers() {
@@ -463,7 +487,7 @@
                 renderContainers();
                 const preselected = currentContainers.find((item) => String(item.id) === pendingSelectionId);
                 if (preselected) {
-                    selectContainer(preselected);
+                    selectContainer(preselected, true);
                     pendingSelectionId = '';
                 }
                 const preview = await fetchBlockPreview(blockId).catch(() => null);
@@ -484,7 +508,7 @@
 
             containerList.innerHTML = currentContainers.map(function (item) {
                 return `
-                    <button type="button" class="transfer-item ${item.puede_trasladar ? '' : 'blocked'} ${String(item.id) === containerIdInput.value ? 'selected' : ''}" data-id="${item.id}" aria-pressed="${String(item.id) === containerIdInput.value}">
+                    <button type="button" class="transfer-item ${item.puede_trasladar ? '' : 'blocked'} ${String(item.id) === containerIdInput.value ? 'selected' : ''}" data-id="${item.id}" aria-pressed="${String(item.id) === containerIdInput.value}" ${selectionGate.busy || String(item.id) === containerIdInput.value ? 'disabled' : ''}>
                         <span class="transfer-item-position">P${item.posicion}</span>
                         <span class="transfer-item-body"><strong>${escapeHtml(item.nombre)}</strong><small>${item.puede_trasladar ? 'Libre para traslado' : escapeHtml(item.motivo_bloqueo)}</small></span>
                         <span class="transfer-item-status">${item.puede_trasladar ? 'Libre' : 'Bloqueado'}</span>
@@ -493,7 +517,9 @@
             }).join('');
         }
 
-        function selectContainer(item) {
+        function selectContainer(item, loaded = false) {
+            if (String(selectedItem?.id) === String(item.id)) return;
+            if (!loaded) return selectionGate.run(() => selectContainer(item, true));
             selectedItem = item;
             containerIdInput.value = item.id;
             filterInput.value = item.nombre;
@@ -505,6 +531,7 @@
                 const selected = String(button.dataset.id) === String(item.id);
                 button.classList.toggle('selected', selected);
                 button.setAttribute('aria-pressed', String(selected));
+                button.disabled = selectionGate.busy || selected;
             });
             updateSummary();
         }
@@ -542,7 +569,7 @@
                 globalSearchResults.innerHTML = '<p class="empty-cell">No hay contenedores activos con ese numero en esta sucursal.</p>';
             } else {
                 globalSearchResults.innerHTML = searchResults.map((item) => `
-                    <button type="button" class="transfer-search-result" role="option" data-id="${item.id}">
+                    <button type="button" class="transfer-search-result" role="option" data-id="${item.id}" ${selectionGate.busy || String(item.id) === String(selectedItem?.id) ? 'disabled' : ''}>
                         <span><strong>${escapeHtml(item.nombre)}</strong><small>${escapeHtml(item.patio_nombre)} · Bloque ${escapeHtml(item.bloque_numero)} · Posicion ${item.posicion}</small></span>
                         <em class="${item.puede_trasladar ? '' : 'blocked'}">${item.puede_trasladar ? 'Libre' : 'Bloqueado'}</em>
                     </button>
@@ -552,7 +579,12 @@
             filterInput.setAttribute('aria-expanded', 'true');
         }
 
-        async function selectSearchResult(item) {
+        function selectSearchResult(item) {
+            if (String(selectedItem?.id) === String(item.id)) return;
+            return selectionGate.run(() => loadSearchSelection(item));
+        }
+
+        async function loadSearchSelection(item) {
             searchRequestId++;
             clearTimeout(searchTimer);
             closeSearchResults();
@@ -664,5 +696,6 @@
         }
         if (!origenPatio.value && destinoPatio.value) loadBlocks(destinoPatio, destinoBloque, loadPosition);
         setStep(0);
+        });
     </script>
 @endsection

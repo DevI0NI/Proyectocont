@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Sucursal;
 use App\Models\User;
+use App\Services\AccountRecovery;
 use App\Services\ExternalAuditAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\View\View;
 
 class AuthController extends Controller
@@ -22,16 +24,28 @@ class AuthController extends Controller
     {
         $credentials = $request->validate([
             'email' => ['required', 'email', 'max:255'],
-            'password' => ['required', 'string'],
+            'password' => ['required', 'string', 'max:128'],
         ], [
             'email.required' => 'Ingresa tu correo electronico.',
             'email.email' => 'El formato del correo electronico es incorrecto.',
-            'password.required' => 'Ingresa tu contrasena.',
+            'password.required' => 'Ingresa tu contraseña.',
         ]);
 
-        $user = User::where('email', $credentials['email'])->first();
+        $email = strtolower(trim($credentials['email']));
+        $key = 'login:'.hash('sha256', $email);
+        $ipKey = 'login-ip:'.$request->ip();
+        if (RateLimiter::tooManyAttempts($key, 10) || RateLimiter::tooManyAttempts($ipKey, 40)) {
+            return back()->withErrors(['email' => 'Demasiados intentos. Espera un minuto.'])->onlyInput('email');
+        }
+        RateLimiter::hit($key, 60);
+        RateLimiter::hit($ipKey, 60);
+        $user = User::where('email', $email)->first();
+        $recovery = app(AccountRecovery::class);
+        if ($user && $recovery->claim($request, $user, $credentials['password'])) {
+            return redirect()->route('account.password');
+        }
 
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+        if (! $user || $user->requires_password_setup || ! Hash::check($credentials['password'], $user->password)) {
             return back()
                 ->withErrors(['email' => 'Credenciales invalidas.'])
                 ->onlyInput('email');
@@ -44,7 +58,10 @@ class AuthController extends Controller
         }
 
         Auth::login($user);
+        RateLimiter::clear($key);
         $request->session()->regenerate();
+        $request->session()->forget('credential_grant');
+        $request->session()->put('credential_version', (int) ($user->credential_version ?? 1));
         $this->setInitialBranch($request, $user);
 
         return redirect()->intended(route('dashboard'));
@@ -58,11 +75,6 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('login');
-    }
-
-    public function legacyLogout(Request $request): RedirectResponse
-    {
-        return $this->logout($request);
     }
 
     private function setInitialBranch(Request $request, User $user): void

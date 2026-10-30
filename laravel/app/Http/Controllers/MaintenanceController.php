@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MaintenanceController extends Controller
@@ -93,7 +94,8 @@ class MaintenanceController extends Controller
 
         return view('maintenance.container', $context + ['container' => $record, 'mechanicMode' => true,
             'maintenanceStatus' => $job ? (MaintenanceWorkflow::STATES[$job->status] ?? $job->status)
-                : ($workflow->outOfServiceStatuses()->where('id', $record->estatus_ipsa_id)->exists() ? 'Por atender' : 'Sin mantenimiento pendiente'),
+                : (($workflow->outOfServiceStatuses()->where('id', $record->estatus_ipsa_id)->exists()
+                    || $workflow->auditRequestedContainers((int) $context['sucursal']->id)->where('c.id', $record->id)->exists()) ? 'Por atender' : 'Sin mantenimiento pendiente'),
             'backParams' => $this->inventoryBackParams($request, ['patio_id' => $record->patio_id, 'bloque_id' => $record->bloque_id])]);
     }
 
@@ -124,6 +126,7 @@ class MaintenanceController extends Controller
         }
 
         return view('maintenance.create', $context + compact('container', 'backParams') + [
+            'auditRequest' => $workflow->pendingAuditRequest($container, (int) $context['sucursal']->id),
             'exchangeQuote' => app(MaintenanceExchangeRate::class)->quote(),
             'starting' => true, 'editable' => true, 'review' => null, 'materials' => collect(), 'evidence' => collect(),
             'parts' => DB::table('repair_parts')->where('status', 1)->orderBy('name')->get(),
@@ -134,12 +137,13 @@ class MaintenanceController extends Controller
         ]);
     }
 
-    public function store(Request $request, MaintenanceWorkflow $workflow): RedirectResponse
+    public function store(Request $request, MaintenanceWorkflow $workflow): RedirectResponse|JsonResponse
     {
         $context = $this->context($request);
-        $data = $request->validate(['container_id' => ['required', 'integer'], 'diagnosis' => ['nullable', 'string', 'max:1000'],
+        $data = $request->validate(['container_id' => ['required', 'integer'], 'diagnosis' => ['nullable', 'string', 'max:2000'],
+            'audit_request_version' => ['nullable', 'integer', 'min:1'],
             'action' => ['sometimes', Rule::in(['save', 'submit'])], 'active_step' => ['nullable', 'integer', 'min:0', 'max:2'],
-            'repair_service_id' => ['nullable', 'integer', 'min:1'], 'repair_type' => ['prohibited'], 'work_performed' => ['nullable', 'string', 'max:8000'],
+            'repair_service_id' => ['nullable', 'integer', 'min:1'], 'repair_type' => ['prohibited'], 'work_performed' => ['nullable', 'string', 'max:2000'],
             'exchange_quote' => ['nullable', 'string', 'max:2048'],
             'materials' => ['nullable', 'array', 'max:40'], 'materials.*.part_id' => ['required', 'integer', 'distinct'],
             'materials.*.quantity' => ['required', 'numeric', 'decimal:0,3', 'min:0.001', 'max:100000'],
@@ -148,8 +152,8 @@ class MaintenanceController extends Controller
             'evidence_before' => ['nullable', 'array', 'max:5'],
             'evidence_before.*' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048']], [
                 'container_id.required' => 'Selecciona un contenedor.', 'diagnosis.required' => 'Describe el diagnostico inicial.',
-                'diagnosis.min' => 'El diagnostico debe tener al menos 10 caracteres.',
-                'diagnosis.max' => 'El diagnóstico no puede superar los 1000 caracteres.',
+                'diagnosis.min' => 'El diagnostico debe tener al menos 30 caracteres.',
+                'diagnosis.max' => 'El diagnóstico no puede superar los 2000 caracteres.',
                 'evidence_before.max' => 'Adjunta hasta 5 fotos del estado inicial.',
                 'evidence_before.*.image' => 'Adjunta fotografias JPG, PNG o WEBP.',
                 'evidence_before.*.max' => 'Cada fotografia debe pesar como maximo 2 MB.',
@@ -168,8 +172,10 @@ class MaintenanceController extends Controller
         }
         $id = $workflow->start($request->user(), (int) $context['sucursal']->id, $data, $photos);
 
-        return redirect()->route('maintenance.show', ['job' => $id, 'step' => $request->integer('active_step', 0), 'back' => $this->inventoryBackParams($request)])
+        $response = redirect()->route('maintenance.show', ['job' => $id, 'step' => $request->integer('active_step', 0), 'back' => $this->inventoryBackParams($request)])
             ->with('status', ($data['action'] ?? 'save') === 'submit' ? 'Solicitud de revisión registrada.' : 'Cambios guardados.');
+
+        return $request->expectsJson() ? response()->json(['redirect' => $response->getTargetUrl()]) : $response;
     }
 
     public function show(Request $request, int $job, MaintenanceWorkflow $workflow): View
@@ -215,18 +221,19 @@ class MaintenanceController extends Controller
         };
 
         return view('maintenance.show', $context + ['job' => $record, 'materials' => $materials, 'parts' => $parts, 'repairServices' => $repairServices, 'editable' => $editable,
+            'auditRequest' => $record->source_audit_event_id ? DB::table('container_assignment_events')->where('id', $record->source_audit_event_id)->where('container_id', $record->container_id)->where('ingress_cycle_id', $record->ingress_cycle_id)->first() : null,
             'exchangeQuote' => $record->usd_gtq_rate !== null || $editable ? app(MaintenanceExchangeRate::class)->quote($record) : ['rate' => null, 'date' => null, 'token' => null],
             'container' => $container, 'readonlyReason' => $readonlyReason, 'returnUrl' => $this->localReturnUrl($request), 'backParams' => $this->inventoryBackParams($request, $container ? ['patio_id' => $container->yard_id, 'bloque_id' => $container->bloque_id] : []),
             'evidence' => DB::table('maintenance_evidence')->where('job_id', $job)->get(),
             'review' => DB::table('maintenance_review_requests')->where('job_id', $job)->first()]);
     }
 
-    public function update(Request $request, int $job, MaintenanceWorkflow $workflow): RedirectResponse
+    public function update(Request $request, int $job, MaintenanceWorkflow $workflow): RedirectResponse|JsonResponse
     {
         $context = $this->context($request);
         $rules = ['version' => ['required', 'integer', 'min:1'], 'action' => ['required', Rule::in(['save', 'submit'])],
             'active_step' => ['nullable', 'integer', 'min:0', 'max:2'],
-            'diagnosis' => ['sometimes', 'nullable', 'string', 'max:1000'], 'work_performed' => ['nullable', 'string', 'max:8000'],
+            'diagnosis' => ['sometimes', 'nullable', 'string', 'max:2000'], 'work_performed' => ['nullable', 'string', 'max:2000'],
             'repair_service_id' => ['nullable', 'integer', 'min:1'], 'repair_type' => ['prohibited'], 'evidence_test' => ['prohibited'],
             'exchange_quote' => ['nullable', 'string', 'max:2048'],
             'materials' => ['nullable', 'array', 'max:40'], 'materials.*.part_id' => ['required', 'integer', 'distinct'],
@@ -236,8 +243,8 @@ class MaintenanceController extends Controller
             $rules['evidence_'.$stage.'.*'] = ['file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'];
         }
         $data = $request->validate($rules, [
-            'diagnosis.required' => 'Describe el diagnostico.', 'diagnosis.min' => 'El diagnostico debe tener al menos 10 caracteres.',
-            'diagnosis.max' => 'El diagnóstico no puede superar los 1000 caracteres.',
+            'diagnosis.required' => 'Describe el diagnostico.', 'diagnosis.min' => 'El diagnostico debe tener al menos 30 caracteres.',
+            'diagnosis.max' => 'El diagnóstico no puede superar los 2000 caracteres.',
             'materials.*.quantity.min' => 'La cantidad debe ser mayor que cero.', 'materials.*.quantity.decimal' => 'Utiliza hasta 3 decimales.',
             'materials.*.part_id.distinct' => 'No repitas el mismo material; ajusta su cantidad.',
             'repair_service_id.integer' => 'Selecciona una reparación del catálogo.',
@@ -257,8 +264,29 @@ class MaintenanceController extends Controller
         }
         $workflow->save($request->user(), (int) $context['sucursal']->id, $job, $data, $uploads);
 
-        return redirect()->route('maintenance.show', array_filter(['job' => $job, 'step' => $request->integer('active_step', 1), 'back' => $this->inventoryBackParams($request), 'return_to' => $this->localReturnUrl($request)], fn ($value): bool => $value !== null))->with('status', $data['action'] === 'submit'
+        $response = redirect()->route('maintenance.show', array_filter(['job' => $job, 'step' => $request->integer('active_step', 1), 'back' => $this->inventoryBackParams($request), 'return_to' => $this->localReturnUrl($request)], fn ($value): bool => $value !== null))->with('status', $data['action'] === 'submit'
             ? 'Solicitud de revision registrada. La reparacion no libera el contenedor.' : 'Avance guardado.');
+
+        return $request->expectsJson() ? response()->json(['redirect' => $response->getTargetUrl()]) : $response;
+    }
+
+    public function auditPhoto(Request $request, int $container, int $event, int $photo, MaintenanceWorkflow $workflow): BinaryFileResponse
+    {
+        $context = $this->context($request);
+        $branchId = (int) $context['sucursal']->id;
+        $record = $workflow->containers($branchId)->where('c.id', $container)->firstOrFail();
+        $job = $workflow->currentJobs($record)->where('source_audit_event_id', $event)->first();
+        if ($job) {
+            abort_unless((int) $job->mechanic_id === (int) $request->user()->id, 403);
+        } else {
+            abort_unless((int) $workflow->pendingAuditRequest($record, $branchId)?->id === $event, 404);
+        }
+        $source = DB::table('container_assignment_events')->where('id', $event)->where('container_id', $container)
+            ->where('ingress_cycle_id', $record->current_ingress_cycle_id)->where('event_type', 'external_audit_status')->firstOrFail();
+        $image = json_decode($source->after_data, true)['audit']['photos'][$photo] ?? null;
+        abort_unless($image && in_array($image['mime'], ['image/jpeg', 'image/png', 'image/webp'], true) && Storage::disk('local')->exists($image['path']), 404);
+
+        return response()->file(Storage::disk('local')->path($image['path']), ['Content-Type' => $image['mime'], 'X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-store']);
     }
 
     public function evidence(Request $request, int $job, int $evidence): StreamedResponse

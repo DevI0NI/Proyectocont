@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Contenedor;
 use App\Models\EstatusContenedor;
+use App\Models\EstatusIpsa;
+use App\Models\Sucursal;
 use App\Models\User;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -107,6 +109,7 @@ class SystemNotifications
 
         $subject = $details['subject'] ?? trim(Str::before(Str::before($description, "\n"), ' · '));
         $summary = match ($notification->title ?? '') {
+            'Solicitud de recuperacion de contrasena', 'Solicitud de recuperación de contraseña' => $notification->body,
             'Contenedor trasladado' => 'Se trasladó el contenedor '.$subject.'.',
             'Contenedor despachado' => 'Se despachó el contenedor '.$subject.'.',
             'Información del contenedor actualizada' => 'Se modificó el contenedor '.$subject.'.',
@@ -119,6 +122,7 @@ class SystemNotifications
             'La auditora solicitó una corrección' => 'Se solicitó corregir la reparación del contenedor '.$subject.'.',
             'Contenedor asignado a tu auditora', 'Contenedor asignado a revisión externa', 'Asignación del ingreso regularizada' => 'Se asignó el contenedor '.$subject.' a revisión externa.',
             'Reparación lista para auditoría' => 'La reparación del contenedor '.$subject.' está lista para auditoría.',
+            'Contenedor disponible' => 'El contenedor '.$subject.' pasó de OOS a Disponible.',
             'Corrección lista para revisión' => 'Se envió una corrección del contenedor '.$subject.' para revisión.',
             'Auditoría externa actualizada' => 'Se actualizó la auditoría del contenedor '.$subject.'.',
             'Asignación de auditoría modificada', 'Instrucción de auditoría modificada' => 'Se modificó la asignación de auditoría del contenedor '.$subject.'.',
@@ -156,7 +160,23 @@ class SystemNotifications
             }
         }
 
+        if ((int) $user->rol_id === 1 && config('account-recovery.enabled')) {
+            $categories['account-recovery'] = 'Recuperación de contraseñas';
+        }
+
         return $categories;
+    }
+
+    public function accountRecoveryRequested(User $target, int $requestId): void
+    {
+        foreach (User::active()->where('rol_id', 1)->get() as $supervisor) {
+            $branch = $supervisor->sucursal_id ?: Sucursal::activas()->value('id');
+            if ($branch) {
+                $this->deliver($supervisor, (int) $branch, 'account-recovery', 'internal', 'account-recovery:'.$requestId,
+                    'Solicitud de recuperación de contraseña', $target->username.' solicitó recuperar su acceso.',
+                    ['details' => json_encode(['actor' => $target->username, 'subject' => $target->username], JSON_THROW_ON_ERROR)]);
+            }
+        }
     }
 
     public function inbox(User $user, int $branchId, string $folder = 'inbox'): Builder
@@ -173,17 +193,22 @@ class SystemNotifications
             }
         }
         $query = DB::table('system_notifications as n')->where('n.user_id', $user->id)
-            ->where('n.branch_id', $branchId)->whereIn('n.category', array_keys($this->categories($user)));
+            ->where(function (Builder $scope) use ($user, $branchId): void {
+                $scope->where('n.branch_id', $branchId);
+                if ((int) $user->rol_id === 1 && config('account-recovery.enabled')) {
+                    $scope->orWhere('n.category', 'account-recovery');
+                }
+            })->whereIn('n.category', array_keys($this->categories($user)));
         if ($folder === 'archived') {
             $query->whereNotNull('n.archived_at')->where('n.expires_at', '>', now());
         } else {
             $query->whereNull('n.archived_at');
         }
         if ((int) $user->rol_id === 4) {
-            $query->where('n.audience', 'mechanic')->where(function (Builder $events) use ($user): void {
+            $query->where('n.audience', 'mechanic')->where(function (Builder $events) use ($user, $branchId): void {
                 $events->where(function (Builder $personal) use ($user): void {
                     $personal->where(function (Builder $types): void {
-                        $types->where('n.event_key', 'like', 'repair-confirmed:%')->orWhere('n.event_key', 'like', 'correction-requested:%')
+                        $types->where('n.event_key', 'like', 'repair-confirmed:%')->orWhere('n.event_key', 'like', 'correction-requested:%')->orWhere('n.event_key', 'like', 'audit-approved:%')
                             ->orWhere(function (Builder $legacy): void {
                                 $legacy->where('n.event_key', 'like', 'maintenance-result:%')->whereIn('n.title', ['Reparación confirmada', 'La auditora solicitó una corrección']);
                             });
@@ -191,6 +216,20 @@ class SystemNotifications
                         $jobs->selectRaw('1')->from('maintenance_jobs as nj')->whereColumn('nj.id', 'n.job_id')
                             ->whereColumn('nj.branch_id', 'n.branch_id')->where('nj.mechanic_id', $user->id);
                     });
+                })->orWhere(function (Builder $requests) use ($branchId): void {
+                    $requests->where('n.event_key', 'like', 'audit-repair-requested:%')
+                        ->whereIn('n.container_id', app(MaintenanceWorkflow::class)->auditRequestedContainers($branchId)->select('c.id'))
+                        ->whereExists(function (Builder $events): void {
+                            $events->selectRaw('1')->from('container_assignment_events as request_notice')
+                                ->whereColumn('request_notice.container_id', 'n.container_id')->whereColumn('request_notice.ingress_cycle_id', 'n.ingress_cycle_id')
+                                ->whereRaw("CONCAT('audit-repair-requested:', request_notice.id) = n.event_key")
+                                ->whereNotExists(function (Builder $newer): void {
+                                    $newer->selectRaw('1')->from('container_assignment_events as newer_notice')
+                                        ->whereColumn('newer_notice.container_id', 'request_notice.container_id')
+                                        ->whereColumn('newer_notice.ingress_cycle_id', 'request_notice.ingress_cycle_id')
+                                        ->where('newer_notice.event_type', 'external_audit_status')->whereColumn('newer_notice.id', '>', 'request_notice.id');
+                                });
+                        });
                 })->orWhere(function (Builder $ingress): void {
                     $ingress->where('n.event_key', 'like', 'damaged-ingress:%')->whereExists(function (Builder $containers): void {
                         $containers->selectRaw('1')->from('contenedores as nc')->join('bloques as nb', 'nb.id', '=', 'nc.bloque_id')
@@ -208,6 +247,12 @@ class SystemNotifications
                     ->where('c.estado_id', 1)->where('pa.estado_id', 1)->where('p.sucursal_id', $branchId), $user, $branchId
             )->select('c.id');
             $query->where('n.audience', 'auditor')->where('n.audit_company_id', $user->external_audit_company_id)
+                ->where(function (Builder $events): void {
+                    $events->where('n.event_key', 'like', 'audit-available:%')->orWhere('n.event_key', 'like', 'audit-correction:%')
+                        ->orWhere(function (Builder $legacy): void {
+                            $legacy->where('n.event_key', 'like', 'audit-assigned:%')->where('n.title', 'Corrección lista para revisión');
+                        });
+                })
                 ->whereIn('n.container_id', $visible)->whereExists(function (Builder $cycles): void {
                     $cycles->selectRaw('1')->from('contenedores as nc')->whereColumn('nc.id', 'n.container_id')
                         ->whereColumn('nc.current_ingress_cycle_id', 'n.ingress_cycle_id');
@@ -292,6 +337,7 @@ class SystemNotifications
 
     public function containerStatuses(Contenedor $container, int $branchId, object $before, array $after, User $actor): void
     {
+        $this->auditAvailable($container, $branchId, $before, $after, $actor);
         $changes = [];
         foreach (['estatus_unidad_id' => ['Unidad', 'estatus_contenedores'], 'estatus_box_id' => ['Estructura', 'estatus_contenedores'], 'estatus_ipsa_id' => ['IPSA', 'estatus_ipsa']] as $column => [$label, $table]) {
             if ((int) $before->{$column} !== (int) $after[$column]) {
@@ -321,31 +367,66 @@ class SystemNotifications
         }
     }
 
-    public function maintenanceResult(int $jobId, string $title, string $body, string $event = 'repair-confirmed'): void
+    public function maintenanceResult(int $jobId, string $title, string $body, string $event = 'repair-confirmed', ?int $eventId = null, array $details = []): void
     {
-        abort_unless(in_array($event, ['repair-confirmed', 'correction-requested'], true), 422);
+        abort_unless(in_array($event, ['repair-confirmed', 'correction-requested', 'audit-approved'], true), 422);
         $job = DB::table('maintenance_jobs as j')->join('contenedores as c', 'c.id', '=', 'j.container_id')->where('j.id', $jobId)
             ->select('j.*', 'c.nombre')->firstOrFail();
         $user = User::active()->where('rol_id', 4)->where('sucursal_id', $job->branch_id)->find($job->mechanic_id);
         if ($user) {
-            $this->deliver($user, (int) $job->branch_id, 'repairs', 'mechanic', $event.':'.Str::uuid(), $title, $job->nombre.' · '.$body,
-                ['job_id' => $job->id, 'container_id' => $job->container_id, 'ingress_cycle_id' => $job->ingress_cycle_id]);
+            $reference = ['job_id' => $job->id, 'container_id' => $job->container_id, 'ingress_cycle_id' => $job->ingress_cycle_id];
+            if ($details) {
+                $reference['details'] = json_encode($details, JSON_THROW_ON_ERROR);
+            }
+            $this->deliver($user, (int) $job->branch_id, 'repairs', 'mechanic', $event.':'.($eventId ?? Str::uuid()), $title, $job->nombre.' · '.$body, $reference);
         }
     }
 
-    public function auditAssigned(Contenedor $container, int $branchId, string $title = 'Contenedor asignado a tu auditora'): void
+    public function auditAvailable(Contenedor $container, int $branchId, object $before, array $after, User $actor): void
     {
-        $cycle = DB::table('container_ingress_cycles')->find($container->current_ingress_cycle_id);
+        if ((int) $before->estatus_ipsa_id === (int) $after['estatus_ipsa_id']) {
+            return;
+        }
+        $wasDamaged = DB::table('estatus_ipsa')->where('id', $before->estatus_ipsa_id)->whereRaw("UPPER(TRIM(nombre)) = 'OOS'")->exists();
+        $available = DB::table('estatus_ipsa')->where('id', $after['estatus_ipsa_id'])->where('estado_id', 1)
+            ->whereRaw("UPPER(TRIM(nombre)) = 'DISPONIBLE'")->exists();
+        if ($wasDamaged && $available) {
+            $this->auditorNotice($container, $branchId, 'audit-available:'.Str::uuid(), 'Contenedor disponible', $actor,
+                $after['nombre'] ?? $container->nombre);
+        }
+    }
+
+    public function correctionSubmitted(Contenedor $container, int $branchId, int $roundId, User $actor): void
+    {
+        $this->auditorNotice($container, $branchId, 'audit-correction:'.$roundId, 'Corrección lista para revisión', $actor, $container->nombre);
+    }
+
+    public function requestedRepairConfirmed(Contenedor $container, int $branchId, int $jobId, User $actor): void
+    {
+        if (EstatusIpsa::available()->whereKey($container->estatus_ipsa_id)->exists()) {
+            $this->auditorNotice($container, $branchId, 'audit-correction:job:'.$jobId, 'Solicitud técnica atendida', $actor, $container->nombre);
+        }
+    }
+
+    private function auditorNotice(Contenedor $container, int $branchId, string $key, string $title, User $actor, string $name): void
+    {
+        $cycle = DB::table('container_ingress_cycles')->where('id', $container->current_ingress_cycle_id)
+            ->where('container_id', $container->id)->where('branch_id', $branchId)->whereNull('closed_at')->first();
         if (! $cycle?->audit_company_id) {
             return;
         }
-        $key = 'audit-assigned:'.Str::uuid();
         $users = User::active()->where('rol_id', 5)->where('external_audit_company_id', $cycle->audit_company_id)
             ->whereIn('id', DB::table('external_audit_user_branch')->where('branch_id', $branchId)->select('user_id'))->get();
         foreach ($users as $user) {
-            if (app(ExternalAuditAccess::class)->configured($user)) {
-                $this->deliver($user, $branchId, 'audits', 'auditor', $key, $title, $container->nombre,
-                    ['container_id' => $container->id, 'ingress_cycle_id' => $cycle->id, 'audit_company_id' => $cycle->audit_company_id]);
+            $access = app(ExternalAuditAccess::class);
+            if ($access->configured($user) && $access->scope(
+                DB::table('contenedores as c')->join('pyp_auditoria as pa', 'pa.contenedor_id', '=', 'c.id')
+                    ->join('bloques as b', 'b.id', '=', 'c.bloque_id')->join('patios as p', 'p.id', '=', 'b.patio_id')
+                    ->where('c.id', $container->id)->where('c.estado_id', 1)->where('pa.estado_id', 1)->where('p.sucursal_id', $branchId), $user, $branchId
+            )->exists()) {
+                $this->deliver($user, $branchId, 'audits', 'auditor', $key, $title, $name,
+                    ['container_id' => $container->id, 'ingress_cycle_id' => $cycle->id, 'audit_company_id' => $cycle->audit_company_id,
+                        'details' => json_encode(['actor' => $actor->username], JSON_THROW_ON_ERROR)]);
             }
         }
     }
@@ -399,6 +480,21 @@ class SystemNotifications
         }
     }
 
+    public function auditRepairRequested(Contenedor $container, int $branchId): void
+    {
+        $request = app(MaintenanceWorkflow::class)->pendingAuditRequest($container, $branchId);
+        if (! $request) {
+            return;
+        }
+        $audit = json_decode($request->after_data, true)['audit'];
+        foreach (User::active()->where('rol_id', 4)->where('sucursal_id', $branchId)->get() as $user) {
+            $this->deliver($user, $branchId, 'repairs', 'mechanic', 'audit-repair-requested:'.$request->id,
+                'La auditora solicitó una reparación técnica', $container->nombre.' · '.$audit['informacion_adicional'],
+                ['container_id' => $container->id, 'ingress_cycle_id' => $container->current_ingress_cycle_id,
+                    'details' => json_encode(['actor' => $audit['inspector_name'] ?? User::find($request->user_id)?->username, 'audit_event_id' => $request->id], JSON_THROW_ON_ERROR)]);
+        }
+    }
+
     private function internalUsers(int $branchId, string $permission): Collection
     {
         return User::active()->whereIn('rol_id', [1, 2, 3])->where(function ($query) use ($branchId): void {
@@ -408,7 +504,7 @@ class SystemNotifications
 
     private function deliver(User $user, int $branchId, string $category, string $audience, string $key, string $title, string $body, array $reference, mixed $createdAt = null): void
     {
-        if ((int) $user->rol_id === 4 && ($audience !== 'mechanic' || ! Str::startsWith($key, ['repair-confirmed:', 'correction-requested:', 'damaged-ingress:']))) {
+        if ((int) $user->rol_id === 4 && ($audience !== 'mechanic' || ! Str::startsWith($key, ['repair-confirmed:', 'correction-requested:', 'audit-approved:', 'damaged-ingress:', 'audit-repair-requested:']))) {
             return;
         }
         $reference['details'] ??= json_encode(['actor' => auth()->user()?->username], JSON_THROW_ON_ERROR);

@@ -4,11 +4,13 @@ namespace App\Services;
 
 use App\Models\Contenedor;
 use App\Models\User;
+use App\Rules\MeaningfulTechnicalText;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class MaintenanceWorkflow
@@ -44,7 +46,19 @@ class MaintenanceWorkflow
 
     public function repairableContainers(int $branchId): Builder
     {
-        return $this->containers($branchId)->whereIn('c.estatus_ipsa_id', $this->outOfServiceStatuses()->select('id'))
+        return $this->containers($branchId)->where(function (Builder $eligible) use ($branchId): void {
+            $eligible->whereIn('c.estatus_ipsa_id', $this->outOfServiceStatuses()->select('id'))
+                ->orWhere(function (Builder $audit) use ($branchId): void {
+                    $audit->whereIn('c.estatus_ipsa_id', DB::table('estatus_ipsa')->where('estado_id', 1)->whereRaw("UPPER(TRIM(nombre)) = 'DISPONIBLE'")->select('id'))
+                        ->where(function (Builder $requests) use ($branchId): void {
+                            $requests->whereIn('c.id', $this->auditRequestedContainers($branchId)->select('c.id'))
+                                ->orWhereExists(function (Builder $jobs): void {
+                                    self::scopeCurrentIngress($jobs->selectRaw('1')->from('maintenance_jobs as j'))
+                                        ->where('j.status', 'in_progress')->whereNotNull('j.source_audit_event_id');
+                                });
+                        });
+                });
+        })
             ->where(function (Builder $ingress) use ($branchId): void {
                 $ingress->where(function (Builder $legacy): void {
                     $legacy->whereNull('c.current_ingress_cycle_id')->whereNotNull('c.fecha_ingreso');
@@ -65,6 +79,42 @@ class MaintenanceWorkflow
                         ->whereColumn('j.legacy_ingress_at', 'c.fecha_ingreso');
                 });
         });
+    }
+
+    public function auditRequestedContainers(int $branchId): Builder
+    {
+        return $this->containers($branchId)
+            ->join('container_ingress_cycles as request_cycle', 'request_cycle.id', '=', 'c.current_ingress_cycle_id')
+            ->join('pyp_auditoria as request_audit', 'request_audit.contenedor_id', '=', 'c.id')
+            ->whereColumn('request_cycle.container_id', 'c.id')->where('request_cycle.branch_id', $branchId)->whereNull('request_cycle.closed_at')
+            ->where('request_audit.estado_id', 1)->where('request_audit.estatus_pyp', 'Rechazado')
+            ->whereColumn('request_audit.ingress_cycle_id', 'request_cycle.id')
+            ->whereColumn('request_audit.external_audit_company_id', 'request_cycle.audit_company_id')
+            ->whereNotExists(fn (Builder $jobs) => self::scopeCurrentIngress($jobs->selectRaw('1')->from('maintenance_jobs as j')))
+            ->whereExists(function (Builder $events): void {
+                $events->selectRaw('1')->from('container_assignment_events as request_event')
+                    ->whereColumn('request_event.container_id', 'c.id')->whereColumn('request_event.ingress_cycle_id', 'request_cycle.id')
+                    ->where('request_event.event_type', 'external_audit_status')
+                    ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(request_event.after_data, '$.audit.estatus_pyp')) = 'Rechazado'")
+                    ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(request_event.after_data, '$.audit.external_audit_company_id')) = CAST(request_cycle.audit_company_id AS CHAR)")
+                    ->whereNotExists(function (Builder $newer): void {
+                        $newer->selectRaw('1')->from('container_assignment_events as newer_request')
+                            ->whereColumn('newer_request.container_id', 'request_event.container_id')
+                            ->whereColumn('newer_request.ingress_cycle_id', 'request_event.ingress_cycle_id')
+                            ->where('newer_request.event_type', 'external_audit_status')->whereColumn('newer_request.id', '>', 'request_event.id')
+                            ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(newer_request.after_data, '$.audit.external_audit_company_id')) = CAST(request_cycle.audit_company_id AS CHAR)");
+                    });
+            });
+    }
+
+    public function pendingAuditRequest(object $container, int $branchId): ?object
+    {
+        if (! $this->auditRequestedContainers($branchId)->where('c.id', $container->id)->exists()) {
+            return null;
+        }
+        $company = DB::table('container_ingress_cycles')->where('id', $container->current_ingress_cycle_id)->value('audit_company_id');
+
+        return app(PypAuditService::class)->latestReview($container, (int) $company);
     }
 
     public function startableContainers(int $branchId): Builder
@@ -110,7 +160,7 @@ class MaintenanceWorkflow
                     throw ValidationException::withMessages(['container_id' => 'Este ingreso ya tiene un trabajo abierto o pendiente de revision.']);
                 }
                 if (! $this->repairableContainers($branchId)->where('c.id', $container->id)->exists()) {
-                    throw ValidationException::withMessages(['container_id' => 'Solo se pueden iniciar reparaciones en contenedores con estado IPSA OOS y un ingreso activo en esta sucursal.']);
+                    throw ValidationException::withMessages(['container_id' => 'Se requiere estado IPSA OOS o una solicitud técnica vigente de la auditora, y un ingreso activo en esta sucursal.']);
                 }
                 if (! $this->startableContainers($branchId)->where('c.id', $container->id)->exists()) {
                     throw ValidationException::withMessages(['container_id' => 'Revisa primero los estados de Unidad y Box. No se puede iniciar una reparacion mientras alguno este pendiente.']);
@@ -121,7 +171,12 @@ class MaintenanceWorkflow
                     && $photos === [] && empty($data['materials']) && empty($data['evidence_after'])) {
                     throw ValidationException::withMessages(['work' => 'Registra algún dato o una fotografía antes de guardar.']);
                 }
+                $auditRequest = $this->pendingAuditRequest($container, $branchId);
+                if (($auditRequest || ! empty($data['audit_request_version'])) && (int) ($data['audit_request_version'] ?? 0) !== (int) $auditRequest?->id) {
+                    throw ValidationException::withMessages(['container_id' => 'La solicitud de la auditora cambió. Recarga y revisa sus observaciones antes de iniciar.']);
+                }
                 $id = DB::table('maintenance_jobs')->insertGetId([
+                    'source_audit_event_id' => $auditRequest?->id,
                     'container_id' => $container->id, 'branch_id' => $branchId, 'ingress_cycle_id' => $container->current_ingress_cycle_id,
                     'legacy_ingress_at' => $container->current_ingress_cycle_id ? null : $container->fecha_ingreso,
                     'mechanic_id' => $user->id, 'status' => 'in_progress', 'diagnosis' => $data['diagnosis'] ?? '',
@@ -188,8 +243,8 @@ class MaintenanceWorkflow
                 }
                 $submit = ($data['action'] ?? 'save') === 'submit';
                 $diagnosis = array_key_exists('diagnosis', $data) ? trim((string) $data['diagnosis']) : $job->diagnosis;
-                if ($submit && mb_strlen(trim($diagnosis)) < 10) {
-                    throw ValidationException::withMessages(['diagnosis' => 'Describe el diagnóstico con al menos 10 caracteres antes de solicitar revisión.']);
+                if ($submit && mb_strlen(trim($diagnosis)) < 30) {
+                    throw ValidationException::withMessages(['diagnosis' => 'Describe el diagnóstico con al menos 30 caracteres antes de solicitar revisión.']);
                 }
                 $serviceId = array_key_exists('repair_service_id', $data) ? ((int) $data['repair_service_id'] ?: null) : $job->repair_service_id;
                 $repairType = null;
@@ -216,8 +271,14 @@ class MaintenanceWorkflow
                         }
                     }
                 }
-                if ($submit && empty($data['work_performed'])) {
-                    throw ValidationException::withMessages(['work_performed' => 'Describe el trabajo realizado antes de solicitar revision.']);
+                if ($submit && mb_strlen(trim($data['work_performed'] ?? '')) < 30) {
+                    throw ValidationException::withMessages(['work_performed' => 'Describe el trabajo realizado con al menos 30 caracteres antes de solicitar revisión.']);
+                }
+                if ($submit) {
+                    Validator::make(['diagnosis' => $diagnosis, 'work_performed' => $data['work_performed']], [
+                        'diagnosis' => [new MeaningfulTechnicalText],
+                        'work_performed' => [new MeaningfulTechnicalText],
+                    ])->validate();
                 }
                 if ($submit && (! in_array('before', $stages, true) || ! in_array('after', $stages, true))) {
                     throw ValidationException::withMessages(['evidence' => 'Adjunta al menos una foto de antes y una de después de la reparación. Ambas son obligatorias para solicitar revisión.']);

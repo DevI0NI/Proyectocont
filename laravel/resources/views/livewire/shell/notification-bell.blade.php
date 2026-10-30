@@ -1,4 +1,4 @@
-<div class="notification-bell" wire:poll.5s data-notification-surface data-notification-bell x-data="{ reading: '' }">
+<div class="notification-bell" wire:poll.60s data-notification-surface data-notification-bell x-data="{ reading: '' }">
     <button class="notification-bell-trigger" wire:ignore.self data-notification-toggle type="button" aria-expanded="false" aria-controls="notificationDropdown" aria-label="Notificaciones" title="Notificaciones">
         <span data-catalog-icon="bell" wire:ignore aria-hidden="true"></span>
         @if($unread)<span class="notification-badge">{{ $unread > 99 ? '99+' : $unread }}</span>@endif

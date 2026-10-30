@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\Containers\InventoryTable;
 use App\Models\Contenedor;
 use App\Models\User;
+use App\Services\PypAuditService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
@@ -33,10 +34,7 @@ class IngressAuditAssignmentTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['database.default' => 'mysql', 'database.connections.mysql.host' => '127.0.0.1',
-            'database.connections.mysql.port' => '3306', 'database.connections.mysql.database' => 'proyectocont_v2.1',
-            'database.connections.mysql.username' => 'root', 'database.connections.mysql.password' => '']);
-        DB::purge('mysql');
+        $this->useIsolatedMysql();
         DB::beginTransaction();
         $this->branch = DB::table('sucursales')->insertGetId(['nombre' => 'QA Fase 5 '.uniqid(), 'ubicacion' => 'Prueba temporal', 'estado_id' => 1]);
         $this->yard = DB::table('patios')->insertGetId(['nombre' => 'Patio QA', 'sucursal_id' => $this->branch, 'estado_id' => 1]);
@@ -54,10 +52,10 @@ class IngressAuditAssignmentTest extends TestCase
         $type = (int) DB::table('tipos_unidad')->where('estado_id', 1)->value('id');
         $this->payload = ['fecha_ingreso' => now()->format('Y-m-d'), 'codigo_contenedor' => 'PHAU'.random_int(1000000, 9999999),
             'tipo_unidad' => $type, 'modelo' => DB::table('modelos')->where('tipo_unidad_id', $type)->where('estado_id', 1)->value('id'),
-            'iso_code' => '22G1', 'marca' => 'QA', 'observaciones_estado' => 'Falla de unidad QA', 'observaciones_box' => 'Dano de estructura QA', 'estado_unidad' => DB::table('estatus_contenedores')->where('tipo_estatus_id', 1)->where('estado_id', 1)->value('id'),
+            'iso_code' => '22G1', 'marca' => 'QA', 'observaciones_estado' => 'Se observa una falla en el sistema de refrigeracion de la unidad.', 'observaciones_box' => 'Se observa una deformacion en el panel lateral de la estructura.', 'estado_unidad' => DB::table('estatus_contenedores')->where('tipo_estatus_id', 1)->where('estado_id', 1)->value('id'),
             'status_box' => DB::table('estatus_contenedores')->where('tipo_estatus_id', 2)->where('estado_id', 1)->value('id'),
             'estatus_ipsa' => DB::table('estatus_ipsa')->where('nombre', 'Disponible')->where('estado_id', 1)->value('id'),
-            'shipping_line_id' => $this->line, 'audit_company_id' => null, 'transportista' => 'Transportista QA', 'placa_cabezal' => 'C123ABC',
+            'shipping_line_id' => $this->line, 'audit_company_id' => null, 'transportista' => 'Transportista QA', 'conductor' => 'Carlos Rodas', 'placa_cabezal' => 'C123ABC', 'placa_chasis' => 'TC123ABC',
             'bloque' => $this->block, 'posicion' => 25];
         $this->actingAs($this->admin)->withSession(['sucursal_activa' => $this->branch]);
     }
@@ -79,6 +77,12 @@ class IngressAuditAssignmentTest extends TestCase
         $this->post('/ingresos', $this->payload)->assertRedirect()->assertSessionHasNoErrors();
 
         return (int) DB::table('contenedores')->where('nombre', $this->payload['codigo_contenedor'])->value('id');
+    }
+
+    private function dispatchPayload(int $container): array
+    {
+        return ['contenedor_id' => $container, 'transportista' => 'Transportista QA',
+            'conductor' => 'Carlos Rodas', 'placa_cabezal' => 'C123ABC', 'placa_chasis' => 'TC123ABC'];
     }
 
     public function test_damage_observations_are_required_for_each_affected_component_on_ingress_and_edit(): void
@@ -120,24 +124,28 @@ class IngressAuditAssignmentTest extends TestCase
         $table = Livewire::test(InventoryTable::class)->set('patioId', (string) $this->yard)->set('blockId', (string) $this->block);
         $table->assertViewHas('containers', fn (array $rows): bool => $rows[0]->audit_status === 'Pendiente de revision' && $rows[0]->audit_assignment_notice === null);
         $this->actingAs($this->inspector);
-        $this->get('/contenedores/'.$id.'/pyp')->assertOk()->assertSee('data-admin-select', false)
-            ->assertSee('Pendiente de revision')->assertSee('En revision')->assertSee('Aprobado')->assertSee('Rechazado');
-        foreach (['En revision', 'Rechazado', 'Pendiente de revision', 'Aprobado'] as $state) {
-            $this->patch('/contenedores/'.$id.'/pyp', ['estatus_pyp' => $state, 'informacion_adicional' => 'Revision registrada: '.$state])
-                ->assertSessionHasNoErrors()->assertRedirect();
-            Livewire::test(InventoryTable::class, ['pypMode' => true])->set('search', $this->payload['codigo_contenedor'])
-                ->set('pypStatusFilter', $state)->assertViewHas('containers', fn (array $rows): bool => count($rows) === 1 && $rows[0]->audit_status === $state);
+        $this->assertSame(['Pendiente de revision', 'En revision', 'Aprobado', 'Rechazado'], PypAuditService::STATES);
+        $this->get('/contenedores/'.$id.'/pyp')->assertRedirect(route('pyp-audits.history', ['container' => $id]));
+        $revision = fn (): int => (int) DB::table('container_assignment_events')->where('container_id', $id)->max('id');
+        $this->post(route('pyp-audits.begin', $id), ['audit_version' => $revision()])->assertSessionHasNoErrors();
+        $this->get('/contenedores/'.$id.'/pyp')->assertOk()->assertSee('data-admin-select', false)->assertSee('Aprobado')->assertSee('Rechazado');
+        Livewire::test(InventoryTable::class, ['pypMode' => true])->set('search', $this->payload['codigo_contenedor'])
+            ->set('pypStatusFilter', 'En revision')->assertViewHas('containers', fn (array $rows): bool => count($rows) === 1);
+        foreach (['En revision', 'Pendiente de revision', 'Texto inventado'] as $invalid) {
+            $this->patch('/contenedores/'.$id.'/pyp', ['audit_version' => $revision(), 'estatus_pyp' => $invalid,
+                'informacion_adicional' => 'La inspeccion tecnica confirma que el contenedor esta en buen estado.'])->assertSessionHasErrors('estatus_pyp');
         }
-        $events = DB::table('container_assignment_events')->where('container_id', $id)->where('event_type', 'external_audit_status')->orderBy('id')->get();
-        $this->assertCount(4, $events);
-        $reopened = $events[2];
-        $this->assertSame('Rechazado', json_decode($reopened->before_data, true)['audit']['estatus_pyp']);
-        $this->assertSame('Pendiente de revision', json_decode($reopened->after_data, true)['audit']['estatus_pyp']);
-        $this->assertSame($this->inspector->id, (int) $reopened->user_id);
-        $this->patch('/contenedores/'.$id.'/pyp', ['estatus_pyp' => 'Texto inventado', 'informacion_adicional' => 'No autorizado'])
-            ->assertSessionHasErrors('estatus_pyp');
-        $this->patch('/contenedores/'.$id.'/pyp', ['estatus_pyp' => 'Rechazado', 'informacion_adicional' => '   '])
+        $this->patch('/contenedores/'.$id.'/pyp', ['audit_version' => $revision(), 'estatus_pyp' => 'Rechazado', 'informacion_adicional' => '   '])
             ->assertSessionHasErrors('informacion_adicional');
+        $this->patch('/contenedores/'.$id.'/pyp', ['audit_version' => $revision(), 'estatus_pyp' => 'Aprobado',
+            'informacion_adicional' => 'La inspeccion tecnica confirma que el contenedor esta en buen estado.'])->assertSessionHasNoErrors();
+        Livewire::test(InventoryTable::class, ['pypMode' => true])->set('search', $this->payload['codigo_contenedor'])
+            ->set('pypStatusFilter', 'Aprobado')->assertViewHas('containers', fn (array $rows): bool => count($rows) === 1 && $rows[0]->audit_status === 'Aprobado');
+        $events = DB::table('container_assignment_events')->where('container_id', $id)->where('event_type', 'external_audit_status')->orderBy('id')->get();
+        $this->assertCount(2, $events);
+        $this->assertSame('En revision', json_decode($events[1]->before_data, true)['audit']['estatus_pyp']);
+        $this->assertSame('Aprobado', json_decode($events[1]->after_data, true)['audit']['estatus_pyp']);
+        $this->assertSame($this->inspector->id, (int) $events[1]->user_id);
         $this->assertDatabaseHas('pyp_auditoria', ['contenedor_id' => $id, 'estatus_pyp' => 'Aprobado']);
     }
 
@@ -159,7 +167,7 @@ class IngressAuditAssignmentTest extends TestCase
         $id = $this->register();
         $this->assertDatabaseHas('container_ingress_cycles', ['container_id' => $id, 'shipping_line_id' => $this->line, 'audit_company_id' => null]);
         $this->get('/contenedores/'.$id)->assertOk()->assertSee('Pendiente de confirmacion');
-        $this->post('/despachos', ['contenedor_id' => $id])->assertSessionHasErrors('dispatch');
+        $this->post('/despachos', $this->dispatchPayload($id))->assertSessionHasErrors('dispatch');
         $this->actingAs($this->inspector);
         Livewire::test(InventoryTable::class, ['pypMode' => true])->set('search', $this->payload['codigo_contenedor'])->assertDontSee($this->payload['codigo_contenedor']);
         $this->get('/contenedores/'.$id.'/pyp')->assertRedirect()->assertSessionHasErrors('pyp');
@@ -228,7 +236,7 @@ class IngressAuditAssignmentTest extends TestCase
         $event = DB::table('container_assignment_events')->where('container_id', $id)->where('event_type', 'reassignment')->first();
         $this->assertSame('Aprobado', json_decode($event->before_data, true)['audit']['estatus_pyp']);
         $this->assertSame($this->admin->id, $event->user_id);
-        $this->post('/despachos', ['contenedor_id' => $id])->assertSessionHasErrors('dispatch');
+        $this->post('/despachos', $this->dispatchPayload($id))->assertSessionHasErrors('dispatch');
         $this->actingAs($this->inspector);
         Livewire::test(InventoryTable::class, ['pypMode' => true])->set('search', $this->payload['codigo_contenedor'])->assertDontSee($this->payload['codigo_contenedor']);
         $secondInspector = clone $this->inspector;
@@ -264,14 +272,14 @@ class IngressAuditAssignmentTest extends TestCase
         $id = $this->register(true);
         $oldCycle = Contenedor::findOrFail($id)->current_ingress_cycle_id;
         DB::table('pyp_auditoria')->where('contenedor_id', $id)->update(['estatus_pyp' => 'Aprobado']);
-        $this->post('/despachos', ['contenedor_id' => $id])->assertSessionHasNoErrors();
+        $this->post('/despachos', $this->dispatchPayload($id))->assertSessionHasNoErrors();
         $this->post('/ingresos', $this->payload)->assertSessionHasNoErrors();
         $this->assertNotSame($oldCycle, Contenedor::findOrFail($id)->current_ingress_cycle_id);
         $this->assertNotNull(DB::table('container_ingress_cycles')->where('id', $oldCycle)->value('closed_at'));
         $this->assertSame(2, DB::table('container_ingress_cycles')->where('container_id', $id)->count());
         $event = DB::table('container_assignment_events')->where('container_id', $id)->where('event_type', 'reentry')->first();
         $this->assertSame('Aprobado', json_decode($event->before_data, true)['audit']['estatus_pyp']);
-        $this->post('/despachos', ['contenedor_id' => $id])->assertSessionHasErrors('dispatch');
+        $this->post('/despachos', $this->dispatchPayload($id))->assertSessionHasErrors('dispatch');
     }
 
     public function test_catalog_deactivation_preserves_history_but_prevents_continuing_external_inspection(): void
@@ -296,7 +304,7 @@ class IngressAuditAssignmentTest extends TestCase
             ->assertRedirect(route('containers.show', ['container' => $id, 'patio_id' => $this->yard, 'bloque_id' => $this->block]))
             ->assertSessionHas('status');
         $this->get('/contenedores/'.$id)->assertOk()->assertSee('Asignacion de auditoria externa')->assertSee('Naviera del Caribe QA');
-        $this->get('/contenedores?patio_id='.$this->yard.'&bloque_id='.$this->block)->assertOk()->assertSee('Auditoria externa');
+        $this->get('/contenedores?patio_id='.$this->yard.'&bloque_id='.$this->block)->assertOk()->assertSee('Auditoría externa');
         $cycle = DB::table('container_ingress_cycles')->where('container_id', $id)->first();
         $this->assertNull($cycle->audit_company_id);
     }
@@ -311,7 +319,7 @@ class IngressAuditAssignmentTest extends TestCase
         $payload['naviera'] = 'Nombre manipulado';
         $this->patch('/contenedores/'.$id, $payload)->assertSessionHasNoErrors();
         $this->assertDatabaseHas('contenedores', ['id' => $id, 'naviera' => 'Naviera historica sin vincular', 'current_ingress_cycle_id' => null]);
-        $this->post('/despachos', ['contenedor_id' => $id])->assertSessionHasErrors('dispatch');
+        $this->post('/despachos', $this->dispatchPayload($id))->assertSessionHasErrors('dispatch');
         $this->get('/contenedores/'.$id)->assertOk()->assertSee('Pendiente de regularizacion');
         $this->getJson(route('dispatches.search', ['query' => $this->payload['codigo_contenedor']]))->assertOk()
             ->assertJsonPath('0.auditoria_aprobada', false)->assertJsonPath('0.puede_despachar', false);

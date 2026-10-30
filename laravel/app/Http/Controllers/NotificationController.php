@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Contenedor;
 use App\Models\Sucursal;
 use App\Services\ExternalAuditAccess;
 use App\Services\MaintenanceCorrections;
+use App\Services\MaintenanceWorkflow;
+use App\Services\PypAuditService;
 use App\Services\SystemNotifications;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,6 +37,7 @@ class NotificationController extends Controller
             'status' => ['nullable', Rule::in(['unread', 'read'])],
             'folder' => ['nullable', Rule::in(['inbox', 'archived'])],
             'search' => ['nullable', 'string', 'max:100'],
+            'recovery_notification' => ['nullable', 'integer', 'min:1'],
         ]);
 
         return view('notifications.index', $context);
@@ -63,10 +67,32 @@ class NotificationController extends Controller
         abort_unless($record, 404);
         $query->whereNull('n.read_at')->update(['read_at' => now()]);
         $returnParams = array_filter(['return_to' => $this->localReturnUrl($request)]);
+        if ((int) $request->user()->rol_id === 1 && str_starts_with($record->event_key, 'account-recovery:')) {
+            return redirect()->route('notifications.index', ['category' => 'account-recovery', 'folder' => $request->input('folder') ?: 'inbox', 'recovery_notification' => $notification]);
+        }
+        if ((int) $request->user()->rol_id === 4 && str_starts_with($record->event_key, 'audit-repair-requested:')) {
+            if (app(MaintenanceWorkflow::class)->startableContainers((int) $record->branch_id)->where('c.id', $record->container_id)->exists()) {
+                return redirect()->route('maintenance.create', ['container_id' => $record->container_id] + $returnParams);
+            }
+
+            return redirect()->route('maintenance.container', ['container' => $record->container_id] + $returnParams);
+        }
         if (str_starts_with($record->event_key, 'activity:') || str_starts_with($record->event_key, 'container-status:') || str_starts_with($record->event_key, 'damaged-ingress:') || str_starts_with($record->event_key, 'container-ingress:')) {
             return redirect()->route('notifications.detail', ['notification' => $notification, 'folder' => $request->input('folder') ?: 'inbox'] + $returnParams);
         }
         if ((int) $request->user()->rol_id === 4) {
+            $details = json_decode($record->details ?? '{}', true);
+            if (str_starts_with($record->event_key, 'audit-approved:')) {
+                return redirect()->route('corrections.detail', array_filter([
+                    'job' => $record->job_id, 'intervention' => $details['correction_id'] ?? null,
+                ]) + $returnParams);
+            }
+            if (str_starts_with($record->event_key, 'correction-requested:') && ! empty($details['correction_id'])) {
+                $round = DB::table('maintenance_corrections')->where('job_id', $record->job_id)->where('id', $details['correction_id'])->firstOrFail();
+                if ($round->status !== 'draft') {
+                    return redirect()->route('corrections.detail', ['job' => $record->job_id, 'intervention' => $round->id] + $returnParams);
+                }
+            }
             if (DB::table('maintenance_jobs')->where('id', $record->job_id)->where('status', 'returned_for_repair')->exists()
                 || DB::table('maintenance_corrections')->where('job_id', $record->job_id)->exists()) {
                 return redirect()->route('corrections.show', ['job' => $record->job_id] + $returnParams);
@@ -78,11 +104,66 @@ class NotificationController extends Controller
             return redirect()->route('notifications.repair', ['job' => $record->job_id] + $returnParams);
         }
         if ((int) $request->user()->rol_id === 5) {
-            return redirect()->route('pyp-audits.edit', ['container' => $record->container_id] + $returnParams);
+            if (str_starts_with($record->event_key, 'audit-correction:')) {
+                return $this->openCorrectionAudit($request, $record, $returnParams);
+            }
+
+            return redirect()->route('pyp-audits.history', ['container' => $record->container_id] + $returnParams);
         }
         $name = DB::table('contenedores')->where('id', $record->container_id)->value('nombre');
 
         return redirect()->route('pyp-audits.index', ['nombre' => $name] + $returnParams);
+    }
+
+    private function openCorrectionAudit(Request $request, object $notice, array $returnParams): RedirectResponse
+    {
+        return DB::transaction(function () use ($request, $notice, $returnParams): RedirectResponse {
+            $history = redirect()->route('pyp-audits.history', ['container' => $notice->container_id] + $returnParams);
+            $container = Contenedor::whereKey($notice->container_id)->lockForUpdate()->firstOrFail();
+            if ((int) $container->current_ingress_cycle_id !== (int) $notice->ingress_cycle_id) {
+                return $history;
+            }
+            $job = app(MaintenanceWorkflow::class)->currentJobs($container)->latest('id')->first();
+            if (preg_match('/^audit-correction:(\d+)$/', $notice->event_key, $matches)) {
+                $round = DB::table('maintenance_corrections as correction')->join('maintenance_jobs as job', 'job.id', '=', 'correction.job_id')
+                    ->where('correction.id', $matches[1])->where('job.container_id', $container->id)
+                    ->where('job.ingress_cycle_id', $notice->ingress_cycle_id)->where('job.branch_id', $notice->branch_id)
+                    ->select('correction.*')->first();
+                if (! $round) {
+                    return $history;
+                }
+                if (in_array($round->status, ['approved', 'rejected'], true)) {
+                    $verdict = DB::table('container_assignment_events')->where('container_id', $container->id)
+                        ->where('ingress_cycle_id', $notice->ingress_cycle_id)->where('event_type', 'external_audit_status')
+                        ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(after_data, '$.audit.external_audit_company_id')) = ?", [(string) $notice->audit_company_id])
+                        ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(after_data, '$.audit.maintenance_correction_id')) = ?", [(string) $round->id])
+                        ->whereIn(DB::raw("JSON_UNQUOTE(JSON_EXTRACT(after_data, '$.audit.estatus_pyp'))"), ['Aprobado', 'Rechazado'])->latest('id')->value('id');
+
+                    return $verdict ? redirect()->route('pyp-audits.show', ['container' => $container->id, 'audit' => $verdict] + $returnParams) : $history;
+                }
+                if ($round->status !== 'submitted' || ! $job || (int) $job->id !== (int) $round->job_id
+                    || (int) DB::table('maintenance_corrections')->where('job_id', $job->id)->latest('number')->value('id') !== (int) $round->id) {
+                    return $history;
+                }
+            } elseif (! preg_match('/^audit-correction:job:(\d+)$/', $notice->event_key, $matches) || ! $job || (int) $job->id !== (int) $matches[1]) {
+                return $history;
+            } elseif (DB::table('maintenance_corrections')->where('job_id', $job->id)->exists()) {
+                return $history;
+            }
+            $audit = DB::table('pyp_auditoria')->where('contenedor_id', $container->id)->where('estado_id', 1)
+                ->where('ingress_cycle_id', $notice->ingress_cycle_id)->where('external_audit_company_id', $notice->audit_company_id)->first();
+            if (! $audit || ! in_array($audit->estatus_pyp, ['Pendiente de revision', 'En revision'], true)) {
+                return $history;
+            }
+            try {
+                $revision = (int) DB::table('container_assignment_events')->where('container_id', $container->id)->max('id');
+                app(PypAuditService::class)->begin($request->user(), (int) $notice->branch_id, (int) $container->id, $revision);
+            } catch (\RuntimeException $exception) {
+                return $history->withErrors(['pyp' => $exception->getMessage()]);
+            }
+
+            return redirect()->route('pyp-audits.edit', ['container' => $container->id] + $returnParams);
+        });
     }
 
     private function reviewJob(Request $request, int $job): object

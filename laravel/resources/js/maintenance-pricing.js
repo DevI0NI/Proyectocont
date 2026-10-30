@@ -54,6 +54,7 @@ export function initializeMaintenancePricing(form) {
         };
         const baseLabor = toBase(labor);
         const baseMaterials = toBase(materials);
+        if (form.querySelectorAll('[data-material-row]').length === 0) baseMaterials.known = true;
         form.querySelector('[data-estimate-labor]').textContent = baseLabor.known ? formatCost(baseLabor.cents, 'GTQ') : '—';
         form.querySelector('[data-estimate-materials]').textContent = baseMaterials.known ? formatCost(baseMaterials.cents, 'GTQ') : '—';
         missing ||= pendingConversion;
@@ -74,6 +75,10 @@ export function initializeMaintenancePricing(form) {
         pending.hidden = !missing;
         pending.textContent = pendingConversion ? 'Estimado incompleto: hay importes en dólares sin convertir.'
             : 'Estimado incompleto: falta seleccionar una reparación, completar cantidades o asignar valores referenciales.';
+        form.querySelectorAll('[data-calculated-labor]').forEach((output) => { output.textContent = form.querySelector('[data-estimate-labor]').textContent; });
+        form.querySelectorAll('[data-calculated-materials]').forEach((output) => { output.textContent = form.querySelector('[data-estimate-materials]').textContent; });
+        form.querySelectorAll('[data-calculated-total]').forEach((output) => { output.textContent = form.querySelector('[data-estimate-total]').textContent; });
+        form.querySelectorAll('[data-calculated-pending]').forEach((output) => { output.hidden = !missing; });
     };
     form.addEventListener('input', update);
     form.addEventListener('change', update);

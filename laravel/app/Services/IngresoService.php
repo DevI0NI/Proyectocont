@@ -14,6 +14,7 @@ class IngresoService
     public function register(User $user, array $data, string $containerCode, Bloque $block): array
     {
         return DB::transaction(function () use ($user, $data, $containerCode, $block): array {
+            $block = Bloque::active()->whereKey($block->id)->lockForUpdate()->firstOrFail();
             $assignmentService = app(ContainerAuditAssignment::class);
             $assignment = $assignmentService->resolve($user, (int) $block->patio->sucursal_id, $data);
             $activeCount = Contenedor::active()->where('bloque_id', $block->id)->count();

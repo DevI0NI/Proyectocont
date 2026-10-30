@@ -312,7 +312,11 @@ class InventoryTable extends Component
             foreach ($containers->items() as $container) {
                 $container->maintenance_actions = $this->maintenanceActions($container, (int) $container->patio_id, (int) $container->bloque_id);
             }
-        } elseif (! $this->pypMode && in_array((int) auth()->user()->rol_id, [1, 2, 3], true)) {
+        } elseif ($this->pypMode) {
+            foreach ($containers->items() as $container) {
+                $container->audit_actions = $this->auditActions($container);
+            }
+        } elseif (in_array((int) auth()->user()->rol_id, [1, 2, 3], true)) {
             foreach ($containers->items() as $container) {
                 $container->repair_history_url = $this->containerHistoryUrl((int) $container->id);
             }
@@ -511,9 +515,7 @@ class InventoryTable extends Component
                         'estatus_ipsa_id' => (int) $container->estatus_ipsa_id,
                         'pyp' => $container->estatus_pyp,
                         'matches' => ! $hasVisualFilters || $matchingIds->has((int) $container->id),
-                        'actions' => $this->pypMode ? [
-                            'info' => route('pyp-audits.edit', ['container' => $container->id, 'patio_id' => $patioId, 'bloque_id' => $block->id]),
-                        ] : ($this->maintenanceMode ? $this->maintenanceActions($container, $patioId, (int) $block->id) : ($canOperate ? [
+                        'actions' => $this->pypMode ? $this->auditActions($container) : ($this->maintenanceMode ? $this->maintenanceActions($container, $patioId, (int) $block->id) : ($canOperate ? [
                             'info' => route('containers.show', [
                                 'container' => $container->id,
                                 'patio_id' => $patioId,
@@ -528,7 +530,7 @@ class InventoryTable extends Component
                             ]),
                             'history' => $this->containerHistoryUrl((int) $container->id),
                         ] : [])),
-                        'url' => route($this->pypMode ? 'pyp-audits.edit' : ($this->maintenanceMode ? 'maintenance.container' : 'containers.show'), [
+                        'url' => $this->pypMode ? $this->auditActions($container)['info'] : route($this->maintenanceMode ? 'maintenance.container' : 'containers.show', [
                             'container' => $container->id,
                             'patio_id' => $patioId,
                             'bloque_id' => $block->id,
@@ -579,6 +581,27 @@ class InventoryTable extends Component
         return route('corrections.container-history', ['container' => $containerId, 'return_to' => route('containers.index', $back, false)]);
     }
 
+    private function auditActions(object $container): array
+    {
+        $back = [];
+        foreach ($this->queryString as $property => $options) {
+            if ($this->{$property} !== $options['except']) {
+                $back[$options['as'] ?? $property] = $this->{$property};
+            }
+        }
+        $params = ['container' => $container->id, 'return_to' => route('pyp-audits.index', $back, false)];
+        $canAudit = (bool) $container->ipsa_available && (bool) $container->audit_work_ready;
+
+        return [
+            'info' => route('pyp-audits.information', $params),
+            'history' => route('pyp-audits.history', $params),
+            'maintenance' => $canAudit ? route('pyp-audits.begin', $params) : null,
+            'maintenance_method' => 'POST',
+            'audit_version' => (int) $container->audit_revision,
+            'maintenance_label' => $container->estatus_pyp === 'En revision' ? 'Continuar auditoría' : 'Auditar',
+        ];
+    }
+
     private function maintenanceActions(object $container, int $patioId, int $blockId): array
     {
         $back = [];
@@ -590,7 +613,8 @@ class InventoryTable extends Component
         $params = ['patio_id' => $patioId, 'bloque_id' => $blockId, 'back' => $back];
         $canContinue = $container->maintenance_job_status === 'in_progress'
             && (int) $container->maintenance_mechanic_id === (int) auth()->id()
-            && strtoupper(trim((string) $container->estatus_ipsa)) === 'OOS'
+            && (strtoupper(trim((string) $container->estatus_ipsa)) === 'OOS'
+                || ($container->source_audit_event_id && strtoupper(trim((string) $container->estatus_ipsa)) === 'DISPONIBLE'))
             && (int) $container->ipsa_status_active === self::ACTIVE;
         $canCorrect = $container->maintenance_job_status === 'returned_for_repair'
             && (int) $container->maintenance_mechanic_id === (int) auth()->id();
@@ -603,7 +627,7 @@ class InventoryTable extends Component
         } elseif ($canCorrect) {
             $maintenanceUrl = route('corrections.show', ['job' => $container->maintenance_job_id, 'return_to' => $returnUrl]);
             $label = 'Atender corrección';
-        } elseif ($container->maintenance_can_start) {
+        } elseif (! $container->maintenance_job_id && $container->maintenance_can_start) {
             $maintenanceUrl = route('maintenance.create', ['container_id' => $container->id] + $params);
         }
 
@@ -656,7 +680,7 @@ class InventoryTable extends Component
                     $join->on('pa.contenedor_id', '=', 'c.id')->where('pa.estado_id', self::ACTIVE);
                 })
                 ->addSelect(['c.current_ingress_cycle_id', 'mj.id as maintenance_job_id', 'mj.status as maintenance_job_status',
-                    'mj.mechanic_id as maintenance_mechanic_id', 'ei.estado_id as ipsa_status_active',
+                    'mj.mechanic_id as maintenance_mechanic_id', 'mj.source_audit_event_id', 'ei.estado_id as ipsa_status_active',
                     'mechanic.username as mechanic_name', 'ic.audit_company_name'])
                 ->selectSub(function ($history) use ($branchId): void {
                     $history->from('maintenance_jobs as history')->select('history.id')
@@ -664,7 +688,8 @@ class InventoryTable extends Component
                         ->where('history.mechanic_id', auth()->id())->orderByDesc('history.id')->limit(1);
                 }, 'maintenance_history_job_id')
                 ->selectRaw($this->maintenanceStatusSql().' as maintenance_status')
-                ->selectRaw("CASE WHEN ((c.current_ingress_cycle_id IS NULL AND c.fecha_ingreso IS NOT NULL) OR (ic.id IS NOT NULL AND ic.closed_at IS NULL AND ic.branch_id = p.sucursal_id)) AND UPPER(TRIM(ei.nombre)) = 'OOS' AND ei.estado_id = 1 AND mj.id IS NULL AND UPPER(TRIM(COALESCE(eu.nombre, ''))) NOT LIKE 'PENDIENT%' AND UPPER(TRIM(COALESCE(eb.nombre, ''))) NOT LIKE 'PENDIENT%' THEN 1 ELSE 0 END as maintenance_can_start")
+                ->selectSub(DB::query()->fromSub(app(MaintenanceWorkflow::class)->startableContainers($branchId)->select('c.id'), 'startable')
+                    ->selectRaw('COUNT(*)')->whereColumn('startable.id', 'c.id'), 'maintenance_can_start')
                 ->selectRaw(ContainerAuditAssignment::statusSql().' as audit_status')
                 ->selectRaw(ContainerAuditAssignment::noticeSql().' as audit_assignment_notice')
                 ->selectRaw('NULL as estatus_pyp, NULL as informacion_adicional, NULL as es_asignado');
@@ -674,6 +699,15 @@ class InventoryTable extends Component
             $join->on('c.id', '=', 'pa.contenedor_id')->where('pa.estado_id', self::ACTIVE);
         })->addSelect(['pa.estatus_pyp', 'pa.informacion_adicional', 'pa.contenedor_id as es_asignado']);
 
+        if ($this->pypMode) {
+            PypAuditService::withRevision($query);
+            $query->selectRaw("CASE WHEN UPPER(TRIM(ei.nombre)) = 'DISPONIBLE' AND ei.estado_id = 1 THEN 1 ELSE 0 END as ipsa_available");
+            $query->selectSub(function ($work): void {
+                MaintenanceWorkflow::scopeCurrentIngress($work->from('maintenance_jobs as j')->selectRaw('CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END'))
+                    ->whereIn('j.status', MaintenanceWorkflow::OPEN_STATES);
+            }, 'audit_work_ready');
+        }
+
         app(ContainerAuditAssignment::class)->joinCurrent($query);
 
         return app(ExternalAuditAccess::class)->scope($query, auth()->user(), $branchId);
@@ -681,7 +715,7 @@ class InventoryTable extends Component
 
     private function maintenanceStatusSql(): string
     {
-        return "CASE WHEN mj.status = 'in_progress' THEN 'En reparacion' WHEN mj.status = 'returned_for_repair' THEN 'Devuelto a reparacion' WHEN mj.status IN ('pending_review', 'completed') THEN 'Reparado' WHEN UPPER(TRIM(ei.nombre)) = 'OOS' AND ei.estado_id = 1 THEN 'Por atender' ELSE NULL END";
+        return "CASE WHEN mj.status = 'in_progress' THEN 'En reparacion' WHEN mj.status = 'returned_for_repair' THEN 'Devuelto a reparacion' WHEN mj.status IN ('pending_review', 'completed') THEN 'Reparado' WHEN (UPPER(TRIM(ei.nombre)) = 'OOS' AND ei.estado_id = 1) OR (pa.estatus_pyp = 'Rechazado' AND pa.ingress_cycle_id = c.current_ingress_cycle_id) THEN 'Por atender' ELSE NULL END";
     }
 
     private function resolveSelectedPatio($patios): ?Patio

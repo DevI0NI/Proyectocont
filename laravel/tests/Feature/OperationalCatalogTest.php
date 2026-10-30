@@ -33,6 +33,15 @@ class OperationalCatalogTest extends TestCase
         ]);
         (require database_path('migrations/2026_10_11_233137_create_operational_catalog_tables.php'))->up();
         (require database_path('migrations/2026_10_13_202712_create_shipping_line_branch_auditor_table.php'))->up();
+        Schema::create('users', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('username')->nullable();
+            $table->integer('rol_id')->default(2);
+            $table->integer('sucursal_id');
+            $table->integer('estado_id');
+        });
+        $this->createNotificationTables();
+        $this->withSession(['sucursal_activa' => 1]);
     }
 
     public function test_validation_errors_are_descriptions_in_spanish_not_translation_keys(): void
@@ -377,11 +386,6 @@ class OperationalCatalogTest extends TestCase
 
     public function test_branch_reactivation_preserves_data_and_does_not_reactivate_users_or_yards(): void
     {
-        Schema::create('users', function (Blueprint $table): void {
-            $table->increments('id');
-            $table->integer('sucursal_id');
-            $table->integer('estado_id');
-        });
         Schema::create('patios', function (Blueprint $table): void {
             $table->increments('id');
             $table->integer('sucursal_id');

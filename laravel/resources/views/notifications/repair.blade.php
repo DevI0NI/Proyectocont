@@ -6,9 +6,7 @@
     $selectedIntervention = $selectedIntervention ?? null;
     $displayDate = $readOnlyDetail ? $job->created_at : $review->created_at;
     $canConfirmWork = $canConfirmWork ?? false;
-    $hasInterventions = $hasInterventions ?? ($interventions ?? collect())->isNotEmpty();
     $showManagement = !$selectedIntervention && ($canConfirmWork || $canUpdateTechnicalStates);
-    $showInterventions = $readOnlyDetail && $hasInterventions && !$showManagement;
 @endphp
 @if($errors->any())<div class="form-error page-error" role="alert">{{ $errors->first() }}</div>@endif
 <section class="page-heading mw-repair-heading notification-review-heading @if($readOnlyDetail) repair-detail-heading @endif">
@@ -34,21 +32,13 @@
 </section>
 <section class="workboard mw-board mw-repair-board notification-review" data-notification-review data-initial-step="{{ $initialStep }}">
     <div class="mw-repair-form notification-review-steps">
-        <div class="notification-review-toolbar @if($showInterventions) has-interventions @endif">
+        <div class="notification-review-toolbar">
             @include('maintenance.timeline')
-            @if($showInterventions)
-                <div class="notification-review-options form-select-dropdown" data-notification-actions>
-                    <button type="button" class="mw-button" data-notification-toggle aria-haspopup="menu" aria-expanded="false" aria-controls="repairInterventionsMenu">Intervenciones<span data-notification-icon="chevron-down" aria-hidden="true"></span></button>
-                    <div id="repairInterventionsMenu" class="form-select-menu notification-review-options-menu notification-interventions-menu" data-notification-popup role="menu" aria-label="Intervenciones de la reparación" hidden>
-                        <a class="topbar-dropdown-option notification-intervention-option @if(!$selectedIntervention) selected @endif" role="menuitem" tabindex="-1" @if(!$selectedIntervention) aria-current="page" @endif href="{{ route('corrections.detail', ['job' => $job->id, 'return_to' => $returnUrl]) }}"><strong>Reparación original</strong><small>Entrega conservada</small><time>{{ \Carbon\Carbon::parse($originalCreatedAt, 'UTC')->timezone('America/Guatemala')->format('d/m/Y H:i') }}</time></a>
-                        @foreach($interventions as $round)
-                            <a class="topbar-dropdown-option notification-intervention-option @if($selectedIntervention?->id === $round->id) selected @endif" role="menuitem" tabindex="-1" @if($selectedIntervention?->id === $round->id) aria-current="page" @endif href="{{ route('corrections.detail', ['job' => $job->id, 'intervention' => $round->id, 'return_to' => $returnUrl]) }}"><strong>Corrección {{ $round->number }}</strong><small class="correction-status" data-state="{{ $round->status }}">{{ match($round->status) { 'draft' => 'Por corregir', 'submitted' => 'Enviada a auditoría', 'approved' => 'Aprobada', default => 'Requiere otra corrección' } }}</small><time>{{ \Carbon\Carbon::parse($round->created_at, 'UTC')->timezone('America/Guatemala')->format('d/m/Y H:i') }}</time></a>
-                        @endforeach
-                    </div>
+            @if($selectedIntervention)
+                <div class="notification-correction-request" data-correction-history>
+                    <button type="button" class="mw-button" data-correction-observation-open aria-haspopup="dialog" aria-controls="repairCorrectionRequest"><span data-notification-icon="shield-check" aria-hidden="true"></span>Solicitud de corrección</button>
+                    @include('maintenance.audit-observation', array_merge($requestContext, ['dialogId' => 'repairCorrectionRequest']))
                 </div>
-            @endif
-            @if(!$readOnlyDetail && $hasInterventions && !$showManagement)
-            <a class="mw-button notification-interventions-shortcut" href="{{ route('corrections.detail', ['job' => $job->id, 'return_to' => request()->getRequestUri()]) }}">Intervenciones</a>
             @endif
             @if($showManagement)
             <div class="notification-review-options form-select-dropdown" data-notification-actions>
@@ -71,9 +61,12 @@
             </div>
             @endif
         </div>
-        @foreach(['before' => [$selectedIntervention ? 'Solicitud de corrección' : 'Evaluación inicial', $selectedIntervention ? 'Observación de la auditora' : 'Diagnóstico y ubicación del daño', $job->diagnosis, 'Fotos de evidencia inicial', 0], 'after' => ['Resultado de la reparación', 'Trabajo realizado', $job->work_performed, 'Fotos de evidencia final', 2]] as $stage => [$title, $textLabel, $text, $photoLabel, $step])
+        @foreach(['before' => ['Evaluación inicial', 'Diagnóstico y ubicación del daño', $job->diagnosis, 'Fotos de evidencia inicial', 0], 'after' => ['Resultado de la reparación', 'Trabajo realizado', $job->work_performed, 'Fotos de evidencia final', 2]] as $stage => [$title, $textLabel, $text, $photoLabel, $step])
             <section role="tabpanel" id="mw-panel-{{ $step }}" aria-labelledby="mw-tab-{{ $step }}" data-maintenance-panel="{{ $step }}" @if($initialStep !== $step) hidden @endif>
                 <div class="container-form-section-head"><span>{{ sprintf('%02d', $step + 1) }}</span><div><h2>{{ $title }}</h2></div></div>
+                @if($step === 2)
+                    @include('maintenance.calculated-cost', ['calculatedCost' => app(\App\Services\MaintenanceCost::class)->summary($job, $materials), 'costScope' => isset($selectedIntervention) ? 'Corrección '.$selectedIntervention->number : 'Reparación original'])
+                @endif
                 <div class="mw-assessment-columns notification-review-columns">
                     <section class="notification-review-text" aria-labelledby="reviewText{{ $step }}">
                         <h3 id="reviewText{{ $step }}">{{ $textLabel }}</h3>

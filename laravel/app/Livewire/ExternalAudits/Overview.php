@@ -20,6 +20,7 @@ class Overview extends Component
         $rows = $branches->map(function ($branch) use ($access, $user): array {
             $query = DB::table('contenedores as c')->join('bloques as b', 'b.id', '=', 'c.bloque_id')
                 ->join('patios as p', 'p.id', '=', 'b.patio_id')
+                ->leftJoin('estatus_ipsa as ei', 'ei.id', '=', 'c.estatus_ipsa_id')
                 ->join('pyp_auditoria as pa', function ($join): void {
                     $join->on('pa.contenedor_id', '=', 'c.id')->where('pa.estado_id', 1);
                 })
@@ -29,7 +30,7 @@ class Overview extends Component
                             ->where('j.branch_id', $branch->id);
                     });
                 })->where('c.estado_id', 1)->where('p.sucursal_id', $branch->id);
-            $ready = "c.estatus_ipsa_id = 1 AND (mj.id IS NULL OR mj.status = 'completed')";
+            $ready = "COALESCE((ei.estado_id = 1 AND UPPER(TRIM(ei.nombre)) = 'DISPONIBLE' AND (mj.id IS NULL OR mj.status = 'completed')), 0)";
             $row = $access->scope($query, $user, (int) $branch->id)->selectRaw("COUNT(*) as total,
                 COALESCE(SUM(CASE WHEN pa.estatus_pyp = 'Aprobado' AND {$ready} THEN 1 ELSE 0 END), 0) as approved,
                 COALESCE(SUM(CASE WHEN pa.estatus_pyp = 'Rechazado' THEN 1 ELSE 0 END), 0) as rejected,

@@ -152,7 +152,7 @@ function feedback(form, name, message = '', state = '') {
 }
 function validateField(form, name, required = false) {
     const field = form.elements[name];
-    if (field.disabled) return true;
+    if (!field || field.disabled) return true;
     const value = field.value;
     let error = '';
     if (name === 'username') {
@@ -336,7 +336,7 @@ document.addEventListener('submit', async (event) => {
             notify(Object.values(result.errors || {}).flat().join(' ') || result.message || 'No se pudo completar la accion.', 'error');
             Object.entries(result.errors || {}).forEach(([name, messages]) => feedback(form, name, messages.join(' '), 'error'));
         } else if (form.hasAttribute('data-user-standalone')) {
-            form.elements.password.value = '';
+            if (form.elements.password) form.elements.password.value = '';
             location.assign(form.dataset.returnUrl);
         } else {
             await close(form.closest('dialog'));

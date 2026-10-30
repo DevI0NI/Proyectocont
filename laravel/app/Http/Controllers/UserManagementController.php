@@ -6,6 +6,7 @@ use App\Models\Rol;
 use App\Models\Sucursal;
 use App\Models\User;
 use App\Services\AccessPermissions;
+use App\Services\AccountRecovery;
 use App\Services\AdministrationTable;
 use App\Services\ExternalAuditAccess;
 use App\Services\SystemNotifications;
@@ -14,6 +15,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -73,7 +75,8 @@ class UserManagementController extends Controller
 
     public function store(Request $request): RedirectResponse|JsonResponse
     {
-        $data = $this->validatedUserData($request, null, true);
+        $data = $this->validatedUserData($request, null);
+        abort_unless(app(AccountRecovery::class)->enabled(), 503, 'Primero configura y habilita la activacion por correo.');
 
         $inactiveMatch = User::inactive()
             ->where(function ($query) use ($data): void {
@@ -106,7 +109,7 @@ class UserManagementController extends Controller
             $user = User::create([
                 'username' => $data['username'],
                 'email' => $data['email'],
-                'password' => Hash::make($data['password']),
+                'password' => Hash::make(Str::random(64)),
                 'rol_id' => $data['rol_id'],
                 'sucursal_id' => $data['sucursal_id'],
                 'estado_id' => self::ACTIVE,
@@ -114,7 +117,9 @@ class UserManagementController extends Controller
                 'external_audit_company_id' => $data['external_audit_company_id'],
                 'external_access_level' => $data['external_access_level'],
             ]);
+            $user->forceFill(['requires_password_setup' => true])->save();
             $user->authorizedExternalBranches()->sync($data['external_branches']);
+            app(AccountRecovery::class)->queueCredential($user, 'activation');
             app(SystemNotifications::class)->userChanged($request->user(), $user, [], 'Usuario creado');
         });
 
@@ -159,10 +164,13 @@ class UserManagementController extends Controller
         $this->authorizeManageTarget($request->user(), $user, false);
 
         $reactivate = $request->boolean('reactivate');
-        $data = $this->validatedUserData($request, $user, $reactivate);
+        $data = $this->validatedUserData($request, $user);
 
         if ($reactivate && (int) $request->user()->rol_id !== 1) {
             abort(403, 'Solo el Super Admin puede reactivar usuarios.');
+        }
+        if ($reactivate) {
+            abort_unless(app(AccountRecovery::class)->enabled(), 503, 'Primero configura y habilita la activacion por correo.');
         }
 
         $payload = [
@@ -177,21 +185,32 @@ class UserManagementController extends Controller
             $payload['permissions'] = $data['permissions'];
         }
 
-        if (! empty($data['password'])) {
-            $payload['password'] = Hash::make($data['password']);
-        }
-
         if ($reactivate) {
             $payload['estado_id'] = self::ACTIVE;
         }
 
         DB::transaction(function () use ($user, $payload, $data, $request, $reactivate): void {
+            $user = User::query()->lockForUpdate()->findOrFail($user->id);
+            $this->authorizeManageTarget($request->user(), $user, false);
+            if ($user->email !== $payload['email']) {
+                abort_unless((int) $user->rol_id !== 1 && (int) $user->id !== (int) $request->user()->id, 403);
+            }
             $before = $user->toArray();
             $before['external_branches'] = $user->authorizedExternalBranches()->orderBy('sucursales.id')->pluck('sucursales.id')->all();
             $user->update($payload);
             $user->authorizedExternalBranches()->sync($data['external_branches']);
+            $recovery = app(AccountRecovery::class);
+            if ($recovery->enabled() && ($before['email'] !== $user->email || (int) $before['rol_id'] !== (int) $user->rol_id || $reactivate)) {
+                $recovery->invalidate($user);
+                $user->forceFill(['credential_version' => ($user->credential_version ?? 1) + 1])->save();
+                if ($before['email'] !== $user->email || $reactivate) {
+                    $user->forceFill(['requires_password_setup' => true])->save();
+                    $recovery->queueCredential($user, 'activation');
+                }
+                $recovery->record($user, 'account_access_changed', $request->user());
+            }
             app(SystemNotifications::class)->userChanged($request->user(), $user, $before,
-                $reactivate ? 'Usuario reactivado' : 'Usuario actualizado', ! empty($data['password']));
+                $reactivate ? 'Usuario reactivado' : 'Usuario actualizado');
         });
 
         if ((int) $request->user()->id === (int) $user->id) {
@@ -223,6 +242,10 @@ class UserManagementController extends Controller
             $before = $user->toArray();
             $before['external_branches'] = $user->authorizedExternalBranches()->orderBy('sucursales.id')->pluck('sucursales.id')->all();
             $user->update(['estado_id' => self::INACTIVE]);
+            if (app(AccountRecovery::class)->enabled()) {
+                app(AccountRecovery::class)->invalidate($user);
+                $user->forceFill(['credential_version' => ($user->credential_version ?? 1) + 1])->save();
+            }
             app(SystemNotifications::class)->userChanged($request->user(), $user, $before, 'Usuario desactivado');
         });
 
@@ -294,7 +317,7 @@ class UserManagementController extends Controller
         return $query;
     }
 
-    private function validatedUserData(Request $request, ?User $target, bool $passwordRequired): array
+    private function validatedUserData(Request $request, ?User $target): array
     {
         $request->merge([
             'username' => trim((string) $request->input('username')),
@@ -328,14 +351,8 @@ class UserManagementController extends Controller
                 'max:100',
                 $emailUniqueRule,
             ],
-            'password' => [
-                $passwordRequired ? 'required' : 'nullable',
-                'string',
-                'min:8',
-                'max:64',
-                'regex:/^(?=.*[A-Z])(?=.*[0-9])(?=.*[\pP\pS]).+$/u',
-                'confirmed',
-            ],
+            'password' => ['prohibited'],
+            'password_confirmation' => ['prohibited'],
             'rol_id' => [
                 'required',
                 'integer',
@@ -355,7 +372,8 @@ class UserManagementController extends Controller
             'email.required' => 'El correo electronico es obligatorio.',
             'email.email' => 'El formato del correo electronico es incorrecto.',
             'email.unique' => 'El correo electronico ya esta registrado.',
-            'password.required' => 'La contrasena es obligatoria.',
+            'password.prohibited' => 'Las contrasenas se definen mediante la clave temporal enviada por correo.',
+            'password_confirmation.prohibited' => 'No se permite asignar contrasenas desde Usuarios.',
             'password.min' => 'La contrasena debe tener al menos 8 caracteres.',
             'password.max' => 'La contrasena no puede superar 64 caracteres.',
             'password.regex' => 'La contrasena debe incluir una mayuscula, un numero y un simbolo.',
@@ -367,6 +385,12 @@ class UserManagementController extends Controller
             'sucursal_id.required' => 'Selecciona un rol y una sucursal validos.',
             'sucursal_id.in' => 'No puedes asignar usuarios a otra sucursal.',
         ]);
+
+        if ($target && strtolower($target->email) !== $data['email']) {
+            abort_unless((int) $target->rol_id !== 1 && (int) $currentUser->id !== (int) $target->id
+                && ((int) $currentUser->rol_id === 1 || ((int) $currentUser->rol_id === 2 && (int) $target->rol_id > 2)), 403, 'No puedes cambiar el correo de esta cuenta.');
+            abort_unless(app(AccountRecovery::class)->enabled(), 503, 'Primero habilita la activacion del nuevo correo.');
+        }
 
         $data['rol_id'] = (int) $data['rol_id'];
         $data['sucursal_id'] = (int) $data['sucursal_id'];

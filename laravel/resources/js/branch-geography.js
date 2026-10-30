@@ -104,6 +104,7 @@ export function initializeRecordSelects() {
         });
         select.addEventListener('invalid', (event) => { event.preventDefault(); trigger.classList.add('invalid'); trigger.focus(); });
         select.addEventListener('change', () => { if (select.name === 'departamento_codigo') municipalities(select.form, select.value); render(); });
+        select.addEventListener('options-updated', render);
         render();
     });
 }

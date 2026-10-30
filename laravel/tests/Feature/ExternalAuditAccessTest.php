@@ -50,7 +50,34 @@ class ExternalAuditAccessTest extends UserManagementInterfaceTest
             $table->integer('posicion');
             $table->integer('estado_id');
             $table->integer('estatus_ipsa_id');
+            $table->integer('estatus_unidad_id')->default(1);
+            $table->integer('estatus_box_id')->default(2);
+            $table->integer('tipo_unidad_id')->nullable();
+            $table->integer('modelo_id')->nullable();
+            $table->dateTime('fecha_ingreso')->nullable();
+            $table->string('iso_code')->nullable();
+            $table->string('marca')->nullable();
+            $table->string('naviera')->nullable();
+            $table->string('observaciones_unidad')->nullable();
+            $table->string('observaciones_box')->nullable();
         });
+        foreach (['tipos_unidad', 'modelos'] as $catalog) {
+            Schema::create($catalog, function (Blueprint $table): void {
+                $table->increments('id');
+                $table->string('nombre');
+            });
+        }
+        Schema::create('estatus_contenedores', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('nombre');
+        });
+        Schema::create('estatus_ipsa', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('nombre');
+            $table->integer('estado_id');
+        });
+        DB::table('estatus_contenedores')->insert([['id' => 1, 'nombre' => 'OK'], ['id' => 2, 'nombre' => 'OK']]);
+        DB::table('estatus_ipsa')->insert(['id' => 1, 'nombre' => 'Disponible', 'estado_id' => 1]);
         Schema::create('pyp_auditoria', function (Blueprint $table): void {
             $table->integer('contenedor_id');
             $table->unsignedBigInteger('external_audit_company_id')->nullable();
@@ -166,9 +193,13 @@ class ExternalAuditAccessTest extends UserManagementInterfaceTest
     {
         $first = $this->externalUser();
         $second = $this->externalUser('Companero');
-        app(PypAuditService::class)->update($first, 1, 1, ['estatus_pyp' => 'Rechazado', 'informacion_adicional' => 'Falla']);
-        app(PypAuditService::class)->update($second, 1, 1, ['estatus_pyp' => 'Aprobado', 'informacion_adicional' => 'Reinspeccion']);
-        $this->assertSame([$first->id, $second->id], DB::table('logs_eventos')->orderBy('id')->pluck('usuario_id')->all());
+        $audits = app(PypAuditService::class);
+        $audits->begin($first, 1, 1, 0);
+        $revision = (int) DB::table('container_assignment_events')->max('id');
+        $audits->update($first, 1, 1, ['action' => 'save', 'audit_version' => $revision, 'informacion_adicional' => 'Se revisaron los paneles y se continua la inspeccion.']);
+        $revision = (int) DB::table('container_assignment_events')->max('id');
+        $audits->update($second, 1, 1, ['audit_version' => $revision, 'estatus_pyp' => 'Aprobado', 'informacion_adicional' => 'La reinspeccion confirma que el contenedor cumple las condiciones.']);
+        $this->assertSame([$first->id, $first->id, $second->id], DB::table('logs_eventos')->orderBy('id')->pluck('usuario_id')->all());
         $this->assertSame(1, DB::table('pyp_auditoria')->where('contenedor_id', 1)->value('external_audit_company_id'));
     }
 
@@ -310,14 +341,14 @@ class ExternalAuditAccessTest extends UserManagementInterfaceTest
 
     private function externalPayload(string $name = 'Externo'): array
     {
-        return ['username' => $name, 'email' => strtolower($name).'@example.test', 'password' => 'Secret123!', 'password_confirmation' => 'Secret123!', 'rol_id' => 5, 'sucursal_id' => 1, 'external_audit_company_id' => 1, 'external_access_level' => 'inspector', 'external_branches' => [1, 2]];
+        return ['username' => $name, 'email' => strtolower($name).'@example.test', 'rol_id' => 5, 'sucursal_id' => 1, 'external_audit_company_id' => 1, 'external_access_level' => 'inspector', 'external_branches' => [1, 2]];
     }
 
     private function externalUser(string $name = 'Externo'): User
     {
         $payload = $this->externalPayload($name);
         unset($payload['password_confirmation'], $payload['external_branches']);
-        $payload['password'] = Hash::make($payload['password']);
+        $payload['password'] = Hash::make('Secret123!');
         $user = User::create($payload + ['estado_id' => 1]);
         $user->authorizedExternalBranches()->sync([1]);
 

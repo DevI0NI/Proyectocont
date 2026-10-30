@@ -19,6 +19,9 @@
                                 <a href="{{ route('users.edit', ['user' => $item, 'reactivar' => 1]) }}">Reactivar</a>
                             @else
                                 <a href="{{ route('users.edit', $item) }}">Editar</a>
+                                @if((int) auth()->user()->rol_id === 1 && (int) $item->rol_id !== 1 && config('account-recovery.enabled'))
+                                    <form method="POST" action="{{ route('users.send-credential', $item) }}">@csrf<button type="submit">Enviar clave temporal</button></form>
+                                @endif
                                 @if((int)$item->rol_id !== 1)
                                     <button type="button" data-user-deactivate data-action="{{ route('users.destroy', $item) }}" data-name="{{ $item->username }}" @disabled((int)auth()->id() === (int)$item->id) @if((int)auth()->id() === (int)$item->id) title="No puedes desactivar tu propia cuenta" @endif>Desactivar</button>
                                 @endif

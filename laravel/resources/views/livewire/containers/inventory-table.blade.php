@@ -183,9 +183,11 @@
             </div>
         </div>
 
-        <div class="containers-view-switch" role="group" aria-label="Cambiar vista">
-            <button type="button" class="@if($viewMode === 'table') active @endif" wire:click="setViewMode('table')">Tabla</button>
-            <button type="button" class="@if($viewMode === 'yard3d') active @endif" wire:click="setViewMode('yard3d')">Vista 3D</button>
+        <div class="containers-view-switch" role="group" aria-label="Cambiar vista"
+            x-data="{ switching: false, async change(mode) { if (this.switching || mode === this.$wire.viewMode) return; this.switching = true; try { await this.$wire.setViewMode(mode); } finally { setTimeout(() => { this.switching = false; }, 800); } } }"
+            :aria-busy="switching">
+            <button type="button" class="@if($viewMode === 'table') active @endif" :disabled="switching || $wire.viewMode === 'table'" @click="change('table')" @disabled($viewMode === 'table')>Tabla</button>
+            <button type="button" class="@if($viewMode === 'yard3d') active @endif" :disabled="switching || $wire.viewMode === 'yard3d'" @click="change('yard3d')" @disabled($viewMode === 'yard3d')>Vista 3D</button>
         </div>
 
         <div class="containers-table-panel">
@@ -281,15 +283,15 @@
                             <strong data-yard-action-name></strong>
                             <small data-yard-action-meta></small>
                             <div class="containers-yard3d-actions-list">
-                                <a data-yard-action-info href="#">{{ $pypMode ? 'Ver auditoría' : 'Informacion' }}</a>
-                                @if($maintenanceMode)
-                                <a data-yard-action-maintenance href="#" hidden>Reparar</a>
-                                @elseif (! $pypMode)
-                                <a data-yard-action-ticket href="#">Constancia ingreso</a>
+                                <a data-yard-action-info href="#">Información</a>
+                                @if($maintenanceMode || $pypMode)
+                                <a data-yard-action-maintenance href="#" hidden>{{ $pypMode ? 'Auditar' : 'Reparar' }}</a>
+                                @if($pypMode)<form data-yard-audit-start method="POST" hidden>@csrf<input type="hidden" name="audit_version"></form>@endif
+                                @else
                                 <a data-yard-action-transfer href="#">Trasladar</a>
                                 <a data-yard-action-dispatch href="#">Despachar</a>
                                 @endif
-                                @if(! $pypMode)<a data-yard-action-history href="#" hidden>Reparaciones</a>@endif
+                                <a data-yard-action-history href="#" hidden>{{ $pypMode ? 'Auditorías' : 'Reparaciones' }}</a>
                             </div>
                         </div>
                     </div>
@@ -446,9 +448,6 @@
                                                         <a href="{{ route('containers.show', ['container' => $container->id, 'patio_id' => $selectedPatio?->id, 'bloque_id' => $selectedBlock?->id]) }}">
                                                             Informacion
                                                         </a>
-                                                        <a href="{{ route('documents.ingress.ticket', ['contenedor_id' => $container->id, 'patio_id' => $selectedPatio?->id, 'bloque_id' => $selectedBlock?->id]) }}">
-                                                            Constancia ingreso
-                                                        </a>
                                                         @if(auth()->user()->hasPermission('transfers.operate'))<a href="{{ route('transfers.create', ['contenedor_id' => $container->id]) }}">Trasladar</a>@endif
                                                         @if(auth()->user()->hasPermission('dispatches.operate'))<a href="{{ route('dispatches.create', ['contenedor_id' => $container->id]) }}">Despachar</a>@endif
                                                     @endif
@@ -458,8 +457,11 @@
                                                         @elseif ((auth()->user()->hasPermission('pyp.assign') || $roleId === 4) && (int) $container->estatus_ipsa_id === 1 && ! $container->es_asignado)
                                                             <button type="button" data-pyp-assign data-action="{{ route('pyp-audits.assign', ['container' => $container->id]) }}" data-code="{{ $container->nombre }}" data-patio="{{ $container->patio_id }}" data-bloque="{{ $container->bloque_id }}">Asignar PYP</button>
                                                         @elseif ($container->es_asignado && in_array($roleId, [4, 5], true))
-                                                            <a href="{{ route('pyp-audits.edit', ['container' => $container->id, 'patio_id' => $container->patio_id, 'bloque_id' => $container->bloque_id]) }}">
-                                                                Ver auditoría
+                                                            @if($container->ipsa_available && $container->audit_actions['maintenance'])
+                                                            <form method="POST" action="{{ $container->audit_actions['maintenance'] }}">@csrf<input type="hidden" name="audit_version" value="{{ $container->audit_actions['audit_version'] }}"><button type="submit">{{ $container->audit_actions['maintenance_label'] }}</button></form>
+                                                            @endif
+                                                            <a href="{{ $container->audit_actions['history'] }}">
+                                                                Auditorías
                                                             </a>
                                                         @elseif ($container->es_asignado)
                                                             <span>Asignado</span>
@@ -467,7 +469,11 @@
                                                             <span>Pendiente</span>
                                                         @endif
                                                         @if (! $isCensored && ($isAssigned || in_array($roleId, [1, 2, 3], true)))
+                                                            @if($roleId === 5)
+                                                            <a href="{{ $container->audit_actions['info'] }}">Información</a>
+                                                            @else
                                                             <button type="button" data-pyp-info data-code="{{ $container->nombre }}" data-info="{{ $container->informacion_adicional ?? '' }}">Mas info</button>
+                                                            @endif
                                                         @endif
                                                     @endif
                                                 </div>

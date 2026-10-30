@@ -69,7 +69,8 @@ class ContainerAuditAssignment
             $before['legacy_shipping_line'] = $previousShippingLine;
         }
         if ($container->current_ingress_cycle_id) {
-            DB::table('container_ingress_cycles')->where('id', $container->current_ingress_cycle_id)->update(['closed_at' => now(), 'updated_at' => now()]);
+            DB::table('container_ingress_cycles')->where('id', $container->current_ingress_cycle_id)
+                ->whereNull('closed_at')->update(['closed_at' => now(), 'updated_at' => now()]);
         }
         $cycleId = DB::table('container_ingress_cycles')->insertGetId($this->cycleFields($assignment) + [
             'container_id' => $container->id, 'branch_id' => $branchId, 'entered_at' => $container->fecha_ingreso,
@@ -87,7 +88,6 @@ class ContainerAuditAssignment
             }
         }
         $this->resetAudit($user, $container, $assignment);
-        app(SystemNotifications::class)->auditAssigned($container, $branchId);
         $this->event($user, $container, $reentry ? 'reentry' : 'ingress', $assignment['reason'] ?: ($reentry ? 'Nuevo ciclo de ingreso; no hereda aprobaciones.' : 'Asignacion inicial del ingreso.'), $before);
         if (! $container->wasRecentlyCreated && ! $reentry && ! $before['cycle']) {
             app(SystemNotifications::class)->activity('audits', 'Asignación del ingreso regularizada', $container->nombre,
@@ -119,7 +119,6 @@ class ContainerAuditAssignment
             DB::table('container_ingress_cycles')->where('id', $cycle->id)->update($this->cycleFields($assignment) + ['updated_at' => now()]);
             if ($changed) {
                 $this->resetAudit($user, $container, $assignment);
-                app(SystemNotifications::class)->auditAssigned($container, $branchId);
             }
             $this->event($user, $container, $changed ? 'reassignment' : 'instruction', $assignment['reason'] ?: 'Actualizacion de referencia de la instruccion.', $before);
             $changes = app(SystemNotifications::class)->changes((array) $cycle, $assignment, [
@@ -155,11 +154,40 @@ class ContainerAuditAssignment
 
     private function event(User $user, Contenedor $container, string $type, string $reason, array $before): void
     {
+        $after = $this->snapshot($container);
+        if (in_array($type, ['ingress', 'reentry'], true) && ($container->wasRecentlyCreated || $type === 'reentry')) {
+            $after['document'] = $this->ingressDocument($user, $container, $after['cycle']);
+        }
         DB::table('container_assignment_events')->insert([
             'container_id' => $container->id, 'ingress_cycle_id' => $container->current_ingress_cycle_id,
             'user_id' => $user->id, 'event_type' => $type, 'reason' => $reason,
-            'before_data' => json_encode($before, JSON_THROW_ON_ERROR), 'after_data' => json_encode($this->snapshot($container), JSON_THROW_ON_ERROR), 'created_at' => now(),
+            'before_data' => json_encode($before, JSON_THROW_ON_ERROR), 'after_data' => json_encode($after, JSON_THROW_ON_ERROR), 'created_at' => now(),
         ]);
+    }
+
+    private function ingressDocument(User $user, Contenedor $container, object $cycle): array
+    {
+        $location = DB::table('bloques as b')->join('patios as p', 'p.id', '=', 'b.patio_id')
+            ->join('sucursales as s', 's.id', '=', 'p.sucursal_id')->where('b.id', $container->bloque_id)
+            ->first(['b.numero', 'p.nombre as patio', 's.nombre as sucursal']);
+        $date = $container->fecha_ingreso;
+
+        return [
+            'numero' => 'EIR-IN-'.$date->format('Ymd').'-'.str_pad((string) $container->id, 3, '0', STR_PAD_LEFT),
+            'fecha' => $date->format('d/m/Y'), 'hora' => $date->format('H:i').' hrs', 'equipo' => $container->nombre, 'container_id' => $container->id,
+            'tipo' => DB::table('tipos_unidad')->where('id', $container->tipo_unidad_id)->value('nombre'),
+            'modelo' => DB::table('modelos')->where('id', $container->modelo_id)->value('nombre'),
+            'iso_code' => $container->iso_code, 'marca' => $container->marca,
+            'estado_unidad' => DB::table('estatus_contenedores')->where('id', $container->estatus_unidad_id)->value('nombre'),
+            'estado_box' => DB::table('estatus_contenedores')->where('id', $container->estatus_box_id)->value('nombre'),
+            'ipsa' => DB::table('estatus_ipsa')->where('id', $container->estatus_ipsa_id)->value('nombre'),
+            'observaciones_unidad' => $container->observaciones_unidad, 'observaciones_box' => $container->observaciones_box,
+            'patio' => $location->patio, 'bloque' => $location->numero, 'posicion' => $container->posicion,
+            'sucursal' => $location->sucursal, 'naviera' => $cycle->shipping_line_name, 'auditora' => $cycle->audit_company_name,
+            'transportista' => $container->transportista, 'conductor' => $container->conductor,
+            'placa_cabezal' => $container->placa_cabezal, 'placa_chasis' => $container->placa_chasis,
+            'usuario' => $user->username, 'marchamo' => 'Pendiente', 'referencia' => 'Constancia visual de recepcion de ingreso.',
+        ];
     }
 
     public function joinCurrent(Builder $query): Builder

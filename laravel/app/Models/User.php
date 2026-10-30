@@ -37,6 +37,8 @@ class User extends Authenticatable
             'estado_id' => 'integer',
             'permissions' => 'array',
             'external_audit_company_id' => 'integer',
+            'requires_password_setup' => 'boolean',
+            'credential_version' => 'integer',
         ];
     }
 

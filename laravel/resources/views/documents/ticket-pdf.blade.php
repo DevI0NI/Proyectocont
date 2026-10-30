@@ -71,7 +71,7 @@
             </div>
         </header>
 
-        <div class="title">Constancia operativa de {{ $operation }}</div>
+        <div class="title">{{ $operation === 'salida' ? 'EIR de salida' : 'Constancia operativa de ingreso' }}</div>
 
         <section class="summary">
             <p>
@@ -80,10 +80,11 @@
                 <strong>{{ $sucursal->nombre }}</strong>.
             </p>
             <p>
-                Actividad registrada: <strong>{{ $activity }}</strong>. El contenedor queda asignado al
+                Actividad registrada: <strong>{{ $activity }}</strong>. {{ $operation === 'salida' ? 'El contenedor se retira del' : 'El contenedor queda asignado al' }}
                 <strong>{{ $data['patio'] }}</strong>, en el <strong>Bloque {{ $data['bloque'] }}</strong>,
                 posicion <strong>{{ $data['posicion'] }}</strong>.
             </p>
+            @if($operation === 'salida')<p>Auditora: <strong>{{ $data['auditora'] }}</strong>. Dictamen: <strong>{{ $data['auditoria'] }}</strong>. Registrado por: <strong>{{ $data['usuario'] }}</strong>.</p>@endif
             <p class="warning">CONSTANCIA INTERNA DE INVENTARIO Y CONTROL DE PATIO</p>
         </section>
 
@@ -92,7 +93,8 @@
             <tbody>
                 <tr><th>Contenedor</th><td>{{ $data['equipo'] }}</td><th>Tipo / Modelo</th><td>{{ $data['tipo'] }} / {{ $data['modelo'] }}</td></tr>
                 <tr><th>ISO Code</th><td>{{ $data['iso_code'] }}</td><th>Marca</th><td>{{ $data['marca'] }}</td></tr>
-                <tr><th>Naviera</th><td>{{ $data['naviera'] }}</td><th>Marchamo</th><td>{{ $data['marchamo'] }}</td></tr>
+                @if($operation === 'salida')<tr><th>Naviera</th><td colspan="3">{{ $data['naviera'] }}</td></tr>
+                @else<tr><th>Naviera</th><td>{{ $data['naviera'] }}</td><th>Marchamo</th><td>{{ $data['marchamo'] }}</td></tr>@endif
                 <tr><th>Estado Unidad</th><td>{{ $data['estado_unidad'] }}</td><th>Estado Estructura</th><td>{{ $data['estado_box'] }}</td></tr>
                 <tr><th>Estatus IPSA</th><td>{{ $data['ipsa'] }}</td><th>Ubicacion</th><td>{{ $data['patio'] }} / B{{ $data['bloque'] }} / P{{ $data['posicion'] }}</td></tr>
             </tbody>

@@ -64,7 +64,8 @@ class ContainerStatusManagementInterfaceTest extends TestCase
             ['id' => 4, 'nombre' => 'Anterior', 'tipo_estatus_id' => 1, 'estado_id' => 2],
         ]);
         DB::table('contenedores')->insert(['estatus_unidad_id' => 1, 'estatus_box_id' => 3, 'estado_id' => 1]);
-        $this->actingAs(User::first());
+        $this->createNotificationTables();
+        $this->actingAs(User::first())->withSession(['sucursal_activa' => 1]);
     }
 
     public function test_live_table_categories_states_filters_and_fallback_forms(): void

@@ -45,7 +45,7 @@
             </button>
         </div>
 
-        <form method="POST" action="{{ route('ingresos.store') }}" class="record-form wide-form container-form has-steps" id="containerIngressForm" novalidate>
+        <form method="POST" action="{{ route('ingresos.store') }}" class="record-form wide-form container-form has-steps" id="containerIngressForm" data-unsaved-form="cancelIngressDialog" data-restored-changes="{{ $errors->any() ? 'true' : 'false' }}" novalidate>
             @csrf
 
             <div class="container-form-section active" data-form-step="0">
@@ -96,7 +96,7 @@
 
                     <label>
                         <span>Marca</span>
-                        <input type="text" name="marca" value="{{ old('marca') }}" maxlength="80" placeholder="CIMC, Maersk, Triton..." required>
+                        <input type="text" name="marca" value="{{ old('marca') }}" maxlength="40" placeholder="CIMC, Maersk, Triton..." required>
                     </label>
                 </div>
             </div>
@@ -143,12 +143,12 @@
 
                     <label class="status-note">
                         <span>Observaciones unidad</span>
-                        <textarea name="observaciones_estado" rows="3" maxlength="255">{{ old('observaciones_estado') }}</textarea>
+                        <textarea name="observaciones_estado" rows="3" minlength="40" maxlength="255">{{ old('observaciones_estado') }}</textarea>
                     </label>
 
                     <label class="status-note">
                         <span>Observaciones estructura</span>
-                        <textarea name="observaciones_box" rows="3" maxlength="255">{{ old('observaciones_box') }}</textarea>
+                        <textarea name="observaciones_box" rows="3" minlength="40" maxlength="255">{{ old('observaciones_box') }}</textarea>
                     </label>
                 </div>
             </div>
@@ -166,13 +166,13 @@
                     @include('partials.container-assignment-fields')
 
                     <label>
-                        <span>Quien lo trajo</span>
-                        <input type="text" name="transportista" value="{{ old('transportista') }}" maxlength="120" placeholder="Transportista o empresa" required>
+                        <span class="plate-field-title">Quien lo trajo @include('partials.field-help', ['helpId' => 'ingressCarrierHelp', 'helpLabel' => 'Ayuda de transportista', 'helpText' => 'Empresa o transportista responsable de traer el contenedor. No es el nombre del piloto. Maximo 100 caracteres.'])</span>
+                        <input type="text" name="transportista" value="{{ old('transportista') }}" maxlength="100" placeholder="Transportista o empresa" required>
                     </label>
 
                     <label>
-                        <span>Piloto</span>
-                        <input type="text" name="conductor" value="{{ old('conductor') }}" maxlength="120" placeholder="Opcional">
+                        <span class="plate-field-title">Piloto @include('partials.field-help', ['helpId' => 'ingressDriverHelp', 'helpLabel' => 'Ayuda de piloto', 'helpText' => 'Nombre y apellidos de quien conduce el cabezal. Obligatorio, maximo 80 caracteres.'])</span>
+                        <input type="text" name="conductor" value="{{ old('conductor') }}" maxlength="80" placeholder="Nombre y apellidos" required>
                     </label>
 
                     <div class="plate-field">
@@ -194,7 +194,7 @@
                                 <span class="plate-help-tooltip" id="chassisPlateHelp" role="tooltip" hidden>6 a 8 letras o numeros, sin contar espacios o guiones. Prefijo opcional. Ejemplos: TC-12ABC, RE123456 o 123456.</span>
                             </span>
                         </div>
-                        <input type="text" id="placa_chasis" name="placa_chasis" value="{{ old('placa_chasis') }}" maxlength="15" data-plate-max="{{ \App\Services\TransportPlate::MAX_ALPHANUMERIC_LENGTH }}" pattern="{{ \App\Services\TransportPlate::PATTERN }}" class="container-code-input">
+                        <input type="text" id="placa_chasis" name="placa_chasis" value="{{ old('placa_chasis') }}" maxlength="15" data-plate-max="{{ \App\Services\TransportPlate::MAX_ALPHANUMERIC_LENGTH }}" pattern="{{ \App\Services\TransportPlate::PATTERN }}" required class="container-code-input">
                     </div>
                     @include('partials.container-assignment-details')
                 </div>
@@ -262,11 +262,11 @@
 
     <dialog class="container-exit-dialog" id="cancelIngressDialog" role="alertdialog" aria-labelledby="cancelIngressTitle" aria-describedby="cancelIngressDescription">
         <span class="container-exit-dialog-kicker">Ingreso sin guardar</span>
-        <h2 id="cancelIngressTitle">¿Cancelar nuevo ingreso?</h2>
+        <h2 id="cancelIngressTitle">¿Seguro que quieres salir?</h2>
         <p id="cancelIngressDescription">Los datos que ingresaste no se guardarán.</p>
         <div class="container-exit-dialog-actions">
-            <button type="button" class="button container-exit-stay" id="stayIngressButton">Seguir registrando</button>
-            <a href="{{ route('containers.index', $returnParams) }}" class="button container-exit-leave">Salir sin guardar</a>
+            <button type="button" class="button container-exit-stay" data-unsaved-stay>Continuar</button>
+            <button type="button" class="button container-exit-leave" data-unsaved-leave>Salir</button>
         </div>
     </dialog>
 
@@ -292,10 +292,6 @@
         const prevStepButton = document.getElementById('prevStepButton');
         const nextStepButton = document.getElementById('nextStepButton');
         const saveIngressButton = document.getElementById('saveIngressButton');
-        const cancelIngressButton = document.getElementById('cancelIngressButton');
-        const cancelIngressDialog = document.getElementById('cancelIngressDialog');
-        const stayIngressButton = document.getElementById('stayIngressButton');
-        let hasUserChanges = @json($errors->any());
         let currentStep = 0;
         let containerCheckTimer = null;
         let containerMessageTimer = null;
@@ -332,6 +328,7 @@
         }
 
         function validationMessageFor(field) {
+            if (field.validity.customError) return field.validationMessage;
             if (field.name === 'codigo_contenedor' && field.validationMessage && field.dataset.state === 'invalid') {
                 return field.validationMessage;
             }
@@ -438,6 +435,7 @@
                 }
             }
 
+            ingressForm.dispatchEvent(new Event('unsaved:submit'));
             ingressForm.submit();
         }
 
@@ -683,13 +681,11 @@
         containerInput.addEventListener('input', queueContainerCheck);
         containerInput.addEventListener('blur', checkContainer);
         ingressForm.addEventListener('input', function (event) {
-            if (event.target.name && event.target.type !== 'hidden') hasUserChanges = true;
             if (event.target.matches('input, textarea') && event.target.checkValidity()) {
                 clearFieldError(event.target);
             }
         });
         ingressForm.addEventListener('change', function (event) {
-            if (event.target.name && event.target.type !== 'hidden') hasUserChanges = true;
             if (event.target.matches('select, input') && event.target.checkValidity()) {
                 clearFieldError(event.target);
             }
@@ -707,16 +703,6 @@
             goToStep(currentStep + 1);
         });
         saveIngressButton.addEventListener('click', submitIngress);
-        cancelIngressButton.addEventListener('click', function (event) {
-            if (!hasUserChanges) return;
-            event.preventDefault();
-            cancelIngressDialog.showModal();
-            stayIngressButton.focus();
-        });
-        stayIngressButton.addEventListener('click', () => cancelIngressDialog.close());
-        cancelIngressDialog.addEventListener('click', function (event) {
-            if (event.target === cancelIngressDialog) cancelIngressDialog.close();
-        });
         timelineSteps.forEach(function (button) {
             button.addEventListener('click', function () {
                 goToStep(Number(button.dataset.stepTarget));

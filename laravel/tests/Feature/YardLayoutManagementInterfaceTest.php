@@ -70,6 +70,7 @@ class YardLayoutManagementInterfaceTest extends TestCase
         for ($i = 0; $i < 3; $i++) {
             DB::table('contenedores')->insert(['bloque_id' => 1, 'estado_id' => 1]);
         }
+        $this->createNotificationTables();
         $this->actingAs(User::first())->withSession(['sucursal_activa' => 1]);
     }
 

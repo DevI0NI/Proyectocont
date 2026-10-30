@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Services\RentalParkingService;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class RentalParkingTest extends TestCase
@@ -15,6 +17,23 @@ class RentalParkingTest extends TestCase
         parent::setUp();
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:']);
         DB::purge('sqlite');
+        Schema::create('sucursales', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('nombre');
+            $table->integer('estado_id');
+        });
+        DB::table('sucursales')->insert(['id' => 1, 'nombre' => 'Sucursal QA', 'estado_id' => 1]);
+        $this->withSession(['sucursal_activa' => 1]);
+        Schema::create('users', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('username');
+            $table->string('email');
+            $table->integer('rol_id');
+            $table->integer('estado_id');
+            $table->integer('sucursal_id')->nullable();
+        });
+        DB::table('users')->insert(['id' => 77, 'username' => 'QA', 'email' => 'qa@example.test', 'rol_id' => 1, 'estado_id' => 1]);
+        $this->createNotificationTables();
         (require database_path('migrations/2026_10_06_151750_create_rental_parking_tables.php'))->up();
     }
 

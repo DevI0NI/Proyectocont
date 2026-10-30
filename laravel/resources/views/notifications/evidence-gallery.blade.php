@@ -15,5 +15,5 @@
         </div>
     </div>
 @else
-    <div class="notification-review-photo-empty"><span data-notification-icon="image" aria-hidden="true"></span><p>Sin fotos registradas.</p></div>
+    <div class="notification-review-photo-empty"><span data-notification-icon="image" aria-hidden="true"></span><p>{{ $emptyMessage ?? 'Sin fotos registradas.' }}</p></div>
 @endif

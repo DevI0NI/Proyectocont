@@ -15,17 +15,7 @@ class DashboardParityTest extends TestCase
     {
         parent::setUp();
 
-        config([
-            'database.default' => 'mysql',
-            'database.connections.mysql.host' => '127.0.0.1',
-            'database.connections.mysql.port' => '3306',
-            'database.connections.mysql.database' => 'proyectocont_v2.1',
-            'database.connections.mysql.username' => 'root',
-            'database.connections.mysql.password' => '',
-        ]);
-
-        DB::purge('mysql');
-        DB::reconnect('mysql');
+        $this->useIsolatedMysql();
         DB::beginTransaction();
     }
 

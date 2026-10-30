@@ -3,6 +3,10 @@ import { initializeRecordSelects } from './branch-geography';
 import { initializeMaintenancePricing } from './maintenance-pricing';
 
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-maintenance-text]').forEach((text) => {
+        const count = text.closest('.mw-field').querySelector('[data-maintenance-text-count]');
+        text.addEventListener('input', () => { count.textContent = String(Array.from(text.value).length); });
+    });
     const dialog = document.querySelector('[data-maintenance-summary]');
     if (dialog) {
         let request;
@@ -305,7 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 input.removeAttribute('aria-busy');
             }
         });
-        const validateDiagnosis = () => diagnosis.setCustomValidity(diagnosis.value.trim().length < 10 ? 'Describe el diagnóstico con al menos 10 caracteres.' : '');
+        const validateDiagnosis = () => diagnosis.setCustomValidity(Array.from(diagnosis.value.trim()).length < 30 ? 'Describe el diagnóstico con al menos 30 caracteres.' : '');
         diagnosis?.addEventListener('invalid', (event) => {
             event.preventDefault();
             diagnosis.setAttribute('aria-invalid', 'true');
@@ -403,6 +407,8 @@ document.addEventListener('DOMContentLoaded', () => {
         form.addEventListener('input', updateDirty);
         form.addEventListener('change', updateDirty);
         form.addEventListener('maintenance:changed', updateDirty);
+        form.addEventListener('technical:submission-failed', () => { submitting = false; updateDirty(); });
+        form.addEventListener('unsaved:submit', () => { submitting = true; });
         document.addEventListener('click', (event) => {
             const link = event.target.closest('a[href]');
             if (!dirty || submitting || !link || link === leave || link.hasAttribute('download') || link.target === '_blank'
@@ -479,12 +485,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const final = event.submitter?.value === 'submit';
             if (!diagnosis.disabled) {
                 diagnosis.required = final;
-                diagnosis.setCustomValidity(final && diagnosis.value.trim().length < 10 ? 'Describe el diagnóstico con al menos 10 caracteres.' : '');
+                diagnosis.setCustomValidity(final && Array.from(diagnosis.value.trim()).length < 30 ? 'Describe el diagnóstico con al menos 30 caracteres.' : '');
                 beforePhotos.required = final && Number(beforePhotos.dataset.existingCount || 0) === 0;
             }
             validateRepair(final);
             work.required = final;
-            work.setCustomValidity(final && !work.value.trim() ? 'Describe el trabajo realizado.' : '');
+            work.setCustomValidity(final && Array.from(work.value.trim()).length < 30 ? 'Describe el trabajo realizado con al menos 30 caracteres.' : '');
             photos.required = final && Number(photos.dataset.existingCount || 0) === 0;
             if (!form.checkValidity()) {
                 event.preventDefault();
