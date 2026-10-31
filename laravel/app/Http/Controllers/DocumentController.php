@@ -165,6 +165,7 @@ class DocumentController extends Controller
                 ])
                 ->first();
         }
+        abort_unless($container, 404, 'Selecciona un contenedor registrado en la sucursal activa.');
 
         $issuedAt = $container?->fecha_ingreso
             ? Carbon::parse($container->fecha_ingreso)

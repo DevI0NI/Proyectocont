@@ -58,6 +58,21 @@ class SecurityAuditTest extends TestCase
         }
     }
 
+    public function test_ingress_ticket_of_a_foreign_container_is_not_found_instead_of_failing(): void
+    {
+        $user = $this->signIn(3);
+        $containers = fn (string $operator) => DB::table('contenedores as c')->join('bloques as b', 'b.id', '=', 'c.bloque_id')
+            ->join('patios as p', 'p.id', '=', 'b.patio_id')->where('p.sucursal_id', $operator, $user->sucursal_id)->value('c.id');
+        $own = $containers('=');
+        $foreign = $containers('<>');
+        $this->assertNotNull($own);
+        $this->assertNotNull($foreign);
+        $this->get('/documentos/ingreso/ticket?contenedor_id='.$own)->assertOk();
+        $this->get('/documentos/ingreso/ticket?contenedor_id='.$foreign)->assertNotFound();
+        $this->get('/documentos/ingreso/ticket/pdf?contenedor_id='.$foreign)->assertNotFound();
+        $this->get('/documentos/ingreso/ticket')->assertNotFound();
+    }
+
     public function test_changing_cycle_identifier_cannot_read_another_container_history(): void
     {
         $user = $this->signIn(2);
