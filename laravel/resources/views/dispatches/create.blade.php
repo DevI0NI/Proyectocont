@@ -64,7 +64,7 @@
                             <em id="dispatchIpsaStatus">Pendiente</em>
                         </div>
                         <div class="dispatch-check" id="dispatchAuditCheck">
-                            <div><strong>Auditoria PYP</strong><span id="dispatchAuditDetail">-</span></div>
+                            <div><strong>Auditoria externa</strong><span id="dispatchAuditDetail">-</span></div>
                             <em id="dispatchAuditStatus">Pendiente</em>
                         </div>
                         <div class="dispatch-check" id="dispatchAccessCheck">
@@ -236,7 +236,7 @@
         function blockingReasons(item) {
             const reasons = [];
             if (!item.ipsa_disponible) reasons.push('IPSA no esta disponible');
-            if (!item.auditoria_aprobada) reasons.push(item.situacion_auditoria || (item.estatus_pyp ? 'PYP: ' + item.estatus_pyp : 'Falta auditoria PYP'));
+            if (!item.auditoria_aprobada) reasons.push(item.situacion_auditoria || (item.estatus_pyp ? 'Auditoria externa: ' + item.estatus_pyp : 'Falta auditoria externa'));
             if (item.bloqueado_fisicamente) reasons.push(item.bloqueadores + ' contenedor(es) delante');
             if (item.mantenimiento_pendiente) reasons.push('Mantenimiento o confirmacion interna pendiente');
             return reasons;

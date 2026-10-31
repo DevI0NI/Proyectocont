@@ -455,7 +455,7 @@
                                                         @if ($isCensored)
                                                             <span>Bloqueado</span>
                                                         @elseif ((auth()->user()->hasPermission('pyp.assign') || $roleId === 4) && (int) $container->estatus_ipsa_id === 1 && ! $container->es_asignado)
-                                                            <button type="button" data-pyp-assign data-action="{{ route('pyp-audits.assign', ['container' => $container->id]) }}" data-code="{{ $container->nombre }}" data-patio="{{ $container->patio_id }}" data-bloque="{{ $container->bloque_id }}">Asignar PYP</button>
+                                                            <button type="button" data-pyp-assign data-action="{{ route('pyp-audits.assign', ['container' => $container->id]) }}" data-code="{{ $container->nombre }}" data-patio="{{ $container->patio_id }}" data-bloque="{{ $container->bloque_id }}">Asignar auditoría</button>
                                                         @elseif ($container->es_asignado && in_array($roleId, [4, 5], true))
                                                             @if($container->ipsa_available && $container->audit_actions['maintenance'])
                                                             <form method="POST" action="{{ $container->audit_actions['maintenance'] }}">@csrf<input type="hidden" name="audit_version" value="{{ $container->audit_actions['audit_version'] }}"><button type="submit">{{ $container->audit_actions['maintenance_label'] }}</button></form>

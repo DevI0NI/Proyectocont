@@ -250,7 +250,7 @@ class ReportService
             'ingresos' => 'Ingresos por Ciclo',
             'movimientos' => 'Bitacora de Movimientos',
             'despachos' => 'Despachos con EIR de Salida',
-            'auditorias' => 'Auditorias PYP',
+            'auditorias' => 'Auditorias externas',
             'reparaciones' => 'Reparaciones y Correcciones',
             'costos' => 'Costos de Mantenimiento',
             'traslados' => 'Reporte de Traslados',
@@ -421,7 +421,7 @@ class ReportService
             ]);
 
         return [
-            ['Patio', 'Bloque', 'Posicion', 'Contenedor', 'Tipo', 'Modelo', 'Unidad', 'Box', 'IPSA', 'PYP', 'Ingreso'],
+            ['Patio', 'Bloque', 'Posicion', 'Contenedor', 'Tipo', 'Modelo', 'Unidad', 'Box', 'IPSA', 'Auditoria externa', 'Ingreso'],
             $rows->map(fn ($row) => [
                 $row->patio,
                 $row->bloque,

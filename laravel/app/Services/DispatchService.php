@@ -51,7 +51,7 @@ class DispatchService
             }
 
             if (! self::isAuditApproved($container->audit_status)) {
-                throw new \RuntimeException('La auditoria PYP debe tener estatus Aprobado para despachar el contenedor.');
+                throw new \RuntimeException('La auditoria externa debe tener estatus Aprobado para despachar el contenedor.');
             }
 
             $blockers = Contenedor::active()

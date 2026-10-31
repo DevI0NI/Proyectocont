@@ -1191,7 +1191,7 @@ class MaintenanceWorkflowTest extends TestCase
         foreach (['inspector', 'supervisor'] as $level) {
             $this->auditor->update(['external_access_level' => $level]);
             $this->actingAs($this->auditor->fresh())->get(route('pyp-audits.index'))->assertOk()->assertSee('Auditoría externa')
-                ->assertSee('Auditora mantenimiento')->assertDontSee('Seguimiento PYP');
+                ->assertSee('Auditora mantenimiento')->assertDontSee('Seguimiento de auditoría externa');
             Livewire::test(InventoryTable::class, ['pypMode' => false])
                 ->assertSet('pypMode', true)->set('search', DB::table('contenedores')->where('id', $this->container)->value('nombre'))
                 ->assertViewHas('pagination', fn ($pagination): bool => $pagination['total'] === 1);
@@ -2248,7 +2248,7 @@ class MaintenanceWorkflowTest extends TestCase
     {
         $this->get('/')->assertRedirect(route('maintenance.orders'));
         $this->get('/seguimiento-pyp')->assertRedirect(route('maintenance.orders'));
-        $this->get('/mantenimiento/ordenes')->assertOk()->assertDontSee('Nuevo trabajo')->assertDontSee('Seguimiento PYP');
+        $this->get('/mantenimiento/ordenes')->assertOk()->assertDontSee('Nuevo trabajo')->assertDontSee('Seguimiento de auditoría externa');
         $this->get('/contenedores/'.$this->container.'/pyp')->assertForbidden();
         $this->patch('/contenedores/'.$this->container.'/pyp', ['estatus_pyp' => 'Aprobado'])->assertForbidden();
         $this->post('/contenedores/'.$this->container.'/pyp/asignar')->assertForbidden();
@@ -3455,7 +3455,7 @@ class MaintenanceWorkflowTest extends TestCase
             ->assertSee('Mantenimiento')->assertSee('Vista 3D')->assertSee('Selecciona un patio')
             ->call('selectPatio', $block->patio_id)->call('selectBlock', $block->id)
             ->assertSee($record->nombre)->assertSee('Opciones')->assertSee('>Reparar</a>', false)->assertDontSee('Nuevo trabajo')
-            ->assertDontSee('XXXXXXXXXXX')->assertDontSee('Asignar PYP')->assertSee('Auditoría externa')
+            ->assertDontSee('XXXXXXXXXXX')->assertDontSee('Asignar auditoría')->assertSee('Auditoría externa')
             ->assertDontSee(route('transfers.create'), false)->assertDontSee(route('dispatches.create'), false)
             ->assertDontSee('Aprobacion anterior')->assertDontSee('Auditora mantenimiento')->assertSee('Aprobado')
             ->assertDontSee(route('maintenance.jobs'), false)->assertSee('Por atender');

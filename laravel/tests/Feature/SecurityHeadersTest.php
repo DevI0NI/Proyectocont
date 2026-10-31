@@ -19,6 +19,12 @@ class SecurityHeadersTest extends TestCase
             ->assertHeader('Content-Security-Policy-Report-Only', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'");
     }
 
+    public function test_https_responses_require_https_on_future_visits_but_http_responses_do_not(): void
+    {
+        $this->get('https://localhost/login')->assertOk()->assertHeader('Strict-Transport-Security', 'max-age=31536000');
+        $this->get('http://localhost/login')->assertOk()->assertHeaderMissing('Strict-Transport-Security');
+    }
+
     public function test_security_headers_preserve_json_response_status_body_and_private_cache_control(): void
     {
         $response = (new SecurityHeaders)->handle(Request::create('/example'), fn (Request $request): Response => new Response('{"error":"invalid"}', 422, ['Content-Type' => 'application/json', 'Cache-Control' => 'private, no-store']));
