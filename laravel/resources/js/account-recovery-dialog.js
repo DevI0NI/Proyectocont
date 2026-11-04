@@ -50,6 +50,7 @@ export function initializeRecoveryDialog(root = document, frame = requestAnimati
         }, 280);
     };
     root.querySelector('[data-recovery-close]')?.addEventListener('click', close);
+    root.querySelector('[data-recovery-dismiss]')?.addEventListener('click', close);
     dialog.addEventListener('cancel', (event) => {
         event.preventDefault();
         close();

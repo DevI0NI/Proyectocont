@@ -300,6 +300,7 @@
                         <span><i class="pending"></i>Pendiente</span>
                         <span><i class="oos"></i>OOS / reparacion</span>
                         <span><i class="other"></i>Otros</span>
+                        <span><i class="selected"></i>Seleccionado</span>
                         @if ($pypMode)
                             <span><i class="other"></i>Ocupación sin acceso</span>
                         @endif
@@ -688,9 +689,14 @@
                         closeOptionsMenus();
                         closeContainerDropdowns();
                         menu.style.setProperty('--column-menu-left', `${Math.max(12, left)}px`);
-                        menu.style.setProperty('--column-menu-top', `${rect.bottom + 8}px`);
                         if (willOpen) {
                             menu.hidden = false;
+                        }
+                        const menuHeight = menu.offsetHeight;
+                        const fitsBelow = rect.bottom + 8 + menuHeight <= window.innerHeight - 12;
+                        const top = fitsBelow ? rect.bottom + 8 : Math.max(12, rect.top - menuHeight - 8);
+                        menu.style.setProperty('--column-menu-top', `${top}px`);
+                        if (willOpen) {
                             window.requestAnimationFrame(() => menu.classList.add('is-open'));
                         } else {
                             menu.classList.remove('is-open');
@@ -717,7 +723,10 @@
                     closeContainerDropdowns();
                     closeOptionsMenus(wrapper);
                     dropdown?.style.setProperty('--options-left', `${Math.max(12, left)}px`);
-                    dropdown?.style.setProperty('--options-top', `${rect.bottom + 8}px`);
+                    const menuHeight = dropdown?.offsetHeight ?? 0;
+                    const fitsBelow = rect.bottom + 8 + menuHeight <= window.innerHeight - 12;
+                    const top = fitsBelow ? rect.bottom + 8 : Math.max(12, rect.top - menuHeight - 8);
+                    dropdown?.style.setProperty('--options-top', `${top}px`);
                     wrapper?.classList.toggle('open', willOpen);
                     optionTrigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
                     return;

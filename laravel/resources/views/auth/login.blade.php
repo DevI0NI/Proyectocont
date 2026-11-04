@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" class="login-html">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{{ ($passwordSetup ?? false) ? 'Definir contraseña' : 'Ingreso' }} | {{ config('app.name') }}</title>
+    @include('partials.app-icons', ['themeColor' => '#30619b'])
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-slate-950 text-white antialiased">
-    <main class="relative min-h-dvh overflow-x-hidden">
-        <section class="absolute inset-0 overflow-hidden bg-slate-950">
+    <section class="login-page-background overflow-hidden">
             @php
                 $loginBackground = 'imagenes/imagen para el login.jpg';
                 $loginBackgroundVersion = file_exists(public_path($loginBackground)) ? filemtime(public_path($loginBackground)) : time();
@@ -21,8 +21,9 @@
             <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,.54),rgba(2,44,46,.28)_45%,rgba(2,6,23,.48))]"></div>
             <div class="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,.08),transparent_28%),radial-gradient(circle_at_80%_80%,rgba(128,203,196,.10),transparent_30%)]"></div>
         </section>
+    <main class="login-page-scroll">
 
-        <section class="relative z-10 mx-auto grid min-h-dvh w-full max-w-[1120px] content-center gap-6 px-5 py-7 sm:px-8 lg:grid-cols-[minmax(390px,520px)_minmax(360px,420px)] lg:items-center lg:justify-center lg:gap-10 lg:px-10 xl:gap-14">
+        <section class="login-page-content relative z-10 mx-auto grid w-full max-w-[1120px] content-center gap-6 px-5 py-7 sm:px-8 lg:grid-cols-[minmax(390px,520px)_minmax(360px,420px)] lg:items-center lg:justify-center lg:gap-10 lg:px-10 xl:gap-14">
             <div class="login-enter-brand flex flex-col items-center justify-center text-center lg:items-start lg:text-left">
                 <img src="{{ asset('imagenes/New logo IPSA.png') }}" alt="Logo IPSA Web" class="mb-5 h-16 w-28 object-contain drop-shadow-[0_16px_30px_rgba(0,0,0,.35)] sm:h-20 sm:w-36 lg:mb-9 lg:h-24 lg:w-40">
                 <h1 class="max-w-[560px] text-4xl font-extrabold leading-[.98] tracking-normal text-white drop-shadow-lg sm:text-5xl lg:text-6xl xl:text-7xl">
@@ -135,11 +136,17 @@
         <dialog class="account-recovery-dialog" id="accountRecoveryDialog" aria-labelledby="recoveryTitle">
             <form method="POST" action="{{ route('account.recovery') }}">
                 @csrf
-                <h2 id="recoveryTitle">Recuperar acceso</h2>
+                <header class="account-recovery-header">
+                    <div class="account-review-heading">
+                        <span class="account-review-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span>
+                        <div><span class="eyebrow">Recuperación de contraseña</span><h2 id="recoveryTitle">Recuperar acceso</h2></div>
+                    </div>
+                    <button type="button" data-recovery-dismiss aria-label="Cerrar" title="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                </header>
                 <label>Correo registrado<input type="email" name="email" autocomplete="email" maxlength="100" value="{{ old('email') }}" required></label>
                 <label>Motivo de la solicitud<textarea name="reason" minlength="60" maxlength="150" rows="4" aria-describedby="recoveryReasonHint" data-recovery-reason required>{{ old('reason') }}</textarea></label>
                 <small class="account-recovery-hint" id="recoveryReasonHint" role="status" hidden></small>
-                <div class="account-recovery-actions"><button type="button" data-recovery-close>Cancelar</button><button type="submit">Enviar solicitud</button></div>
+                <footer class="account-recovery-actions"><button type="button" data-recovery-close>Cancelar</button><button type="submit">Enviar solicitud</button></footer>
             </form>
         </dialog>
     @endif

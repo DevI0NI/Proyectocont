@@ -121,7 +121,10 @@ function positionColumnMenu() {
         const width = Math.max(190, columnMenu.menu.offsetWidth || 190);
         const left = Math.min(header.left + header.width / 2 - width / 2, innerWidth - width - 12);
         columnMenu.menu.style.setProperty('--column-menu-left', `${Math.max(12, left)}px`);
-        columnMenu.menu.style.setProperty('--column-menu-top', `${header.bottom + 8}px`);
+        const height = columnMenu.menu.offsetHeight;
+        const fitsBelow = header.bottom + 8 + height <= innerHeight - 12;
+        const top = fitsBelow ? header.bottom + 8 : Math.max(12, header.top - height - 8);
+        columnMenu.menu.style.setProperty('--column-menu-top', `${top}px`);
         return;
     }
     columnMenu.menu.style.left = Math.max(8, Math.min(box.left, innerWidth - columnMenu.menu.offsetWidth - 8)) + 'px';

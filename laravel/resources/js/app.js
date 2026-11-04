@@ -658,6 +658,14 @@ function initYard3d(canvas) {
         return containerMaterials.get(key);
     };
 
+    const selectedContainerMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2f6df6,
+        emissive: 0x2f6df6,
+        emissiveIntensity: 0.28,
+        roughness: 0.5,
+        metalness: 0.08,
+    });
+
     const rowCount = blocks.length;
     const maxColumns = Math.max(...blocks.map((block) => Math.ceil((Number(block.capacidad) || 1) / 2)), 1);
     const floorWidth = Math.max(14, maxColumns * slotWidth + 4);
@@ -728,6 +736,8 @@ function initYard3d(canvas) {
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let hovered = null;
+    let selectedMesh = null;
+    let selectedMeshMaterial = null;
     let pointerStart = null;
     let hoverFrame = 0;
     let lastHoverEvent = null;
@@ -761,6 +771,24 @@ function initYard3d(canvas) {
         if (actionPanel) {
             actionPanel.hidden = true;
         }
+    }
+
+    function setSelectedContainer(mesh) {
+        if (selectedMesh) {
+            selectedMesh.material = selectedMeshMaterial;
+        }
+
+        selectedMesh = mesh;
+        selectedMeshMaterial = mesh?.material ?? null;
+
+        if (selectedMesh) {
+            selectedMesh.material = selectedContainerMaterial;
+        }
+    }
+
+    function closeActions() {
+        hideActions();
+        setSelectedContainer(null);
     }
 
     function pickContainer(event) {
@@ -933,20 +961,22 @@ function initYard3d(canvas) {
             return;
         }
 
-        const hit = hovered || pickContainer(event);
+        const hit = pickContainer(event);
         const item = hit?.userData?.container;
+        if (hovered && hovered !== hit) hovered.scale.copy(originalScale);
+        hovered = hit;
         if (item) {
-            if (hovered && hovered !== hit) hovered.scale.copy(originalScale);
-            hovered = hit;
             hovered.scale.set(1.08, 1.08, 1.08);
             if (event.pointerType === 'touch') {
                 showStatusTooltip(item, event);
             } else if (tooltip) {
                 tooltip.hidden = true;
             }
+            setSelectedContainer(item.anonymous ? null : hit);
             showActions(item, event);
         } else {
-            hideActions();
+            if (tooltip) tooltip.hidden = true;
+            closeActions();
         }
     };
 
@@ -954,7 +984,7 @@ function initYard3d(canvas) {
     canvas.addEventListener('pointermove', updateHover);
     canvas.addEventListener('pointerleave', handlePointerLeave);
     canvas.addEventListener('pointerup', handlePointerUp);
-    actionClose?.addEventListener('click', hideActions);
+    actionClose?.addEventListener('click', closeActions);
     const beginAudit = (event) => {
         if (!actionAuditForm) return;
         event.preventDefault();
@@ -984,9 +1014,11 @@ function initYard3d(canvas) {
         canvas.removeEventListener('pointermove', updateHover);
         canvas.removeEventListener('pointerleave', handlePointerLeave);
         canvas.removeEventListener('pointerup', handlePointerUp);
-        actionClose?.removeEventListener('click', hideActions);
+        actionClose?.removeEventListener('click', closeActions);
         actionMaintenance?.removeEventListener('click', beginAudit);
         cancelAnimationFrame(hoverFrame);
+        setSelectedContainer(null);
+        selectedContainerMaterial.dispose();
     };
 
     yardScenes.set(canvas, { signature, scene, renderer, camera, controls, resizeObserver, cleanup, frame: 0 });

@@ -69,7 +69,7 @@
 .dashboard-body .administration-main .admin-page-size .topbar-dropdown-option { display:block; text-align:left; padding:8px; }
 .dashboard-body .administration-main .admin-action.disabled { opacity:.4; cursor:default; transform:none; }
 .administration-main[aria-busy=true] .table-scroll { opacity:.65; }
-.admin-table-toolbar { display:flex; align-items:center; gap:12px; padding:14px 0; border-top:1px solid var(--shell-line); border-bottom:1px solid var(--shell-line); }
+.admin-table-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px 0; border-top:1px solid var(--shell-line); border-bottom:1px solid var(--shell-line); }
 .admin-table-search { display:flex; align-items:center; flex:1; min-width:180px; gap:8px; }
 .admin-table-search input { width:100%; min-width:0; border:1px solid var(--shell-line); border-radius:12px; background:var(--shell-panel); color:var(--shell-ink); padding:10px 12px; font:inherit; font-size:13px; }
 .admin-table-toolbar [data-admin-icon] svg { width:16px; height:16px; }
