@@ -92,3 +92,18 @@
 .account-review-resolution time { display: block; margin-top: 4px; font-size: 11px; }
 @media (max-width: 420px) { .account-review-dialog { padding: 20px; } .account-review-dialog dl { grid-template-columns: minmax(0, 1fr); gap: 14px; } .account-review-dialog footer .button { flex: 1 1 auto; } }
 @media (prefers-reduced-motion: reduce) { .account-review-dialog header button, .dashboard-body .account-review-dialog footer .button { transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease; } .account-review-dialog header button:hover, .dashboard-body .account-review-dialog footer .button:not(:disabled):hover, .dashboard-body .account-review-dialog footer .button:not(:disabled):active { transform: none; } }
+.account-recovery-dialog { width: min(520px, calc(100vw - 32px)); padding: 26px; box-shadow: 0 24px 70px rgb(0 0 0 / 30%); scrollbar-width: thin; scrollbar-color: #477b79 transparent; }
+.account-recovery-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.account-recovery-dialog .account-review-icon { border-color: #41656a; background: rgb(128 203 196 / 12%); color: #80cbc4; }
+.account-recovery-dialog .account-review-icon svg { display: block; width: 21px; height: 21px; }
+.account-recovery-dialog .eyebrow { color: #80cbc4; font-size: 10px; line-height: 1.5; }
+.account-recovery-dialog h2 { margin: 4px 0 0; font-size: 21px; line-height: 1.3; }
+.account-recovery-dialog input, .account-recovery-dialog textarea { font-size: 16px; transition: border-color 160ms ease, box-shadow 160ms ease; }
+.account-recovery-dialog input:focus, .account-recovery-dialog textarea:focus { border-color: #80cbc4; box-shadow: 0 0 0 4px rgb(128 203 196 / 16%); outline: none; }
+.account-recovery-dialog .account-recovery-header button { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; padding: 0; background: transparent; color: #b2cbd1; cursor: pointer; transition: background-color 160ms ease, color 160ms ease; }
+.account-recovery-dialog .account-recovery-header button:hover { background: rgb(128 203 196 / 12%); color: #fff; }
+.account-recovery-dialog .account-recovery-header svg { display: block; width: 18px; height: 18px; }
+.account-recovery-dialog footer.account-recovery-actions { margin-top: 24px; padding-top: 20px; border-top: 1px solid #41656a; }
+.account-recovery-dialog footer button { font-size: 13px; line-height: 20px; cursor: pointer; transition: background-color 160ms ease; }
+.account-recovery-dialog footer button:hover { background: rgb(128 203 196 / 12%); }
+.account-recovery-dialog footer button[type=submit]:hover { background: #066353; border-color: #066353; }

@@ -88,10 +88,9 @@ class Inbox extends Component
         abort_unless($this->recoveryModalOpen && $this->recoveryRequestId !== null, 404);
         abort_unless(app(AccountRecovery::class)->enabled(), 403);
         app(AccountRecovery::class)->review($this->recoveryRequestId, auth()->user(), $decision);
-        $this->feedback = $decision === 'approved' ? 'Solicitud aprobada. El envío de la clave quedó en cola.' : 'Solicitud rechazada.';
         $this->recoveryModalOpen = false;
         $this->dispatch('notifications-changed');
-        $this->dispatch('notification-feedback');
+        $this->dispatch('account-review-feedback', message: $decision === 'approved' ? 'Solicitud aprobada. El envío de la clave quedó en cola.' : 'Solicitud rechazada.');
     }
 
     private function recoveryRequest(): ?object

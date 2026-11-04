@@ -348,6 +348,20 @@ div[data-notification-surface]:not(.notification-bell) { display: grid; gap: 16p
 .notification-recent-metadata time { margin-left: auto; text-align: right; }
 .notification-dropdown .notification-all { justify-content: center; padding: 17px 20px; }
 @media (max-width: 420px) { .notification-bell-filters { gap: 3px; } .notification-bell-filters button { flex: 1; gap: 5px; padding-inline: 6px; font-size: 12px; } }
+@media (max-width: 980px) {
+    .notification-dropdown, .notification-dropdown:has(.notification-bell-toolbar) { display: flex; flex-direction: column; max-height: calc(100dvh - 80px - var(--safe-area-top) - var(--safe-area-bottom)); position: fixed; right: calc(12px + var(--safe-area-right)); top: calc(68px + var(--safe-area-top)); width: min(680px, calc(100vw - 24px - var(--safe-area-left) - var(--safe-area-right))); }
+    .notification-dropdown > .notification-bell-heading, .notification-dropdown > .notification-all { flex: 0 0 auto; }
+    .notification-dropdown > .notification-recent-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+}
+@media (max-width: 560px) {
+    .notification-dropdown > .notification-bell-heading { padding: 16px 16px 0; }
+    .notification-bell-filters { flex: 1 1 100%; }
+    .notification-bell-filters button { flex: 1 1 0; justify-content: center; min-width: 0; white-space: nowrap; }
+    .notification-bell-commands { flex: 1 1 100%; justify-content: stretch; }
+    .dashboard-body .notification-bell-commands > button { flex: 1 1 0; justify-content: center; min-width: 0; }
+    .notification-recent .notification-recent-title { gap: 6px; grid-template-columns: minmax(0, 1fr); }
+    .notification-recent .notification-recent-kind { justify-self: start; max-width: 100%; }
+}
 .notification-open button:disabled { cursor: default; }
 .notification-text-action:disabled, .notification-board button:disabled, .notification-dropdown button:disabled { cursor: default; opacity: .5; }
 .notification-empty { align-items: center; color: var(--shell-muted); display: flex; flex-direction: column; justify-content: center; min-height: 280px; padding: 32px 20px; text-align: center; }
@@ -481,6 +495,6 @@ div[data-notification-surface]:not(.notification-bell) { display: grid; gap: 16p
     .notification-dropdown { position: fixed; right: 12px; top: 78px; }
     .notification-recent-item { gap: 10px; padding: 14px; }
 }
-@media (max-width: 420px) { .notification-recent-item { gap: 8px; } .notification-recent .notification-recent-kind { max-width: 90px; } .notification-recent-actions { padding: 0; } .notification-recent-metadata time { margin-left: 0; text-align: left; } }
+@media (max-width: 420px) { .notification-recent-item { gap: 8px; } .notification-recent-actions { padding: 0; } .notification-recent-metadata time { margin-left: 0; text-align: left; } }
 @media (max-width: 520px) { .dashboard-body .notification-heading { align-items: start; flex-direction: column; gap: 10px; } .notification-unread-total { border: 0; padding: 0; } .notification-unread-total strong { font-size: 17px; } }
 @media (min-width: 761px) and (max-width: 1000px) { .notification-row { grid-template-columns: 20px 36px minmax(0,1fr); } .notification-row-end { align-items: start; grid-column: 3; } }

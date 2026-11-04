@@ -1,6 +1,9 @@
 import { createElement, CheckCheck, MailOpen, Archive, ArchiveRestore, Inbox, X, Wrench, ShieldCheck, Search, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, Download, Image as ImageIcon, Plus, Send, Ellipsis, ListX } from 'lucide';
 import { initializeRecordSelects } from './branch-geography';
 import { initializeMaintenancePricing } from './maintenance-pricing';
+import { notify } from './action-feedback';
+
+window.addEventListener('account-review-feedback', (event) => notify(event.detail.message));
 
 const icons = { 'check-check': CheckCheck, 'mail-open': MailOpen, archive: Archive, 'archive-restore': ArchiveRestore, inbox: Inbox, x: X, wrench: Wrench, 'shield-check': ShieldCheck, search: Search, 'chevron-down': ChevronDown, 'chevron-left': ChevronLeft, 'chevron-right': ChevronRight, 'chevrons-left': ChevronsLeft, 'chevrons-right': ChevronsRight, eye: Eye, download: Download, image: ImageIcon, plus: Plus, send: Send, ellipsis: Ellipsis, 'list-x': ListX };
 

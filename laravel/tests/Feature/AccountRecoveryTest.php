@@ -32,7 +32,8 @@ class AccountRecoveryTest extends UserManagementInterfaceTest
             ->call('openRecovery', $notice->id)->assertSet('recoveryModalOpen', true)
             ->assertSee($target->email)->assertSee('Motivo de la solicitud')->assertSee('Aprobar solicitud')
             ->assertViewHas('counts', fn ($counts) => ($counts['account-recovery'] ?? 0) === 0)
-            ->call('reviewRecovery', 'approved')->assertSet('recoveryModalOpen', false);
+            ->call('reviewRecovery', 'approved')->assertSet('recoveryModalOpen', false)
+            ->assertDispatched('account-review-feedback', message: 'Solicitud aprobada. El envío de la clave quedó en cola.');
         $this->assertDatabaseHas('account_recovery_requests', ['status' => 'approved', 'reviewed_by' => $super->id]);
         $this->assertNotNull(DB::table('system_notifications')->where('id', $notice->id)->value('read_at'));
         Queue::assertPushed(SendAccountCredential::class, 1);

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{{ config('app.name') }}</title>
     <script>
         (function () {
@@ -12,6 +12,7 @@
             document.documentElement.classList.toggle('sidebar-prefers-collapsed', collapsed);
         })();
     </script>
+    @include('partials.app-icons')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @if(request()->routeIs('branches.index', 'users.index', 'unit-types.index', 'statuses.index', 'yard-layout.index', 'yard-layout.blocks') || (request()->routeIs('catalogs.index') && in_array(request()->route('catalog'), ['navieras', 'auditoras', 'iso'], true)))
         <script>
