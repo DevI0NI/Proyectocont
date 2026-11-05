@@ -55,7 +55,6 @@ class IngresoController extends Controller
         $this->normalizeDocumentaryInput($request);
 
         $data = $request->validate([
-            'fecha_ingreso' => ['required', 'date'],
             'codigo_contenedor' => ['required', 'string', 'size:11', 'regex:/^[A-Z0-9]{11}$/'],
             'tipo_unidad' => ['required', 'integer', Rule::exists('tipos_unidad', 'id')->where('estado_id', self::ACTIVE)],
             'modelo' => ['required', 'integer', Rule::exists('modelos', 'id')->where('estado_id', self::ACTIVE)],
@@ -73,8 +72,6 @@ class IngresoController extends Controller
             'bloque' => ['required', 'integer', Rule::exists('bloques', 'id')->where('estado_id', self::ACTIVE)],
             'posicion' => ['required', 'integer', 'min:1'],
         ], [
-            'fecha_ingreso.required' => 'La fecha de ingreso es obligatoria.',
-            'fecha_ingreso.date' => 'La fecha de ingreso no es valida.',
             'codigo_contenedor.required' => 'El numero de equipo es obligatorio.',
             'codigo_contenedor.size' => 'El numero de equipo debe tener exactamente 11 caracteres.',
             'codigo_contenedor.regex' => 'El numero de equipo debe tener exactamente 11 caracteres, solo mayusculas y numeros.',

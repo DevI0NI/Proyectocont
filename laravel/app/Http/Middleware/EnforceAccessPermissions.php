@@ -22,10 +22,10 @@ class EnforceAccessPermissions
             abort_unless((int) $user->estado_id === 1, 403, 'Esta cuenta esta desactivada.');
             if ((int) $user->rol_id === 4) {
                 app(ExternalAuditAccess::class)->authorizeBranch($user, (int) session('sucursal_activa'));
-                if ($request->routeIs('dashboard', 'containers.index', 'pyp-audits.index') || $request->is('index.php', 'bloques/bloques.php', 'bloques/contenedor.php')) {
+                if ($request->routeIs('containers.index', 'pyp-audits.index') || $request->is('bloques/bloques.php', 'bloques/contenedor.php')) {
                     return redirect()->route('maintenance.orders');
                 }
-                abort_unless($request->routeIs('maintenance.*', 'corrections.*', 'notifications.index', 'notifications.detail', 'notifications.open', 'notifications.read', 'notifications.read-all', '*livewire.update') || $request->is('mantenimiento/ordenes.php'), 403, 'Esta vista no pertenece a la interfaz de mantenimiento.');
+                abort_unless($request->routeIs('dashboard', 'maintenance.*', 'corrections.*', 'notifications.index', 'notifications.detail', 'notifications.open', 'notifications.read', 'notifications.read-all', '*livewire.update') || $request->is('mantenimiento/ordenes.php'), 403, 'Esta vista no pertenece a la interfaz de mantenimiento.');
             }
             if ((int) $user->rol_id === 5) {
                 app(ExternalAuditAccess::class)->authorizeBranch($user, (int) session('sucursal_activa'));

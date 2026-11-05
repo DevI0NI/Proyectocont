@@ -52,7 +52,7 @@ class IngresoService
                 'estatus_box_id' => (int) $data['status_box'],
                 'observaciones_box' => trim((string) ($data['observaciones_box'] ?? '')),
                 'estatus_ipsa_id' => (int) $data['estatus_ipsa'],
-                'fecha_ingreso' => $data['fecha_ingreso'].' '.now()->format('H:i:s'),
+                'fecha_ingreso' => now('America/Guatemala')->format('Y-m-d H:i:s'),
                 'naviera' => $assignment['shipping_line_name'],
                 'transportista' => trim((string) $data['transportista']),
                 'conductor' => trim((string) ($data['conductor'] ?? '')),

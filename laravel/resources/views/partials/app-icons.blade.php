@@ -6,4 +6,4 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Proportsa">
 <meta name="application-name" content="Proportsa">
-<meta name="theme-color" content="{{ $themeColor ?? '#0f766e' }}">
+<meta name="theme-color" content="{{ $themeColor ?? '#101c22' }}">

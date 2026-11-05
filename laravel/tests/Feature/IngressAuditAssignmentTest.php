@@ -149,6 +149,16 @@ class IngressAuditAssignmentTest extends TestCase
         $this->assertDatabaseHas('pyp_auditoria', ['contenedor_id' => $id, 'estatus_pyp' => 'Aprobado']);
     }
 
+    public function test_ingress_date_is_assigned_by_the_system_in_guatemala_time(): void
+    {
+        $this->travelTo('2026-11-05 02:15:00');
+        $this->payload['fecha_ingreso'] = '2020-01-01';
+
+        $this->post('/ingresos', $this->payload)->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame('2026-11-04 20:15:00', (string) DB::table('contenedores')->where('nombre', $this->payload['codigo_contenedor'])->value('fecha_ingreso'));
+    }
+
     public function test_unassigned_ingress_has_no_audit_status_or_status_filter_match(): void
     {
         $id = $this->register();

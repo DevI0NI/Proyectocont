@@ -33,6 +33,31 @@ import './yard-layout';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
+document.addEventListener('click', (event) => {
+    if (event.target instanceof Element && event.target.closest('.form-select-menu button, .form-select-trigger') && event.target.closest('label')) {
+        event.preventDefault();
+    }
+}, true);
+
+document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element) || event.target.closest('input, select, textarea, button, a')) {
+        return;
+    }
+    const control = event.target.closest('label')?.control;
+    if (!control || ['checkbox', 'radio', 'file'].includes(control.type)) {
+        return;
+    }
+    if (control.matches('select.enhanced-native-select') || matchMedia('(pointer: coarse)').matches) {
+        event.preventDefault();
+    }
+}, true);
+
+document.addEventListener('focusin', (event) => {
+    if (event.target instanceof Element && event.target.matches('select.enhanced-native-select')) {
+        event.target.blur();
+    }
+});
+
 const dashboardCharts = new WeakMap();
 const yardScenes = new WeakMap();
 const ingressLocationScenes = new WeakMap();
@@ -403,7 +428,7 @@ function initStatusChart(canvas) {
     const chart = new Chart(canvas, {
         type: 'doughnut',
         data: {
-            labels: hasData ? labels : ['Sin activos'],
+            labels: hasData ? labels : [canvas.dataset.emptyLabel || 'Sin activos'],
             datasets: [
                 {
                     data: values,
@@ -414,7 +439,7 @@ function initStatusChart(canvas) {
                 },
             ],
         },
-        options: doughnutOptions(theme, `${total}`, 'activos'),
+        options: doughnutOptions(theme, `${total}`, canvas.dataset.centerLabel || 'activos'),
         plugins: [centerTextPlugin],
     });
 

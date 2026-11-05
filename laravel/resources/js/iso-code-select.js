@@ -72,6 +72,7 @@ function initialize() {
             wrapper.classList.remove('open');
             trigger.setAttribute('aria-expanded', 'false');
             search.setAttribute('aria-expanded', 'false');
+            if (document.activeElement === search) search.blur();
             if (focus) trigger.focus();
             if (!menu.matches(':popover-open') || closingAnimation) return;
             menu.classList.add('is-closing');
@@ -140,7 +141,7 @@ function initialize() {
             search.setAttribute('aria-expanded', 'true');
             position();
             if (!matchMedia('(prefers-reduced-motion: reduce)').matches) menu.animate([{ opacity:0, transform:'translateY(-8px) scale(.98)' }, { opacity:1, transform:'translateY(0) scale(1)' }], { duration:180, easing:'ease' });
-            search.focus({ preventScroll:true });
+            if (!matchMedia('(pointer: coarse)').matches) search.focus({ preventScroll:true });
         }
         function selectedLabel() {
             label.textContent = select.selectedOptions[0]?.textContent || 'Selecciona un ISO Code';

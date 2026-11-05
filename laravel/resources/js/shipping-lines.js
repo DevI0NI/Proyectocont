@@ -152,7 +152,7 @@ function openSelection(selection) {
             if (selectionTransitions.get(menu) !== state) return;
             state.frame = null;
             menu.classList.add('is-open');
-            selection.querySelector('[data-relation-search]').focus({ preventScroll:true });
+            if (!matchMedia('(pointer: coarse)').matches) selection.querySelector('[data-relation-search]').focus({ preventScroll:true });
         });
     });
 }

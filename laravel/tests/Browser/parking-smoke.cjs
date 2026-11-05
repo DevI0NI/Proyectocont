@@ -47,8 +47,8 @@ const fixture = JSON.parse(execFileSync(php, [fixtureScript], { cwd: root, encod
         await page.locator('#userMenuTrigger').click();
         await page.locator('#themeToggle').click();
         await page.locator('#userMenuTrigger').click();
-        assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
-        await page.screenshot({ path: path.join(root, 'storage/app/parking-qa-dark.png'), fullPage: true });
+        assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
+        await page.screenshot({ path: path.join(root, 'storage/app/parking-qa-light.png'), fullPage: true });
         await page.setViewportSize({ width: 390, height: 844 });
         await page.goto(`http://127.0.0.1:8000/rentas?location=${fixture.location}`);
         await page.locator('.parking-pc-required').waitFor({ state: 'visible' });
@@ -60,10 +60,10 @@ const fixture = JSON.parse(execFileSync(php, [fixtureScript], { cwd: root, encod
         await page.locator('#userMenuTrigger').click();
         await page.locator('#themeToggle').click();
         await page.locator('#userMenuTrigger').click();
-        await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+        await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
         await page.locator('#parkingPcTitle').click();
         await page.evaluate(() => window.scrollTo(0, 0));
-        await page.screenshot({ path: path.join(root, 'storage/app/parking-qa-mobile-light.png'), fullPage: true });
+        await page.screenshot({ path: path.join(root, 'storage/app/parking-qa-mobile-dark.png'), fullPage: true });
         const mobile = await browser.newContext({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile', viewport: { width: 1440, height: 1000 } });
         await mobile.addCookies(await context.cookies());
         const mobilePage = await mobile.newPage();

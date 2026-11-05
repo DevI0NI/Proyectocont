@@ -337,7 +337,7 @@ div[data-notification-surface]:not(.notification-bell) { display: grid; gap: 16p
 .notification-recent-item .notification-recent > .notification-recent-copy { gap: 8px; width: 100%; }
 .notification-recent .notification-recent-title { align-items: baseline; display: grid; gap: 8px; grid-template-columns: auto minmax(0, 1fr); }
 .notification-recent-title > strong { color: var(--shell-ink); }
-.notification-recent .notification-recent-kind { background: color-mix(in srgb, var(--shell-ink) 7%, transparent); border: 1px solid var(--shell-line); border-radius: 4px; color: var(--shell-muted); font-size: 11px; font-weight: 600; max-width: 150px; padding: 3px 7px; }
+.notification-recent .notification-recent-kind { background: color-mix(in srgb, var(--shell-ink) 7%, transparent); border: 1px solid var(--shell-line); border-radius: 4px; color: var(--shell-muted); font-size: 11px; font-weight: 600; padding: 3px 7px; white-space: nowrap; }
 .notification-recent .notification-recent-unread { align-items: center; color: #087f70; display: inline-flex; font-size: 11px; font-weight: 650; gap: 7px; }
 .notification-recent-unread::before { background: #079b86; border-radius: 50%; box-shadow: 0 0 0 3px rgba(7,155,134,.12), 0 0 7px rgba(7,155,134,.4); content: ''; flex: 0 0 6px; height: 6px; width: 6px; }
 [data-theme="dark"] .notification-recent .notification-recent-unread { color: #80cbc4; }
