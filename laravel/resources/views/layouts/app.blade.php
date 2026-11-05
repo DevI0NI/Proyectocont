@@ -6,7 +6,7 @@
     <title>{{ config('app.name') }}</title>
     <script>
         (function () {
-            const theme = localStorage.getItem('proportsa-theme') || 'light';
+            const theme = localStorage.getItem('proportsa-theme') || 'dark';
             document.documentElement.setAttribute('data-theme', theme);
             const collapsed = localStorage.getItem('proportsa-sidebar-collapsed') === 'true';
             document.documentElement.classList.toggle('sidebar-prefers-collapsed', collapsed);
@@ -45,7 +45,7 @@
         }
 
         $navItems = [
-            ['label' => 'Dashboard', 'route' => 'dashboard', 'active' => ['dashboard'], 'icon' => null, 'visible' => !in_array($roleId, [4, 5], true)],
+            ['label' => 'Dashboard', 'route' => 'dashboard', 'active' => ['dashboard'], 'icon' => null, 'visible' => $roleId !== 5],
             ['label' => 'Dashboard', 'route' => 'external-audits.dashboard', 'active' => ['external-audits.dashboard'], 'icon' => null, 'visible' => $roleId === 5 && $user->external_access_level === 'supervisor'],
             ['label' => 'Mantenimiento', 'route' => 'maintenance.orders', 'active' => ['maintenance.*'], 'icon' => null, 'vectorIcon' => 'wrench', 'visible' => $roleId === 4],
             ['label' => 'Contenedores', 'route' => 'containers.index', 'active' => ['containers.index', 'containers.show', 'containers.edit'], 'icon' => 'bloques.png', 'visible' => $canOperate],
@@ -331,8 +331,9 @@
         }
 
         function syncThemeButton() {
-            const theme = document.documentElement.getAttribute('data-theme') || 'light';
+            const theme = document.documentElement.getAttribute('data-theme') || 'dark';
             themeToggle?.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+            document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#101c22' : '#f4f8fa');
             if (themeLabel) {
                 themeLabel.textContent = theme === 'dark' ? 'Activado' : 'Desactivado';
             }
@@ -340,7 +341,7 @@
 
         themeToggle?.addEventListener('click', function (event) {
             event.stopPropagation();
-            const current = document.documentElement.getAttribute('data-theme') || 'light';
+            const current = document.documentElement.getAttribute('data-theme') || 'dark';
             const next = current === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', next);
             localStorage.setItem('proportsa-theme', next);

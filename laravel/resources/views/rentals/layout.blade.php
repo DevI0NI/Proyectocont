@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Parqueo - PROPORTSA</title>
-    <script>document.documentElement.dataset.theme = localStorage.getItem('proportsa-theme') || 'light';</script>
+    <script>document.documentElement.dataset.theme = localStorage.getItem('proportsa-theme') || 'dark';</script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="parking-body">

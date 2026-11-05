@@ -1,20 +1,21 @@
+@php
+    $loginBackground = 'imagenes/imagen para el login.jpg';
+    $loginBackgroundVersion = file_exists(public_path($loginBackground)) ? filemtime(public_path($loginBackground)) : time();
+    $loginBackgroundUrl = asset($loginBackground).'?v='.$loginBackgroundVersion;
+@endphp
 <!doctype html>
-<html lang="es" class="login-html">
+<html lang="es" class="login-html" style="--login-image: url('{{ $loginBackgroundUrl }}')">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{{ ($passwordSetup ?? false) ? 'Definir contraseña' : 'Ingreso' }} | {{ config('app.name') }}</title>
-    @include('partials.app-icons', ['themeColor' => '#30619b'])
+    @include('partials.app-icons', ['themeColor' => '#0e6f73'])
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-slate-950 text-white antialiased">
     <section class="login-page-background overflow-hidden">
-            @php
-                $loginBackground = 'imagenes/imagen para el login.jpg';
-                $loginBackgroundVersion = file_exists(public_path($loginBackground)) ? filemtime(public_path($loginBackground)) : time();
-            @endphp
             <img
-                src="{{ asset($loginBackground) }}?v={{ $loginBackgroundVersion }}"
+                src="{{ $loginBackgroundUrl }}"
                 alt=""
                 class="login-enter-background absolute inset-0 h-full w-full object-cover"
             >

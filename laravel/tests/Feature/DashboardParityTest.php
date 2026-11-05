@@ -37,6 +37,12 @@ class DashboardParityTest extends TestCase
         $this->actingAs($mechanic)
             ->withSession(['sucursal_activa' => $branchId])
             ->get('/')
+            ->assertOk()
+            ->assertViewIs('dashboard.mechanic');
+
+        $this->actingAs($mechanic)
+            ->withSession(['sucursal_activa' => $branchId])
+            ->get(route('containers.index'))
             ->assertRedirect(route('maintenance.orders'));
 
         $this->actingAs($pyp)

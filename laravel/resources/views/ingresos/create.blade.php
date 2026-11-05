@@ -60,7 +60,7 @@
                 <div class="container-form-grid">
                     <label>
                         <span>Fecha de ingreso</span>
-                        <input type="date" name="fecha_ingreso" value="{{ old('fecha_ingreso', now()->format('Y-m-d')) }}" required>
+                        <input type="text" value="{{ now('America/Guatemala')->format('d/m/Y') }}" readonly aria-readonly="true" tabindex="-1">
                     </label>
 
                     <label>
@@ -607,6 +607,7 @@
             if (select.dataset.enhanced === 'true') return;
             select.dataset.enhanced = 'true';
             select.classList.add('enhanced-native-select');
+            select.tabIndex = -1;
 
             const dropdown = document.createElement('div');
             dropdown.className = 'form-select-dropdown';

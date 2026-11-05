@@ -94,7 +94,7 @@ export function initializeRecordSelects() {
                 empty.setAttribute('role', 'status'); optionsList.append(empty);
             }
         }
-        trigger.addEventListener('click', (event) => { if (search) event.preventDefault(); const open = !dropdown.classList.contains('open'); closeMenus(dropdown); if (open) { if (search) { search.value = ''; render(); } placeMenu(); } dropdown.classList.toggle('open', open); trigger.setAttribute('aria-expanded', String(open)); if (open) search?.focus(); });
+        trigger.addEventListener('click', (event) => { if (search) event.preventDefault(); const open = !dropdown.classList.contains('open'); closeMenus(dropdown); if (open) { if (search) { search.value = ''; render(); } placeMenu(); } dropdown.classList.toggle('open', open); trigger.setAttribute('aria-expanded', String(open)); if (open && !matchMedia('(pointer: coarse)').matches) search?.focus(); });
         dropdown.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && dropdown.classList.contains('open')) { event.preventDefault(); event.stopPropagation(); closeMenus(); trigger.focus(); }
             if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;

@@ -1366,6 +1366,7 @@ textarea {
 .container-form input[readonly] {
     background: rgba(148, 163, 184, 0.08);
     color: var(--muted);
+    pointer-events: none;
 }
 
 .container-form-actions {
@@ -3694,7 +3695,7 @@ textarea {
 
     .container-form-grid,
     .container-form-grid.three-columns {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .ticket-head,
@@ -5396,6 +5397,29 @@ textarea {
 
 .dashboard-body .activity-item:last-child {
     border-bottom: 0;
+}
+
+.dashboard-body .mechanic-dashboard-link {
+    border-radius: 6px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.dashboard-body .mechanic-dashboard-link:hover,
+.dashboard-body .mechanic-dashboard-link:focus-visible {
+    background: color-mix(in srgb, var(--brand) 8%, transparent);
+}
+
+.dashboard-body .mechanic-dashboard .dashboard-hero::after {
+    display: none;
+}
+
+.dashboard-body .mechanic-dashboard .pyp-panel .activity-list {
+    margin-top: 12px;
+}
+
+.dashboard-body .mechanic-dashboard .panel-header .button {
+    flex: 0 0 auto;
 }
 
 [data-theme="dark"] .dashboard-body .activity-item {
@@ -7726,14 +7750,21 @@ body.sidebar-collapsed:not(.sidebar-open) .dashboard-body .app-shell,
     }
 
     .dashboard-body .containers-table-heading {
+        align-items: stretch;
+    }
+
+    .dashboard-body .containers-table-heading > div:first-child {
+        align-content: center;
         display: grid;
     }
 
     .dashboard-body .container-capacity-pill {
-        align-items: flex-start;
+        align-content: center;
         display: grid;
-        justify-self: start;
-        padding: 9px 12px;
+        gap: 3px;
+        justify-items: center;
+        padding: 6px 12px;
+        text-align: center;
     }
 
     .dashboard-body .containers-empty-state {
@@ -8034,13 +8065,12 @@ body.sidebar-collapsed:not(.sidebar-open) .dashboard-body .app-shell,
 }
 
 .dashboard-body {
-    padding-bottom: var(--safe-area-bottom);
     padding-left: var(--safe-area-left);
     padding-right: var(--safe-area-right);
 }
 
 .dashboard-body::before {
-    background: #0f766e;
+    background: #101c22;
     content: "";
     height: var(--safe-area-top);
     left: 0;
@@ -8065,20 +8095,98 @@ body.sidebar-collapsed:not(.sidebar-open) .dashboard-body .app-shell,
     .dashboard-body .topbar {
         padding-top: calc(10px + var(--safe-area-top));
     }
+
+    .dashboard-body .main-panel {
+        padding-bottom: calc(30px + var(--safe-area-bottom));
+    }
+
+    .dashboard-body .app-shell {
+        min-height: 100dvh;
+    }
+}
+
+@media (max-width: 980px) {
+    .dashboard-body .container-form-grid > *,
+    .dashboard-body .container-form-grid label {
+        min-width: 0;
+    }
+
+    .dashboard-body .container-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    .dashboard-body .container-form .form-select-trigger {
+        min-height: 44px;
+    }
+
+    .dashboard-body .container-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .dashboard-body input[type="date"] {
+        -webkit-appearance: none;
+        appearance: none;
+        display: block;
+        height: 44px;
+        line-height: 20px;
+        max-width: 100%;
+        min-width: 0;
+        padding-bottom: 11px;
+        padding-top: 11px;
+        width: 100%;
+    }
+
+    .dashboard-body input[type="date"]::-webkit-date-and-time-value {
+        display: block;
+        line-height: 20px;
+        margin: 0;
+        min-height: 20px;
+        text-align: left;
+    }
+}
+
+@media (max-width: 980px) and (orientation: landscape) {
+    .dashboard-body .container-form-grid {
+        column-gap: 20px;
+    }
+}
+
+.dashboard-body .container-form .form-select-trigger span {
+    margin: 0;
+}
+
+@media (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+    select,
+    textarea,
+    .form-select-trigger,
+    .containers-filters .topbar-dropdown-trigger,
+    .containers-filters .container-clear-button,
+    .containers-filters .container-new-button {
+        font-size: 16px !important;
+    }
+}
+
+html[data-theme="light"] {
+    background-color: #f4f8fa;
+}
+
+html[data-theme="dark"] {
+    background-color: #0b151a;
 }
 
 html.login-html {
-    background: #30619b linear-gradient(to bottom, #30619b 25%, #044a51 75%) center / 100% 200vh;
+    background: #0e6f73 linear-gradient(to bottom, #30619b 0, #30619b 200px, #0e6f73 200px) no-repeat;
     color-scheme: dark;
     height: 100%;
-    overflow: hidden;
     overscroll-behavior: none;
 }
 
 html.login-html body {
-    background: #30619b;
-    height: 100%;
-    inset: 0;
+    background: transparent;
+    bottom: -120px;
+    height: auto;
+    left: 0;
+    right: 0;
+    top: 0;
     overflow: hidden;
     overscroll-behavior: none;
     position: fixed;
@@ -8089,6 +8197,22 @@ html.login-html body {
     background: transparent;
     inset: -120px 0;
     position: fixed;
+}
+
+@media (display-mode: standalone) {
+    html.login-html {
+        background:
+            radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.08), transparent 28%),
+            radial-gradient(circle at 80% 80%, rgba(128, 203, 196, 0.1), transparent 30%),
+            linear-gradient(90deg, rgba(2, 6, 23, 0.54), rgba(2, 44, 46, 0.28) 45%, rgba(2, 6, 23, 0.48)),
+            var(--login-image) center / cover no-repeat,
+            #0e6f73;
+        height: 100lvh;
+    }
+
+    html.login-html .login-page-background {
+        display: none;
+    }
 }
 
 .login-page-scroll {
@@ -8188,6 +8312,12 @@ html.login-html body {
         width: 100%;
     }
 
+    .dashboard-body .containers-filters .container-choice:not(.compact) .topbar-sucursal-label {
+        display: block;
+        flex: 0 0 58px;
+        font-size: 11px;
+    }
+
     .dashboard-body .containers-filters .container-choice.compact,
     .dashboard-body .containers-filters .container-clear-button {
         grid-column: span 2;
@@ -8234,9 +8364,26 @@ html.login-html body {
     }
 }
 
+@media (max-width: 980px) {
+    .dashboard-body .containers-filters:not(:has(.compact)) .container-clear-button,
+    .dashboard-body .containers-filters:not(:has(.compact)) .container-new-button,
+    .dashboard-body .containers-filters:has(.container-clear-button:last-child) .container-choice.compact,
+    .dashboard-body .containers-filters .container-choice.compact ~ .container-clear-button:last-child {
+        grid-column: span 3;
+    }
+
+    .dashboard-body .containers-filters:not(:has(.compact)) .container-clear-button:last-child {
+        grid-column: span 6;
+    }
+}
+
 @media (min-width: 561px) and (max-width: 980px) {
     .dashboard-body .containers-filters .container-choice:not(.compact) {
         grid-column: span 3;
+    }
+
+    .dashboard-body .containers-filters:not(:has(.container-choice:not(.compact) ~ .container-choice:not(.compact))) .container-choice:not(.compact) {
+        grid-column: span 6;
     }
 }
 

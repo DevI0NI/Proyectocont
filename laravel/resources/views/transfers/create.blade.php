@@ -364,6 +364,7 @@
 
         function enhanceSelect(select) {
             select.classList.add('enhanced-native-select');
+            select.tabIndex = -1;
             const dropdown = document.createElement('div');
             dropdown.className = 'form-select-dropdown';
 

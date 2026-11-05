@@ -2246,7 +2246,7 @@ class MaintenanceWorkflowTest extends TestCase
 
     public function test_mechanic_is_separated_from_external_audits_and_internal_operations(): void
     {
-        $this->get('/')->assertRedirect(route('maintenance.orders'));
+        $this->get('/')->assertOk()->assertViewIs('dashboard.mechanic')->assertDontSee('Seguimiento de auditoría externa');
         $this->get('/seguimiento-pyp')->assertRedirect(route('maintenance.orders'));
         $this->get('/mantenimiento/ordenes')->assertOk()->assertDontSee('Nuevo trabajo')->assertDontSee('Seguimiento de auditoría externa');
         $this->get('/contenedores/'.$this->container.'/pyp')->assertForbidden();
