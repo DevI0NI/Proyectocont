@@ -5196,32 +5196,39 @@ textarea {
     position: relative;
 }
 
-.dashboard-body .dashboard-hero::after {
-    background: linear-gradient(135deg, rgba(128, 203, 196, 0.2), rgba(255, 209, 102, 0.18));
-    border-radius: 999px;
-    content: "";
-    height: 170px;
-    position: absolute;
-    right: -74px;
-    top: -74px;
-    width: 170px;
-}
-
-.dashboard-body .hero-kpi {
-    align-items: center;
-    border-radius: 999px;
+.dashboard-body .occupancy-caption {
+    align-items: baseline;
     display: flex;
-    flex: 0 0 auto;
-    font-weight: 900;
-    justify-content: center;
+    gap: 12px;
+    justify-content: space-between;
 }
 
-.dashboard-body .hero-kpi {
-    background: #e6faf7;
-    border: 1px solid #c8e8e4;
+.dashboard-body .occupancy-caption span {
+    color: var(--shell-muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.dashboard-body .occupancy-caption strong {
     color: var(--brand);
-    height: 58px;
-    width: 58px;
+    font-size: 15px;
+    font-weight: 900;
+}
+
+[data-theme="dark"] .dashboard-body .occupancy-caption strong {
+    color: #80cbc4;
+}
+
+.dashboard-body .activity-item .activity-operation {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+}
+
+.dashboard-body .activity-operation .status-dot {
+    flex: 0 0 8px;
+    height: 8px;
+    width: 8px;
 }
 
 .dashboard-body .hero-number-row {
@@ -5410,16 +5417,8 @@ textarea {
     background: color-mix(in srgb, var(--brand) 8%, transparent);
 }
 
-.dashboard-body .mechanic-dashboard .dashboard-hero::after {
-    display: none;
-}
-
 .dashboard-body .mechanic-dashboard .pyp-panel .activity-list {
     margin-top: 12px;
-}
-
-.dashboard-body .mechanic-dashboard .panel-header .button {
-    flex: 0 0 auto;
 }
 
 [data-theme="dark"] .dashboard-body .activity-item {
@@ -5612,7 +5611,7 @@ textarea {
 
 .dashboard-body .occupancy-track {
     height: 12px;
-    margin: 26px 0 20px;
+    margin: 8px 0 20px;
 }
 
 .dashboard-body .occupancy-fill,

@@ -14,7 +14,6 @@
                     <h2>Inventario activo</h2>
                     <p>Contenedores dentro de la sucursal</p>
                 </div>
-                <span class="hero-kpi">{{ $occupancyPercent }}%</span>
             </div>
 
             <div class="hero-number-row">
@@ -22,7 +21,11 @@
                 <span>de {{ number_format($stats['capacidad']) }} espacios</span>
             </div>
 
-            <div class="occupancy-track">
+            <div class="occupancy-caption">
+                <span>Ocupación de la sucursal</span>
+                <strong>{{ $occupancyPercent }} %</strong>
+            </div>
+            <div class="occupancy-track" role="progressbar" aria-label="Ocupación de la sucursal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ min($occupancyPercent, 100) }}">
                 <div class="occupancy-fill" style="width: {{ min($occupancyPercent, 100) }}%;"></div>
             </div>
 
@@ -36,7 +39,7 @@
                     <strong>{{ number_format($freeCapacity) }}</strong>
                 </div>
                 <div>
-                    <span>Despachados</span>
+                    <span>Despachados en total</span>
                     <strong>{{ number_format($stats['despachados']) }}</strong>
                 </div>
             </div>
@@ -159,7 +162,8 @@
                         <article class="activity-item" wire:key="activity-{{ $event->fecha_evento }}-{{ $event->contenedor ?? 'none' }}">
                             <time>{{ \Carbon\Carbon::parse($event->fecha_evento)->format('d/m H:i') }}</time>
                             <div>
-                                <strong>{{ $event->operacion }}</strong>
+                                @php($operation = \App\Livewire\Dashboard\Overview::OPERATIONS[$event->operacion] ?? ['label' => ucfirst(mb_strtolower(str_replace('_', ' ', $event->operacion))), 'color' => '#7b8ca5'])
+                                <strong class="activity-operation"><span class="status-dot" style="--dot-color: {{ $operation['color'] }}" aria-hidden="true"></span>{{ $operation['label'] }}</strong>
                                 <span>{{ $event->contenedor ?? 'N/D' }} · {{ $event->usuario ?? 'N/D' }}</span>
                             </div>
                         </article>

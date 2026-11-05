@@ -8,6 +8,19 @@ use Livewire\Component;
 
 class Overview extends Component
 {
+    /**
+     * Readable names and colors for the recent activity operations.
+     *
+     * @var array<string, array{label: string, color: string}>
+     */
+    public const OPERATIONS = [
+        'INGRESO' => ['label' => 'Ingreso', 'color' => '#00897b'],
+        'TRASLADO' => ['label' => 'Traslado', 'color' => '#4f8fd6'],
+        'MODIFICACION_ESTATUS' => ['label' => 'Cambio de estatus', 'color' => '#f2b84b'],
+        'MODIFICACION_DATOS' => ['label' => 'Datos modificados', 'color' => '#7b8ca5'],
+        'RETIRO' => ['label' => 'Despacho', 'color' => '#ef625c'],
+    ];
+
     public int $branchId = 0;
 
     public function mount(): void

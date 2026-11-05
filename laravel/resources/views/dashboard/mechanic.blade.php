@@ -111,7 +111,6 @@
                         <h2>Lo que sigue</h2>
                         <p>Primero las correcciones, luego las reparaciones más antiguas</p>
                     </div>
-                    <a class="button secondary" href="{{ route('maintenance.jobs', ['mine' => 1]) }}">Ver mis trabajos</a>
                 </div>
 
                 <div class="activity-list">

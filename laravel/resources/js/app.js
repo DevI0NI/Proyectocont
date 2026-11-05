@@ -291,6 +291,21 @@ function doughnutOptions(theme, centerText, centerSubtext) {
     };
 }
 
+const yardChartNarrowWidth = 520;
+
+function wrapChartLabel(label, maxLength) {
+    return label.split(/\s+/).reduce((lines, word) => {
+        const last = lines[lines.length - 1];
+        if (last && `${last} ${word}`.length <= maxLength) {
+            lines[lines.length - 1] = `${last} ${word}`;
+        } else {
+            lines.push(word);
+        }
+
+        return lines;
+    }, []);
+}
+
 function initYardChart(canvas) {
     const labels = parseChartData(canvas, 'labels');
     const values = parseChartData(canvas, 'values');
@@ -379,6 +394,7 @@ function initYardChart(canvas) {
                     },
                     ticks: {
                         callback: (value) => `${value}%`,
+                        maxRotation: 0,
                         color: theme.muted,
                         font: {
                             family: 'Instrument Sans, Segoe UI, Arial, sans-serif',
@@ -397,12 +413,17 @@ function initYardChart(canvas) {
                         display: false,
                     },
                     ticks: {
-                        color: theme.label,
-                        font: {
-                            family: 'Instrument Sans, Segoe UI, Arial, sans-serif',
-                            size: 13,
-                            weight: 800,
+                        callback(value) {
+                            const label = String(this.getLabelForValue(value));
+
+                            return this.chart.width < yardChartNarrowWidth ? wrapChartLabel(label, 15) : label;
                         },
+                        color: theme.label,
+                        font: (context) => ({
+                            family: 'Instrument Sans, Segoe UI, Arial, sans-serif',
+                            size: context.chart.width < yardChartNarrowWidth ? 11 : 13,
+                            weight: 800,
+                        }),
                         padding: 10,
                     },
                 },

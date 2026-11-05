@@ -3484,7 +3484,7 @@ class MaintenanceWorkflowTest extends TestCase
 
                 return $item['actions']['maintenance_label'] === 'Continuar reparación';
             });
-        $this->get('/mantenimiento/trabajos')->assertOk()->assertSee($record->nombre);
+        $this->get('/mantenimiento/trabajos')->assertNotFound()->assertDontSee($record->nombre);
         $this->get('/mantenimiento/ordenes/nueva?container_id='.$this->container)->assertNotFound();
     }
 
