@@ -122,10 +122,9 @@ class OperationalFlowTest extends TestCase
         $this->getJson('/contenedores?nombre='.str_repeat('a', 256))->assertUnprocessable()->assertJsonValidationErrors('nombre');
         $this->assertNull(DB::table('contenedores')->where('id', $containerId)->value('placa_anio'));
         $this->assertDatabaseHas('contenedores', ['id' => $containerId, 'placa_cabezal' => '123456', 'placa_chasis' => 'TC-12ABC']);
-        foreach (['/documentos/ingreso/eir', '/documentos/ingreso/ticket'] as $path) {
-            $this->get($path.'?contenedor_id='.$containerId)->assertOk()
-                ->assertSee('TC-12ABC')->assertDontSee('Anio Placa')->assertDontSee('cabezal / anio');
-        }
+        $this->get('/documentos/ingreso/ticket?contenedor_id='.$containerId)->assertOk()
+            ->assertSee('TC-12ABC')->assertDontSee('Anio Placa')->assertDontSee('cabezal / anio');
+        $this->get('/documentos/ingreso/eir?contenedor_id='.$containerId)->assertNotFound()->assertDontSee('TC-12ABC');
 
         foreach (['/ingresos', "/contenedores/{$containerId}/editar", "/contenedores/{$containerId}"] as $path) {
             $this->get($path)->assertOk()->assertDontSee('name="placa_anio"', false)->assertDontSee('Anio placa');

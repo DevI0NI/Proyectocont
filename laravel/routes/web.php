@@ -181,7 +181,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/despachos/contenedores', [DispatchController::class, 'search'])->name('dispatches.search');
         Route::get('/despachos/obtener_contenedores_despacho.php', [DispatchController::class, 'search']);
 
-        Route::get('/documentos/ingreso/eir', [DocumentController::class, 'ingressEir'])->name('documents.ingress.eir');
+        Route::get('/documentos/ingreso/eir', fn () => abort(404))->name('documents.ingress.eir');
         Route::redirect('/ingresos/eir_ingreso.php', '/documentos/ingreso/eir', 302);
         Route::get('/documentos/ingreso/ticket', [DocumentController::class, 'ingressTicket'])->name('documents.ingress.ticket');
         Route::get('/documentos/ingreso/ticket/pdf', [DocumentController::class, 'ingressTicketPdf'])->name('documents.ingress.ticket.pdf');
@@ -213,7 +213,7 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('role:4')
         ->name('maintenance.orders');
     Route::middleware('role:4')->group(function (): void {
-        Route::get('/mantenimiento/trabajos', [MaintenanceController::class, 'jobs'])->name('maintenance.jobs');
+        Route::get('/mantenimiento/trabajos', fn () => abort(404))->name('maintenance.jobs');
         Route::get('/mantenimiento/contenedores/{container}', [MaintenanceController::class, 'container'])->whereNumber('container')->name('maintenance.container');
         Route::get('/mantenimiento/contenedores/{container}/solicitud/{event}/fotos/{photo}', [MaintenanceController::class, 'auditPhoto'])->whereNumber(['container', 'event', 'photo'])->name('maintenance.audit-photo');
         Route::get('/mantenimiento/ordenes/nueva', [MaintenanceController::class, 'create'])->name('maintenance.create');
@@ -296,5 +296,5 @@ Route::middleware('auth')->group(function (): void {
         Route::patch('/contenedores/{container}/pyp', [PypAuditController::class, 'update'])->name('pyp-audits.update');
     });
 
-    Route::view('/migracion/pendiente', 'placeholder')->name('placeholder');
+    Route::get('/migracion/pendiente', fn () => abort(404))->name('placeholder');
 });

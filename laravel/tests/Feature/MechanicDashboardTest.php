@@ -66,6 +66,7 @@ class MechanicDashboardTest extends TestCase
             ->assertViewHas('activity', fn ($events): bool => $events->pluck('action')->all() === ['correction_requested'])
             ->assertSee(route('corrections.show', $correction), false)
             ->assertSee(route('maintenance.show', $started), false)
+            ->assertDontSee(route('maintenance.jobs'), false)
             ->assertSee('La auditora pidió una corrección');
     }
 
