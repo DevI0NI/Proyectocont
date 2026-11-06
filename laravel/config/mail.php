@@ -40,10 +40,11 @@ return [
         'account_credentials' => [
             'transport' => 'smtp',
             'scheme' => 'smtp',
-            'host' => 'smtp.gmail.com',
-            'port' => 587,
+            'host' => env('ACCOUNT_MAIL_HOST', 'smtp.gmail.com'),
+            'port' => (int) env('ACCOUNT_MAIL_PORT', 587),
             'username' => env('ACCOUNT_MAIL_USERNAME'),
             'password' => env('ACCOUNT_MAIL_PASSWORD'),
+            'from_address' => env('ACCOUNT_MAIL_FROM_ADDRESS', env('ACCOUNT_MAIL_USERNAME')),
             'timeout' => 15,
             'require_tls' => true,
         ],
