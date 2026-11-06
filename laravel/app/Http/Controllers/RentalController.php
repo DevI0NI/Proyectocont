@@ -19,33 +19,40 @@ class RentalController extends Controller
 
     public function index(Request $request): View
     {
-        $request->validate(['q' => ['nullable', 'string', 'max:255']]);
         $locations = DB::table('rental_locations')->orderBy('name')->get();
         $location = $locations->firstWhere('id', (int) $request->query('location', $locations->first()?->id));
         $spaces = collect();
         $rate = null;
-        $stays = collect();
         if ($location) {
             $spaces = DB::table('rental_spaces as s')->leftJoin('rental_stays as t', 't.active_space_id', '=', 's.id')
                 ->where('s.location_id', $location->id)->orderBy('s.id')
                 ->select('s.*', 't.id as stay_id', 't.plate', 't.driver', 't.entered_at')->get();
             $rate = DB::table('rental_rates')->where('location_id', $location->id)->orderByDesc('id')->first();
-            $staysQuery = DB::table('rental_stays as t')->join('rental_spaces as s', 's.id', '=', 't.space_id')
-                ->where('t.location_id', $location->id)->select('t.*', 's.code as space_code');
-            if ($request->query('tab') === 'history') {
-                $staysQuery->whereNotNull('t.exited_at');
-            } else {
-                $staysQuery->whereNull('t.exited_at');
-            }
-            if ($search = trim((string) $request->query('q', ''))) {
-                $staysQuery->where(function ($query) use ($search): void {
-                    $query->where('t.plate', 'like', '%'.$search.'%')->orWhere('t.driver', 'like', '%'.$search.'%');
-                });
-            }
-            $stays = $staysQuery->orderByDesc('t.id')->paginate(15)->withQueryString();
         }
 
-        return view('rentals.index', compact('locations', 'location', 'spaces', 'rate', 'stays'));
+        return view('rentals.index', compact('locations', 'location', 'spaces', 'rate'));
+    }
+
+    public function records(Request $request): View|RedirectResponse
+    {
+        $request->validate(['q' => ['nullable', 'string', 'max:255']]);
+        $locations = DB::table('rental_locations')->orderBy('name')->get();
+        $location = $locations->firstWhere('id', (int) $request->query('location', $locations->first()?->id));
+        if (! $location) {
+            return redirect()->route('rentals.index');
+        }
+        $history = $request->query('tab') === 'history';
+        $staysQuery = DB::table('rental_stays as t')->join('rental_spaces as s', 's.id', '=', 't.space_id')
+            ->where('t.location_id', $location->id)->select('t.*', 's.code as space_code');
+        $history ? $staysQuery->whereNotNull('t.exited_at') : $staysQuery->whereNull('t.exited_at');
+        if ($search = trim((string) $request->query('q', ''))) {
+            $staysQuery->where(function ($query) use ($search): void {
+                $query->where('t.plate', 'like', '%'.$search.'%')->orWhere('t.driver', 'like', '%'.$search.'%');
+            });
+        }
+        $stays = $staysQuery->orderByDesc('t.id')->paginate(15)->withQueryString();
+
+        return view('rentals.records', compact('locations', 'location', 'stays', 'history'));
     }
 
     public function spaces(): RedirectResponse

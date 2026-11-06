@@ -42,7 +42,7 @@ class RentalParkingTest extends TestCase
         $this->get('/rentas')->assertRedirect('/login');
         foreach ([2, 3, 4, 5] as $role) {
             $this->actingAs($this->user($role));
-            foreach (['/rentas', '/rentas/configuracion', '/rentas/espacios', '/rentas/estadias/1'] as $path) {
+            foreach (['/rentas', '/rentas/registros', '/rentas/configuracion', '/rentas/espacios', '/rentas/estadias/1'] as $path) {
                 $this->get($path)->assertForbidden();
             }
             foreach (['/rentas/predios', '/rentas/estadias', '/rentas/predios/1/tarifas', '/rentas/predios/1/espacios', '/rentas/estadias/1/liquidar'] as $path) {
@@ -117,7 +117,10 @@ class RentalParkingTest extends TestCase
         $this->post("/rentas/estadias/$stay->id/liquidar", [...$data, 'payment_confirmed' => 1])->assertSessionHasErrors('settlement');
         $this->post('/rentas/estadias', $this->entry($space))->assertSessionHasNoErrors();
         $this->assertDatabaseCount('rental_stays', 2);
-        $this->get('/rentas?location='.$location.'&tab=history')->assertOk()->assertSee('Comprobante');
+        $this->get('/rentas?location='.$location)->assertOk()->assertDontSee('parking-register', false)->assertSee(route('rentals.records', ['location' => $location]), false);
+        $this->get('/rentas/registros?location='.$location)->assertOk()->assertSee('Dentro del predio')->assertSee('C123ABC')->assertSee('Cobrar salida');
+        $this->get('/rentas/registros?location='.$location.'&tab=history')->assertOk()->assertSee('Historial de cobros')->assertSee('Comprobante')->assertSee('GTQ 20.00');
+        $this->get('/rentas/registros?location='.$location.'&tab=history&q=NOEXISTE')->assertOk()->assertSee('No hay resultados para esa busqueda.');
         $this->travelBack();
     }
 

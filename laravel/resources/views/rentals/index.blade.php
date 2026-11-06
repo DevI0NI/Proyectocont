@@ -22,6 +22,7 @@
             </div>
             <div class="parking-hero-actions">
                 <form method="GET" action="{{ route('rentals.index') }}" class="parking-location-picker"><label>Predio<select name="location" data-parking-location>@foreach($locations as $item)<option value="{{ $item->id }}" @selected($location->id === $item->id)>{{ $item->name }}</option>@endforeach</select></label></form>
+                <a class="button secondary" href="{{ route('rentals.records', ['location' => $location->id]) }}"><span data-parking-icon="list"></span>Registros</a>
                 <a class="button secondary" href="{{ route('rentals.settings') }}"><span data-parking-icon="settings"></span>Configuracion</a>
             </div>
         </section>
@@ -96,10 +97,5 @@
             </aside>
         </section>
 
-        <section class="panel-card parking-register">
-            <div class="parking-register-toolbar"><nav class="parking-tabs" aria-label="Estadias"><a class="@if(request('tab') !== 'history') active @endif" href="{{ route('rentals.index', ['location' => $location->id]) }}">Estadias activas</a><a class="@if(request('tab') === 'history') active @endif" href="{{ route('rentals.index', ['location' => $location->id, 'tab' => 'history']) }}">Historial</a></nav><form method="GET" action="{{ route('rentals.index') }}" class="parking-search"><input type="hidden" name="location" value="{{ $location->id }}"><input type="hidden" name="tab" value="{{ request('tab','active') }}"><input name="q" maxlength="255" value="{{ request('q') }}" placeholder="Buscar placa o conductor" aria-label="Buscar placa o conductor"><button class="parking-icon" type="submit" title="Buscar" aria-label="Buscar"><span data-parking-icon="search"></span></button></form></div>
-            <div class="table-scroll"><table class="data-table parking-table"><thead><tr><th>Estadia</th><th>Placa</th><th>Conductor</th><th>Espacio</th><th>Entrada</th><th>Modalidad</th><th>{{ request('tab') === 'history' ? 'Total' : 'Tarifa' }}</th><th></th></tr></thead><tbody>@forelse($stays as $stay)<tr><td>#{{ str_pad($stay->id, 6, '0', STR_PAD_LEFT) }}</td><td><strong>{{ $stay->plate }}</strong></td><td>{{ $stay->driver }}</td><td>{{ $stay->space_code }}</td><td>{{ \Carbon\CarbonImmutable::parse($stay->entered_at,'UTC')->setTimezone('America/Guatemala')->format('d/m/Y H:i') }}</td><td>{{ $stay->billing_unit === 'hour' ? 'Por hora' : 'Por dia' }}</td><td>{{ $stay->currency }} {{ number_format(($stay->exited_at ? $stay->total_cents : $stay->rate_cents) / 100, 2) }}</td><td><a class="button secondary" href="{{ route('rentals.show', $stay->id) }}">{{ $stay->exited_at ? 'Comprobante' : 'Cobrar salida' }}</a></td></tr>@empty<tr><td colspan="8" class="parking-table-empty">{{ request('tab') === 'history' ? 'Sin estadias liquidadas.' : 'No hay vehiculos dentro del predio.' }}</td></tr>@endforelse</tbody></table></div>
-            {{ $stays->links() }}
-        </section>
     @endif
 @endsection

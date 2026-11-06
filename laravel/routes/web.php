@@ -199,6 +199,7 @@ Route::middleware('auth')->group(function (): void {
         Route::redirect('/rentas/rentas.php', '/rentas', 302);
         Route::get('/rentas/espacios', [RentalController::class, 'spaces'])->name('rentals.spaces');
         Route::redirect('/rentas/espacios.php', '/rentas/espacios', 302);
+        Route::get('/rentas/registros', [RentalController::class, 'records'])->name('rentals.records');
         Route::get('/rentas/configuracion', [RentalController::class, 'settings'])->name('rentals.settings');
         Route::post('/rentas/predios', [RentalController::class, 'storeLocation'])->name('rentals.locations.store');
         Route::post('/rentas/predios/{location}/espacios', [RentalController::class, 'storeSpaces'])->name('rentals.spaces.store');

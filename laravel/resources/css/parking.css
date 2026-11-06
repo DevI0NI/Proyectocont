@@ -6,7 +6,7 @@
 .parking-body .parking-pc-required h1 { font-size:24px; font-weight:800; line-height:1.25; margin:0; }
 .parking-body .parking-pc-required p { max-width:440px; margin:0; color:var(--muted); line-height:1.6; }
 @media(max-width:980px) { .parking-body .parking-pc-required { display:flex; } .parking-desktop-content { display:none; } }
-.parking-body .parking-main { max-width:1600px; width:100%; }
+.parking-body .parking-main { max-width:none; width:100%; }
 .parking-body .parking-heading { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:22px; }
 .parking-body .parking-heading h1 { font-family:"Instrument Sans", "Segoe UI", Arial, sans-serif; font-size:28px; font-weight:850; letter-spacing:0; }
 .parking-body select.enhanced-native-select { position:absolute; width:1px; height:1px; min-height:1px; padding:0; margin:0; opacity:0; pointer-events:none; }
@@ -28,7 +28,7 @@
 .parking-account { margin-left:auto; display:flex; gap:12px; align-items:center; font-size:13px; }
 .parking-icon { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; flex-shrink:0; padding:0; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); cursor:pointer; }
 .parking-icon svg, .parking-actions svg, .parking-heading .button svg { width:18px; height:18px; }
-.parking-main { max-width:1600px; margin:0 auto; padding:28px 32px 40px; }
+.parking-main { max-width:none; margin:0 auto; padding:28px 32px 40px; }
 .parking-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
 .parking-heading h1 { font-size:28px; font-weight:800; margin:4px 0; line-height:1.25; }
 .parking-body h2 { font-size:18px; font-weight:750; margin:0 0 16px; }

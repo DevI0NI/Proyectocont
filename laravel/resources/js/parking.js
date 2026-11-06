@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { documentaryTextError } from './documentary-validation.js';
 import { initializePlateInput } from './transport-plate-input.js';
-import { createElement, ArrowLeft, Settings, Sun, Truck, RotateCcw, Search, Printer, Monitor } from 'lucide';
+import { createElement, ArrowLeft, Settings, Sun, Truck, RotateCcw, Search, Printer, Monitor, List } from 'lucide';
 
-const icons = { 'arrow-left': ArrowLeft, settings: Settings, sun: Sun, truck: Truck, 'rotate-ccw': RotateCcw, search: Search, printer: Printer, monitor: Monitor };
+const icons = { 'arrow-left': ArrowLeft, settings: Settings, sun: Sun, truck: Truck, 'rotate-ccw': RotateCcw, search: Search, printer: Printer, monitor: Monitor, list: List };
 let parkingInitialized = false;
 
 function initParking() {
