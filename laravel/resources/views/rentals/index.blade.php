@@ -1,39 +1,102 @@
 @extends('layouts.app')
 @section('content')
-    <div class="parking-heading"><div><span class="eyebrow">Control de estadias</span><h1>Parqueo de transporte</h1></div><a class="button secondary" href="{{ route('rentals.settings') }}"><span data-parking-icon="settings"></span>Configuracion</a></div>
     @if(! $location)
+        <div class="parking-heading"><div><span class="eyebrow">Control de estadias</span><h1>Parqueo de transporte</h1></div><a class="button secondary" href="{{ route('rentals.settings') }}"><span data-parking-icon="settings"></span>Configuracion</a></div>
         <section class="parking-empty"><span data-parking-icon="truck"></span><h2>Configura tu primer predio</h2><a class="button" href="{{ route('rentals.settings') }}">Crear predio</a></section>
     @else
         @php
             $occupied = $spaces->whereNotNull('stay_id')->count();
             $blocked = $spaces->where('status', 'maintenance')->count();
             $free = $spaces->whereNull('stay_id')->where('status', 'available');
+            $total = $spaces->count();
+            $occupancy = $total > 0 ? (int) round($occupied / $total * 100) : 0;
             $sceneData = $spaces->map(fn($s) => ['id' => $s->id, 'code' => $s->code, 'state' => $s->stay_id ? 'occupied' : $s->status, 'plate' => $s->plate, 'url' => $s->stay_id ? route('rentals.show', $s->stay_id) : null]);
+            $selectedSpace = $free->firstWhere('id', (int) old('space_id'));
         @endphp
-        <div class="parking-location-bar"><form method="GET" action="{{ route('rentals.index') }}"><label>Predio<select name="location" data-parking-location>@foreach($locations as $item)<option value="{{ $item->id }}" @selected($location->id === $item->id)>{{ $item->name }}</option>@endforeach</select></label></form><span class="parking-state available">{{ $free->count() }} disponibles</span><span class="parking-state occupied">{{ $occupied }} ocupados</span><span class="parking-state maintenance">{{ $blocked }} bloqueados</span><span class="parking-capacity">{{ $spaces->count() }} espacios</span></div>
-        @if(! $rate)<div class="parking-warning">Este predio no tiene tarifas. <a href="{{ route('rentals.settings') }}">Configurar tarifas</a></div>@endif
-        <section class="parking-operation">
-            <div class="parking-entry">
-                <div class="parking-section-heading"><h2>Nueva entrada</h2><span class="parking-state neutral">Caseta</span></div>
-                <form method="POST" action="{{ route('rentals.store') }}" class="parking-form" id="parking-entry-form">@csrf
-                    <div class="parking-fields"><label>Placa<input name="plate" required maxlength="20" autocomplete="off" value="{{ old('plate') }}" class="parking-plate-input"></label><label>Espacio<select name="space_id" id="parking-space-select" required><option value="">Selecciona un espacio</option>@foreach($free as $space)<option value="{{ $space->id }}" @selected((string)old('space_id') === (string)$space->id)>{{ $space->code }}</option>@endforeach</select></label></div>
-                    <label>Conductor<input name="driver" required maxlength="120" value="{{ old('driver') }}" autocomplete="name"></label>
-                    <label>Cliente / empresa<input name="customer" maxlength="120" value="{{ old('customer') }}"></label>
-                    <fieldset class="parking-billing"><legend>Modalidad de cobro</legend><label><input type="radio" name="billing_unit" value="hour" @checked(old('billing_unit','hour') === 'hour')><span>Por hora<strong>{{ $location->currency }} {{ number_format(($rate?->hourly_cents ?? 0) / 100, 2) }}</strong><small>Hora iniciada</small></span></label><label><input type="radio" name="billing_unit" value="day" @checked(old('billing_unit') === 'day')><span>Por dia<strong>{{ $location->currency }} {{ number_format(($rate?->daily_cents ?? 0) / 100, 2) }}</strong><small>24 horas iniciadas</small></span></label></fieldset>
-                    <label>Observaciones<textarea name="notes" maxlength="1000" rows="2">{{ old('notes') }}</textarea></label>
-                    <button class="button" type="submit" @disabled(! $rate || $free->isEmpty())>Registrar entrada</button>
-                </form>
+
+        <section class="parking-hero">
+            <div>
+                <span class="eyebrow">Control de estadias</span>
+                <h1>Parqueo de transporte</h1>
+                <p>Toca un espacio <strong class="parking-text-available">libre</strong> para registrar una entrada, o uno <strong class="parking-text-occupied">ocupado</strong> para cobrar la salida.</p>
             </div>
-            <div class="parking-map-section">
-                <div class="parking-section-heading"><h2>{{ $location->name }}</h2><button class="parking-icon" type="button" data-parking-reset title="Restablecer vista" aria-label="Restablecer vista"><span data-parking-icon="rotate-ccw"></span></button></div>
-                <div class="parking-canvas-stage" data-parking-scene data-spaces="{{ $sceneData->toJson() }}"><canvas aria-label="Plano 3D de espacios de parqueo"></canvas><div class="parking-map-tooltip" hidden></div><div class="parking-map-error" hidden>Vista 3D no disponible. Puedes seleccionar un espacio en la lista.</div></div>
-                <div class="parking-map-footer"><span class="parking-map-selection" id="parking-selection">Sin espacio seleccionado</span><div class="parking-legend"><span class="available">Libre</span><span class="occupied">Ocupado</span><span class="maintenance">Bloqueado</span></div></div>
-                <div class="parking-space-list" aria-label="Espacios del predio">@foreach($spaces as $space)<button type="button" class="parking-space-option {{ $space->stay_id ? 'occupied' : $space->status }}" data-space-id="{{ $space->id }}" @if($space->stay_id) data-stay-url="{{ route('rentals.show', $space->stay_id) }}" @endif @disabled($space->status === 'maintenance') title="{{ $space->plate ?: ($space->status === 'maintenance' ? 'Bloqueado' : 'Disponible') }}">{{ $space->code }}</button>@endforeach</div>
+            <div class="parking-hero-actions">
+                <form method="GET" action="{{ route('rentals.index') }}" class="parking-location-picker"><label>Predio<select name="location" data-parking-location>@foreach($locations as $item)<option value="{{ $item->id }}" @selected($location->id === $item->id)>{{ $item->name }}</option>@endforeach</select></label></form>
+                <a class="button secondary" href="{{ route('rentals.settings') }}"><span data-parking-icon="settings"></span>Configuracion</a>
             </div>
         </section>
-        <section class="parking-register">
+
+        <section class="parking-summary" aria-label="Resumen del predio">
+            <div class="parking-stat available"><span class="parking-stat-dot"></span><div><small>Libres</small><strong>{{ $free->count() }}</strong></div></div>
+            <div class="parking-stat occupied"><span class="parking-stat-dot"></span><div><small>Ocupados</small><strong>{{ $occupied }}</strong></div></div>
+            <div class="parking-stat maintenance"><span class="parking-stat-dot"></span><div><small>Bloqueados</small><strong>{{ $blocked }}</strong></div></div>
+            <div class="parking-stat parking-occupancy"><div><small>Ocupacion · {{ $total }} espacios</small><strong>{{ $occupancy }} %</strong></div><div class="parking-occupancy-bar" aria-hidden="true"><span style="width: {{ $occupancy }}%"></span></div></div>
+        </section>
+
+        @if(! $rate)
+            <div class="parking-warning parking-warning-card"><span><strong>Falta configurar las tarifas de este predio.</strong> Sin tarifas no se pueden registrar entradas.</span><a class="button" href="{{ route('rentals.settings') }}">Configurar tarifas</a></div>
+        @endif
+
+        <section class="parking-workspace">
+            <article class="panel-card parking-board">
+                <div class="parking-board-header">
+                    <div><h2>Espacios de {{ $location->name }}</h2><div class="parking-legend"><span class="available">Libre</span><span class="occupied">Ocupado</span><span class="maintenance">Bloqueado</span></div></div>
+                    <div class="parking-view-toggle" role="tablist" aria-label="Tipo de vista"><button type="button" class="active" role="tab" aria-selected="true" data-parking-view="plan">Plano</button><button type="button" role="tab" aria-selected="false" data-parking-view="3d">Vista 3D</button></div>
+                </div>
+                <div class="parking-grid" data-parking-view-panel="plan" aria-label="Espacios del predio">
+                    @forelse($spaces as $space)
+                        @php $state = $space->stay_id ? 'occupied' : $space->status; @endphp
+                        <button type="button" class="parking-tile parking-space-option {{ $state }}" data-space-id="{{ $space->id }}" data-space-code="{{ $space->code }}" @if($space->stay_id) data-stay-url="{{ route('rentals.show', $space->stay_id) }}" @endif @disabled($state === 'maintenance') title="{{ $state === 'occupied' ? 'Cobrar salida de '.$space->plate : ($state === 'maintenance' ? 'Espacio bloqueado' : 'Elegir '.$space->code) }}">
+                            <span class="parking-tile-code">{{ $space->code }}</span>
+                            @if($state === 'occupied')
+                                <strong class="parking-tile-plate">{{ $space->plate }}</strong>
+                                <small>Desde {{ \Carbon\CarbonImmutable::parse($space->entered_at, 'UTC')->setTimezone('America/Guatemala')->format('d/m H:i') }}</small>
+                                <span class="parking-tile-action">Cobrar salida</span>
+                            @elseif($state === 'maintenance')
+                                <small>Bloqueado</small>
+                            @else
+                                <small>Libre</small>
+                                <span class="parking-tile-action">Elegir</span>
+                            @endif
+                        </button>
+                    @empty
+                        <p class="parking-table-empty">Este predio no tiene espacios. Agregalos en Configuracion.</p>
+                    @endforelse
+                </div>
+                <div class="parking-3d" data-parking-view-panel="3d" hidden>
+                    <div class="parking-canvas-stage" data-parking-scene data-spaces="{{ $sceneData->toJson() }}"><canvas aria-label="Plano 3D de espacios de parqueo"></canvas><div class="parking-map-tooltip" hidden></div><div class="parking-map-error" hidden>Vista 3D no disponible. Usa el plano.</div><button class="parking-icon parking-3d-reset" type="button" data-parking-reset title="Restablecer vista" aria-label="Restablecer vista"><span data-parking-icon="rotate-ccw"></span></button></div>
+                    <p class="parking-3d-help">Arrastra para girar, usa la rueda para acercar y toca un espacio para elegirlo.</p>
+                </div>
+            </article>
+
+            <aside class="panel-card parking-entry-card">
+                <div class="parking-entry-title"><h2>Registrar entrada</h2><p>Completa los tres pasos.</p></div>
+                <form method="POST" action="{{ route('rentals.store') }}" class="parking-form" id="parking-entry-form">@csrf
+                    <div class="parking-step">
+                        <div class="parking-step-label"><span>1</span>Espacio</div>
+                        <div class="parking-chosen @unless($selectedSpace) is-empty @endunless" id="parking-selection" data-empty-text="Toca un espacio libre en el plano">{{ $selectedSpace?->code ?? 'Toca un espacio libre en el plano' }}</div>
+                        <select name="space_id" id="parking-space-select" class="parking-plain-select" data-plain-select required aria-label="Espacio"><option value="">Selecciona un espacio</option>@foreach($free as $space)<option value="{{ $space->id }}" @selected((string) old('space_id') === (string) $space->id)>{{ $space->code }}</option>@endforeach</select>
+                    </div>
+                    <div class="parking-step">
+                        <div class="parking-step-label"><span>2</span>Vehiculo y conductor</div>
+                        <label>Placa<input name="plate" required maxlength="20" autocomplete="off" value="{{ old('plate') }}" class="parking-plate-input" placeholder="Ej. C123ABC"></label>
+                        <label>Conductor<input name="driver" required maxlength="120" value="{{ old('driver') }}" autocomplete="name" placeholder="Nombre completo"></label>
+                        <label><span>Cliente o empresa <span class="parking-optional">(opcional)</span></span><input name="customer" maxlength="120" value="{{ old('customer') }}"></label>
+                    </div>
+                    <div class="parking-step">
+                        <div class="parking-step-label"><span>3</span>Forma de cobro</div>
+                        <fieldset class="parking-billing"><legend class="sr-only">Modalidad de cobro</legend><label><input type="radio" name="billing_unit" value="hour" @checked(old('billing_unit','hour') === 'hour')><span>Por hora<strong>{{ $location->currency }} {{ number_format(($rate?->hourly_cents ?? 0) / 100, 2) }}</strong><small>Cada hora iniciada</small></span></label><label><input type="radio" name="billing_unit" value="day" @checked(old('billing_unit') === 'day')><span>Por dia<strong>{{ $location->currency }} {{ number_format(($rate?->daily_cents ?? 0) / 100, 2) }}</strong><small>Cada 24 horas</small></span></label></fieldset>
+                        <label><span>Observaciones <span class="parking-optional">(opcional)</span></span><textarea name="notes" maxlength="1000" rows="2">{{ old('notes') }}</textarea></label>
+                    </div>
+                    <button class="button parking-submit" type="submit" data-parking-submit @disabled(! $rate || $free->isEmpty())>{{ $selectedSpace ? 'Registrar entrada en '.$selectedSpace->code : 'Registrar entrada' }}</button>
+                    @if(! $rate)<p class="parking-form-hint">Configura las tarifas para habilitar las entradas.</p>@elseif($free->isEmpty())<p class="parking-form-hint">No hay espacios libres en este predio.</p>@endif
+                </form>
+            </aside>
+        </section>
+
+        <section class="panel-card parking-register">
             <div class="parking-register-toolbar"><nav class="parking-tabs" aria-label="Estadias"><a class="@if(request('tab') !== 'history') active @endif" href="{{ route('rentals.index', ['location' => $location->id]) }}">Estadias activas</a><a class="@if(request('tab') === 'history') active @endif" href="{{ route('rentals.index', ['location' => $location->id, 'tab' => 'history']) }}">Historial</a></nav><form method="GET" action="{{ route('rentals.index') }}" class="parking-search"><input type="hidden" name="location" value="{{ $location->id }}"><input type="hidden" name="tab" value="{{ request('tab','active') }}"><input name="q" maxlength="255" value="{{ request('q') }}" placeholder="Buscar placa o conductor" aria-label="Buscar placa o conductor"><button class="parking-icon" type="submit" title="Buscar" aria-label="Buscar"><span data-parking-icon="search"></span></button></form></div>
-            <div class="table-scroll"><table class="data-table parking-table"><thead><tr><th>Estadia</th><th>Placa</th><th>Conductor</th><th>Espacio</th><th>Entrada</th><th>Modalidad</th><th>{{ request('tab') === 'history' ? 'Total' : 'Tarifa' }}</th><th></th></tr></thead><tbody>@forelse($stays as $stay)<tr><td>#{{ str_pad($stay->id, 6, '0', STR_PAD_LEFT) }}</td><td><strong>{{ $stay->plate }}</strong></td><td>{{ $stay->driver }}</td><td>{{ $stay->space_code }}</td><td>{{ \Carbon\CarbonImmutable::parse($stay->entered_at,'UTC')->setTimezone('America/Guatemala')->format('d/m/Y H:i') }}</td><td>{{ $stay->billing_unit === 'hour' ? 'Por hora' : 'Por dia' }}</td><td>{{ $stay->currency }} {{ number_format(($stay->exited_at ? $stay->total_cents : $stay->rate_cents) / 100, 2) }}</td><td><a class="button secondary" href="{{ route('rentals.show', $stay->id) }}">{{ $stay->exited_at ? 'Comprobante' : 'Liquidar' }}</a></td></tr>@empty<tr><td colspan="8" class="parking-table-empty">{{ request('tab') === 'history' ? 'Sin estadias liquidadas.' : 'Sin estadias activas.' }}</td></tr>@endforelse</tbody></table></div>
+            <div class="table-scroll"><table class="data-table parking-table"><thead><tr><th>Estadia</th><th>Placa</th><th>Conductor</th><th>Espacio</th><th>Entrada</th><th>Modalidad</th><th>{{ request('tab') === 'history' ? 'Total' : 'Tarifa' }}</th><th></th></tr></thead><tbody>@forelse($stays as $stay)<tr><td>#{{ str_pad($stay->id, 6, '0', STR_PAD_LEFT) }}</td><td><strong>{{ $stay->plate }}</strong></td><td>{{ $stay->driver }}</td><td>{{ $stay->space_code }}</td><td>{{ \Carbon\CarbonImmutable::parse($stay->entered_at,'UTC')->setTimezone('America/Guatemala')->format('d/m/Y H:i') }}</td><td>{{ $stay->billing_unit === 'hour' ? 'Por hora' : 'Por dia' }}</td><td>{{ $stay->currency }} {{ number_format(($stay->exited_at ? $stay->total_cents : $stay->rate_cents) / 100, 2) }}</td><td><a class="button secondary" href="{{ route('rentals.show', $stay->id) }}">{{ $stay->exited_at ? 'Comprobante' : 'Cobrar salida' }}</a></td></tr>@empty<tr><td colspan="8" class="parking-table-empty">{{ request('tab') === 'history' ? 'Sin estadias liquidadas.' : 'No hay vehiculos dentro del predio.' }}</td></tr>@endforelse</tbody></table></div>
             {{ $stays->links() }}
         </section>
     @endif

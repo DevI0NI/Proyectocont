@@ -18,13 +18,17 @@ const fixture = JSON.parse(execFileSync(php, [fixtureScript], { cwd: root, encod
         const errors = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.goto(`http://127.0.0.1:8000/rentas?location=${fixture.location}`);
-        await page.locator('canvas').waitFor();
+        await page.locator('.parking-tile').first().waitFor();
         await page.waitForFunction(() => document.querySelector('[data-parking-icon="settings"] svg'));
         assert.equal(await page.locator('.topbar #userMenuTrigger').isVisible(), true);
         assert.equal(await page.locator('#sidebar .nav-item.active').innerText(), 'Parqueo');
-        await page.locator('#parking-space-select + .form-select-dropdown .form-select-trigger').click();
-        await page.locator('.parking-main .form-select-dropdown.open').getByRole('option', { name: 'QA-04', exact: true }).click();
+        await page.locator('.parking-space-option[data-space-code="QA-04"]').click();
         assert.match(await page.locator('#parking-selection').innerText(), /QA-04/);
+        assert.match(await page.locator('[data-parking-submit]').innerText(), /QA-04/);
+        await page.locator('.parking-space-option.available:not(.selected)').first().click();
+        assert.match(await page.locator('#parking-selection').innerText(), /QA-03/);
+        await page.locator('[data-parking-view="3d"]').click();
+        await page.locator('.parking-canvas-stage canvas').waitFor();
         assert.equal(await page.locator('.parking-map-error').isVisible(), false);
         const canvas = page.locator('.parking-canvas-stage canvas');
         const before = await canvas.screenshot();
@@ -32,8 +36,6 @@ const fixture = JSON.parse(execFileSync(php, [fixtureScript], { cwd: root, encod
         const colors = new Set();
         for (let i = 0; i < png.data.length; i += 64) colors.add(`${png.data[i]},${png.data[i + 1]},${png.data[i + 2]}`);
         assert.ok(colors.size > 30, `Canvas blank or missing objects: ${colors.size} colors`);
-        await page.locator('.parking-space-option.available').first().click();
-        assert.match(await page.locator('#parking-selection').innerText(), /QA-03/);
         const bounds = await canvas.boundingBox();
         await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
         await page.mouse.down();
@@ -75,6 +77,7 @@ const fixture = JSON.parse(execFileSync(php, [fixtureScript], { cwd: root, encod
         }
         await mobile.close();
         await page.setViewportSize({ width: 1440, height: 1000 });
+        await page.locator('[data-parking-view="plan"]').click();
         await page.locator('.parking-space-option.occupied').first().click();
         await page.locator('[name="payment_confirmed"]').check();
         await page.locator('[data-parking-settle] button[type="submit"]').click();

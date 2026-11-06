@@ -90,6 +90,11 @@ class RentalParkingTest extends TestCase
         $stay = DB::table('rental_stays')->first();
         $this->assertSame('C123ABC', $stay->plate);
         $this->assertSame(1000, $stay->rate_cents);
+        $this->get('/rentas?location='.$location)->assertOk()
+            ->assertSee('parking-tile parking-space-option occupied', false)
+            ->assertSee('C123ABC')
+            ->assertSee('Desde 06/10 06:00')
+            ->assertSee(route('rentals.show', $stay->id), false);
         $this->post("/rentas/predios/$location/tarifas", ['hourly' => '99', 'daily' => '999'])->assertSessionHasNoErrors();
         $this->travelTo(CarbonImmutable::parse('2026-10-06 13:10:00', 'UTC'));
         $data = ['expected_total_cents' => 2000, 'payment_method' => 'cash'];
