@@ -5964,6 +5964,20 @@ body.sidebar-collapsed:not(.sidebar-open) .dashboard-body .app-shell,
     color: #80cbc4;
 }
 
+.toast-denied .toast-icon {
+    background: #fdecea;
+    color: #c0392b;
+}
+
+[data-theme="dark"] .dashboard-body .toast-denied .toast-icon {
+    background: #4a2320;
+    color: #f2a49b;
+}
+
+.toast-denied .toast-progress circle {
+    stroke: #c0392b;
+}
+
 .toast-icon svg {
     height: 22px;
     width: 22px;
