@@ -132,9 +132,26 @@ class RentalParkingTest extends TestCase
         $this->actingAs($this->user())->post('/rentas/estadias', [])->assertSessionHasErrors(['space_id', 'plate', 'driver', 'billing_unit']);
         $this->post("/rentas/predios/$location/tarifas", ['hourly' => '0', 'daily' => '10'])->assertSessionHasErrors('hourly');
         $this->post('/rentas/estadias', [...$this->entry($space), 'billing_unit' => 'month'])->assertSessionHasErrors('billing_unit');
-        $this->post('/rentas/estadias', [...$this->entry($space), 'driver' => '<script>alert(1)</script>'])->assertSessionHasNoErrors();
+        $this->post('/rentas/estadias', [...$this->entry($space), 'notes' => '<script>alert(1)</script>'])->assertSessionHasNoErrors();
         $stay = DB::table('rental_stays')->first();
         $this->get('/rentas/estadias/'.$stay->id)->assertOk()->assertSee('&lt;script&gt;', false)->assertDontSee('<script>alert(1)</script>', false);
+    }
+
+    public function test_entry_uses_the_system_plate_and_name_rules(): void
+    {
+        [, $space] = $this->fixture();
+        $this->actingAs($this->user());
+        foreach (['ABC', 'ABCDEFG', 'C1234567890', 'C12#ABC'] as $plate) {
+            $this->post('/rentas/estadias', [...$this->entry($space), 'plate' => $plate])->assertSessionHasErrors('plate');
+        }
+        foreach (['Juan 123', '<script>', str_repeat('a', 81)] as $driver) {
+            $this->post('/rentas/estadias', [...$this->entry($space), 'driver' => $driver])->assertSessionHasErrors('driver');
+        }
+        $this->post('/rentas/estadias', [...$this->entry($space), 'customer' => str_repeat('Transportes ', 9)])->assertSessionHasErrors('customer');
+        $this->post('/rentas/estadias', [...$this->entry($space), 'notes' => str_repeat('a', 501)])->assertSessionHasErrors('notes');
+        $this->assertDatabaseCount('rental_stays', 0);
+        $this->post('/rentas/estadias', [...$this->entry($space), 'plate' => 'tc-12 abc', 'driver' => 'José Pérez', 'customer' => 'Transportes Izabal, S.A.'])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('rental_stays', ['plate' => 'TC12ABC', 'driver' => 'José Pérez']);
     }
 
     private function fixture(bool $withRate = true): array

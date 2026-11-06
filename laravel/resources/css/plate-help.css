@@ -7,7 +7,7 @@
 
 .container-form .plate-field-title label { display: inline; margin: 0; }
 
-:is(.container-form, .mw-repair-form) .plate-help {
+:is(.container-form, .mw-repair-form, .parking-form) .plate-help {
     display: inline-flex;
     position: relative;
     flex-shrink: 0;
@@ -17,7 +17,7 @@
     margin: 0;
 }
 
-:is(.container-form, .mw-repair-form) .plate-help-trigger {
+:is(.container-form, .mw-repair-form, .parking-form) .plate-help-trigger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -39,7 +39,7 @@
 .plate-help-trigger:hover { color: var(--accent); }
 .plate-help-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-:is(.container-form, .mw-repair-form) .plate-help-tooltip {
+:is(.container-form, .mw-repair-form, .parking-form) .plate-help-tooltip {
     display: block;
     position: absolute;
     bottom: calc(100% + 10px);
@@ -60,4 +60,4 @@
     pointer-events: none;
 }
 
-:is(.container-form, .mw-repair-form) .plate-help-tooltip[hidden] { display: none !important; }
+:is(.container-form, .mw-repair-form, .parking-form) .plate-help-tooltip[hidden] { display: none !important; }

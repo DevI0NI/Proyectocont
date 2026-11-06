@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\DocumentaryText;
 use App\Services\RentalParkingService;
+use App\Services\TransportPlate;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -134,15 +136,24 @@ class RentalController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $request->merge(['plate' => strtoupper(preg_replace('/[\s-]+/', '', (string) $request->input('plate')))]);
+        $request->merge(['plate' => strtoupper(trim((string) $request->input('plate')))]);
         $data = $request->validate([
             'space_id' => ['required', 'integer', 'exists:rental_spaces,id'],
-            'plate' => ['required', 'regex:/^[A-Z0-9]{3,20}$/'],
-            'driver' => ['required', 'string', 'max:120'],
-            'customer' => ['nullable', 'string', 'max:120'],
+            'plate' => ['required', 'string', 'max:15', 'regex:'.TransportPlate::REGEX],
+            'driver' => ['required', 'string', 'max:80', new DocumentaryText('driver')],
+            'customer' => ['nullable', 'string', 'max:100', new DocumentaryText('company')],
             'billing_unit' => ['required', Rule::in(['hour', 'day'])],
-            'notes' => ['nullable', 'string', 'max:1000'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'space_id.required' => 'Toca un espacio libre en el plano.',
+            'plate.required' => 'Ingresa la placa del vehiculo.',
+            'plate.regex' => TransportPlate::MESSAGE,
+            'driver.required' => 'Ingresa el nombre del conductor.',
+            'driver.max' => 'El nombre del conductor admite maximo 80 caracteres.',
+            'customer.max' => 'El cliente o empresa admite maximo 100 caracteres.',
+            'notes.max' => 'Las observaciones admiten maximo 500 caracteres.',
         ]);
+        $data['plate'] = preg_replace('/[\s-]+/', '', $data['plate']);
         try {
             $id = $this->parking->enter($data, $request->user()->id);
         } catch (QueryException $exception) {

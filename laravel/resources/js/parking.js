@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { documentaryTextError } from './documentary-validation.js';
+import { initializePlateInput } from './transport-plate-input.js';
 import { createElement, ArrowLeft, Settings, Sun, Truck, RotateCcw, Search, Printer, Monitor } from 'lucide';
 
 const icons = { 'arrow-left': ArrowLeft, settings: Settings, sun: Sun, truck: Truck, 'rotate-ccw': RotateCcw, search: Search, printer: Printer, monitor: Monitor };
@@ -65,11 +67,52 @@ function initParking() {
     }));
     select?.addEventListener('change', syncSelection);
     if (select) syncSelection();
+    initEntryChecks(document.querySelector('#parking-entry-form'));
     const stage = document.querySelector('[data-parking-scene]');
     if (stage) {
         try { initScene(stage, select); }
         catch { stage.querySelector('.parking-map-error').hidden = false; }
     }
+}
+
+const platePattern = /^(?=(?:(?: |-)*[A-Z0-9]){6,8}$)(?=.*[0-9])[A-Z0-9]+(?:(?: |-)[A-Z0-9]+)*$/;
+
+function plateError(value, required) {
+    const plate = value.trim();
+    if (!plate) return required ? 'Ingresa la placa del vehiculo.' : '';
+    return platePattern.test(plate) ? '' : '6 a 8 letras o numeros, con al menos un numero.';
+}
+
+function initEntryChecks(form) {
+    if (!form) return;
+    form.querySelectorAll('[data-parking-check]').forEach((field) => {
+        const hint = field.parentElement.querySelector('.parking-field-check');
+        const kind = field.dataset.parkingCheck;
+        if (kind === 'plate') initializePlateInput(field);
+        const validate = (show = true) => {
+            if (kind === 'plate' && field.value !== field.value.toUpperCase()) {
+                const [start, end] = [field.selectionStart, field.selectionEnd];
+                field.value = field.value.toUpperCase();
+                field.setSelectionRange(start, end);
+            }
+            const message = kind === 'plate' ? plateError(field.value, field.required) : documentaryTextError(field.value, kind, field.required);
+            field.setCustomValidity(message);
+            if (!show) return;
+            const state = message ? 'invalid' : field.value.trim() ? 'valid' : '';
+            field.dataset.state = state;
+            field.setAttribute('aria-invalid', String(Boolean(message)));
+            hint.dataset.state = state;
+            hint.textContent = message || (state ? 'Dato valido.' : '');
+            hint.classList.toggle('is-visible', Boolean(state));
+        };
+        field.addEventListener('input', () => validate());
+        field.addEventListener('blur', () => validate());
+        field.addEventListener('invalid', (event) => { event.preventDefault(); validate(); });
+        validate(field.value.trim() !== '');
+    });
+    const notes = form.querySelector('[data-parking-counter]');
+    const counter = notes?.parentElement.querySelector('.parking-field-counter');
+    notes?.addEventListener('input', () => { counter.textContent = `${Array.from(notes.value).length} / ${notes.maxLength}`; });
 }
 
 function initParkingSelects() {
