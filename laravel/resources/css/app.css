@@ -3778,7 +3778,40 @@ textarea {
 }
 
 .login-enter-background {
-    animation: loginBackgroundEnter 700ms ease-out both;
+    animation: loginBackgroundReveal 0s linear 2.5s forwards;
+    opacity: 0;
+    transform: scale(1.05);
+    transition: opacity 900ms ease, transform 1600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.login-enter-background.is-loaded {
+    animation: none;
+    opacity: 1;
+    transform: scale(1);
+}
+
+@keyframes loginBackgroundReveal {
+    to { opacity: 1; transform: scale(1); }
+}
+
+@view-transition {
+    navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 260ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-enter-background {
+        transition: none;
+    }
+
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation: none;
+    }
 }
 
 .login-enter-brand {
@@ -3787,11 +3820,6 @@ textarea {
 
 .login-enter-form {
     animation: loginContentEnter 520ms cubic-bezier(0.2, 0.7, 0.2, 1) 140ms both;
-}
-
-@keyframes loginBackgroundEnter {
-    from { opacity: 0.72; }
-    to { opacity: 1; }
 }
 
 @keyframes loginContentEnter {
@@ -8206,8 +8234,17 @@ html.login-html body {
     width: 100%;
 }
 
+.login-page-background::before {
+    background: var(--login-placeholder, none) center / cover no-repeat;
+    content: "";
+    filter: blur(22px);
+    inset: 0;
+    position: absolute;
+    transform: scale(1.12);
+}
+
 .login-page-background {
-    background: transparent;
+    background: #0b2a2c;
     inset: -120px 0;
     position: fixed;
 }

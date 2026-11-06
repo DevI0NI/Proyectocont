@@ -1,14 +1,16 @@
 @php
-    $loginBackground = 'imagenes/imagen para el login.jpg';
+    $loginBackground = 'imagenes/login-fondo.webp';
+    $loginPlaceholder = file_exists(public_path('imagenes/login-fondo-mini.webp')) ? 'data:image/webp;base64,'.base64_encode(file_get_contents(public_path('imagenes/login-fondo-mini.webp'))) : '';
     $loginBackgroundVersion = file_exists(public_path($loginBackground)) ? filemtime(public_path($loginBackground)) : time();
     $loginBackgroundUrl = asset($loginBackground).'?v='.$loginBackgroundVersion;
 @endphp
 <!doctype html>
-<html lang="es" class="login-html" style="--login-image: url('{{ $loginBackgroundUrl }}')">
+<html lang="es" class="login-html" style="--login-image: url('{{ $loginBackgroundUrl }}'); --login-placeholder: url('{{ $loginPlaceholder }}')">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{{ ($passwordSetup ?? false) ? 'Definir contraseña' : 'Ingreso' }} | {{ config('app.name') }}</title>
+    <link rel="preload" as="image" href="{{ $loginBackgroundUrl }}" fetchpriority="high">
     @include('partials.app-icons', ['themeColor' => '#0e6f73'])
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
@@ -17,6 +19,9 @@
             <img
                 src="{{ $loginBackgroundUrl }}"
                 alt=""
+                fetchpriority="high"
+                decoding="async"
+                data-login-background
                 class="login-enter-background absolute inset-0 h-full w-full object-cover"
             >
             <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,.54),rgba(2,44,46,.28)_45%,rgba(2,6,23,.48))]"></div>
@@ -26,7 +31,7 @@
 
         <section class="login-page-content relative z-10 mx-auto grid w-full max-w-[1120px] content-center gap-6 px-5 py-7 sm:px-8 lg:grid-cols-[minmax(390px,520px)_minmax(360px,420px)] lg:items-center lg:justify-center lg:gap-10 lg:px-10 xl:gap-14">
             <div class="login-enter-brand flex flex-col items-center justify-center text-center lg:items-start lg:text-left">
-                <img src="{{ asset('imagenes/New logo IPSA.png') }}" alt="Logo IPSA Web" class="mb-5 h-16 w-28 object-contain drop-shadow-[0_16px_30px_rgba(0,0,0,.35)] sm:h-20 sm:w-36 lg:mb-9 lg:h-24 lg:w-40">
+                <img src="{{ asset('imagenes/logo-ipsa.webp') }}" alt="Logo IPSA Web" class="mb-5 h-16 w-28 object-contain drop-shadow-[0_16px_30px_rgba(0,0,0,.35)] sm:h-20 sm:w-36 lg:mb-9 lg:h-24 lg:w-40">
                 <h1 class="max-w-[560px] text-4xl font-extrabold leading-[.98] tracking-normal text-white drop-shadow-lg sm:text-5xl lg:text-6xl xl:text-7xl">
                     @if($passwordSetup ?? false) Protege<br>tu cuenta @else Bienvenido<br>de nuevo @endif
                 </h1>
