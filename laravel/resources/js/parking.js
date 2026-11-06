@@ -30,15 +30,38 @@ function initParking() {
     });
     const select = document.querySelector('#parking-space-select');
     const selection = document.querySelector('#parking-selection');
+    const submit = document.querySelector('[data-parking-submit]');
+    const submitEnabled = submit && !submit.disabled;
     function syncSelection() {
-        selection.textContent = select.value ? `Espacio seleccionado: ${select.selectedOptions[0].textContent}` : 'Sin espacio seleccionado';
+        const code = select.value ? select.selectedOptions[0].textContent : '';
+        selection.textContent = code || selection.dataset.emptyText;
+        selection.classList.toggle('is-empty', !code);
+        if (submit) {
+            submit.textContent = code ? `Registrar entrada en ${code}` : 'Registrar entrada';
+            submit.disabled = !submitEnabled || !code;
+        }
         document.querySelectorAll('.parking-space-option').forEach((button) => button.classList.toggle('selected', button.dataset.spaceId === select.value));
         document.querySelector('[data-parking-scene]')?.dispatchEvent(new Event('selectionchange'));
     }
+    if (selection && !selection.classList.contains('is-empty')) selection.classList.add('pulse');
+    document.querySelectorAll('[data-parking-view]').forEach((tab) => tab.addEventListener('click', () => {
+        document.querySelectorAll('[data-parking-view]').forEach((other) => {
+            const active = other === tab;
+            other.classList.toggle('active', active);
+            other.setAttribute('aria-selected', String(active));
+        });
+        document.querySelectorAll('[data-parking-view-panel]').forEach((panel) => { panel.hidden = panel.dataset.parkingViewPanel !== tab.dataset.parkingView; });
+    }));
     document.querySelectorAll('.parking-space-option').forEach((button) => button.addEventListener('click', () => {
         if (button.dataset.stayUrl) { window.location.href = button.dataset.stayUrl; return; }
-        select.value = button.dataset.spaceId;
+        select.value = select.value === button.dataset.spaceId ? '' : button.dataset.spaceId;
         select.dispatchEvent(new Event('change', { bubbles: true }));
+        if (select.value) {
+            selection.classList.remove('pulse');
+            void selection.offsetWidth;
+            selection.classList.add('pulse');
+            document.querySelector('#parking-entry-form input[name="plate"]')?.focus({ preventScroll: true });
+        }
     }));
     select?.addEventListener('change', syncSelection);
     if (select) syncSelection();
@@ -57,7 +80,7 @@ function initParkingSelects() {
             dropdown.querySelector('.form-select-trigger').setAttribute('aria-expanded', 'false');
         });
     }
-    document.querySelectorAll('.parking-main select').forEach((select, index) => {
+    document.querySelectorAll('.parking-main select:not([data-plain-select])').forEach((select, index) => {
         select.classList.add('enhanced-native-select');
         select.setAttribute('aria-hidden', 'true');
         select.tabIndex = -1;

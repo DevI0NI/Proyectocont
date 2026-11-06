@@ -26,7 +26,7 @@ class RentalController extends Controller
         if ($location) {
             $spaces = DB::table('rental_spaces as s')->leftJoin('rental_stays as t', 't.active_space_id', '=', 's.id')
                 ->where('s.location_id', $location->id)->orderBy('s.id')
-                ->select('s.*', 't.id as stay_id', 't.plate', 't.driver')->get();
+                ->select('s.*', 't.id as stay_id', 't.plate', 't.driver', 't.entered_at')->get();
             $rate = DB::table('rental_rates')->where('location_id', $location->id)->orderByDesc('id')->first();
             $staysQuery = DB::table('rental_stays as t')->join('rental_spaces as s', 's.id', '=', 't.space_id')
                 ->where('t.location_id', $location->id)->select('t.*', 's.code as space_code');
