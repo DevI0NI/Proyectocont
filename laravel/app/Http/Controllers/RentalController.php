@@ -163,7 +163,9 @@ class RentalController extends Controller
             throw ValidationException::withMessages(['space_id' => 'El espacio o la placa ya tiene una estadia activa. Actualiza la vista.']);
         }
 
-        return redirect()->route('rentals.show', $id)->with('status', 'Entrada registrada.');
+        $stay = DB::table('rental_stays as t')->join('rental_spaces as s', 's.id', '=', 't.space_id')->where('t.id', $id)->select('t.location_id', 't.plate', 's.code')->first();
+
+        return redirect()->route('rentals.index', ['location' => $stay->location_id])->with('status', "Entrada registrada: {$stay->plate} en el espacio {$stay->code}.");
     }
 
     public function show(int $stay): View
@@ -173,7 +175,7 @@ class RentalController extends Controller
             ->select('t.*', 's.code as space_code', 'l.name as location_name')->first();
         abort_unless($record, 404);
         $quote = $this->parking->quote($record);
-        $events = DB::table('rental_events')->where('stay_id', $stay)->orderBy('id')->get();
+        $events = DB::table('rental_events as e')->leftJoin('users as u', 'u.id', '=', 'e.user_id')->where('e.stay_id', $stay)->orderBy('e.id')->select('e.*', 'u.username')->get();
 
         return view('rentals.show', ['stay' => $record, 'quote' => $quote, 'events' => $events]);
     }

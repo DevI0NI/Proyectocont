@@ -10,12 +10,19 @@
             <dl class="parking-detail-grid"><div><dt>Conductor</dt><dd>{{ $stay->driver }}</dd></div><div><dt>Cliente / empresa</dt><dd>{{ $stay->customer ?: 'No registrado' }}</dd></div><div><dt>Entrada</dt><dd>{{ $local($stay->entered_at) }}</dd></div><div><dt>Salida</dt><dd>{{ $stay->exited_at ? $local($stay->exited_at) : 'Pendiente de liquidacion' }}</dd></div><div><dt>Modalidad</dt><dd>{{ $stay->billing_unit === 'hour' ? 'Hora iniciada' : 'Dia iniciado (24 h)' }}</dd></div><div><dt>Tarifa de entrada</dt><dd>{{ $money($stay->rate_cents) }}</dd></div></dl>
             @if($stay->notes)<p class="parking-notes">{{ $stay->notes }}</p>@endif
             <h2>Historial</h2>
-            <ol class="parking-timeline">@foreach($events as $event)<li><strong>{{ $event->action }}</strong><span>{{ $local($event->created_at) }} · Usuario #{{ $event->user_id }}</span></li>@endforeach</ol>
+            <ol class="parking-timeline">@foreach($events as $event)<li><strong>{{ $event->action }}</strong><span>{{ $local($event->created_at) }} · {{ $event->username ?? 'Usuario #'.$event->user_id }}</span></li>@endforeach</ol>
         </div>
-        <div class="parking-settlement">
-            <span class="eyebrow">{{ $stay->exited_at ? 'Total liquidado' : 'Liquidacion estimada' }}</span>
-            <strong class="parking-total">{{ $money($stay->exited_at ? $stay->total_cents : $quote['total_cents']) }}</strong>
-            <dl><div><dt>Permanencia</dt><dd>{{ intdiv($quote['seconds'], 3600) }} h {{ intdiv($quote['seconds'] % 3600, 60) }} min</dd></div><div><dt>Periodos cobrables</dt><dd>{{ $stay->exited_at ? $stay->billable_units : $quote['units'] }} {{ $stay->billing_unit === 'hour' ? 'hora(s)' : 'dia(s)' }}</dd></div></dl>
+        @php
+            $period = $stay->billing_unit === 'hour' ? 3600 : 86400;
+            $nextCharge = $period - ($quote['seconds'] % $period);
+        @endphp
+        <div class="parking-settlement" @unless($stay->exited_at) data-parking-live data-seconds="{{ $quote['seconds'] }}" data-period="{{ $period }}" data-rate="{{ $stay->rate_cents }}" data-currency="{{ $stay->currency }}" @endunless>
+            <span class="eyebrow">{{ $stay->exited_at ? 'Total liquidado' : 'Total a cobrar ahora' }}</span>
+            <strong class="parking-total" data-live-total>{{ $money($stay->exited_at ? $stay->total_cents : $quote['total_cents']) }}</strong>
+            <dl><div><dt>Tiempo dentro</dt><dd data-live-elapsed>{{ intdiv($quote['seconds'], 3600) }} h {{ str_pad(intdiv($quote['seconds'] % 3600, 60), 2, '0', STR_PAD_LEFT) }} min</dd></div><div><dt>Periodos cobrables</dt><dd data-live-units>{{ $stay->exited_at ? $stay->billable_units : $quote['units'] }} {{ $stay->billing_unit === 'hour' ? 'hora(s)' : 'dia(s)' }}</dd></div></dl>
+            @unless($stay->exited_at)
+                <p class="parking-next-charge"><span class="parking-live-dot" aria-hidden="true"></span>En vivo · El siguiente {{ $stay->billing_unit === 'hour' ? 'periodo' : 'dia' }} se cobra en <strong data-live-next>{{ intdiv($nextCharge, 3600) }} h {{ str_pad(intdiv($nextCharge % 3600, 60), 2, '0', STR_PAD_LEFT) }} min</strong></p>
+            @endunless
             @if($stay->exited_at)
                 <span class="parking-state available">Liquidada · Espacio liberado</span><p>{{ $stay->payment_method === 'cash' ? 'Efectivo' : 'Transferencia' }} @if($stay->payment_reference)· {{ $stay->payment_reference }}@endif</p><small>Constancia operativa de cobro. No sustituye una factura fiscal.</small>
             @else
@@ -25,10 +32,9 @@
                     <label>Referencia<input name="payment_reference" maxlength="100" value="{{ old('payment_reference') }}" data-payment-reference></label>
                     <label class="parking-check"><input type="checkbox" name="payment_confirmed" value="1" required> Confirmo que el pago fue recibido</label>
                     <button type="submit" class="button">Liquidar y registrar salida</button>
-                    <a class="parking-refresh" href="{{ route('rentals.show', $stay->id) }}">Actualizar calculo</a>
                 </form>
             @endif
         </div>
     </section>
-    <dialog class="parking-dialog" data-settlement-dialog aria-labelledby="settlement-title"><span class="eyebrow">Confirmar liquidacion</span><h2 id="settlement-title">Registrar salida de {{ $stay->plate }}?</h2><p>Se registrara el pago de {{ $money($quote['total_cents']) }} y se liberara el espacio {{ $stay->space_code }}.</p><div class="parking-actions"><button type="button" class="button secondary" data-dialog-close>Volver</button><button type="button" class="button" data-settlement-confirm>Confirmar salida</button></div></dialog>
+    <dialog class="parking-dialog" data-settlement-dialog aria-labelledby="settlement-title"><span class="eyebrow">Confirmar liquidacion</span><h2 id="settlement-title">Registrar salida de {{ $stay->plate }}?</h2><p>Se registrara el pago de <strong data-live-total>{{ $money($quote['total_cents']) }}</strong> y se liberara el espacio {{ $stay->space_code }}.</p><div class="parking-actions"><button type="button" class="button secondary" data-dialog-close>Volver</button><button type="button" class="button" data-settlement-confirm>Confirmar salida</button></div></dialog>
 @endsection

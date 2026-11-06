@@ -50,7 +50,9 @@
                             <span class="parking-tile-code">{{ $space->code }}</span>
                             @if($state === 'occupied')
                                 <strong class="parking-tile-plate">{{ $space->plate }}</strong>
-                                <small>Desde {{ \Carbon\CarbonImmutable::parse($space->entered_at, 'UTC')->setTimezone('America/Guatemala')->format('d/m H:i') }}</small>
+                                @php $enteredAt = \Carbon\CarbonImmutable::parse($space->entered_at, 'UTC'); $insideSeconds = max(0, now('UTC')->getTimestamp() - $enteredAt->getTimestamp()); @endphp
+                                <small>Desde {{ $enteredAt->setTimezone('America/Guatemala')->format('d/m H:i') }}</small>
+                                <small class="parking-tile-elapsed" data-live-since="{{ $insideSeconds }}">{{ intdiv($insideSeconds, 3600) }} h {{ str_pad(intdiv($insideSeconds % 3600, 60), 2, '0', STR_PAD_LEFT) }} min dentro</small>
                                 <span class="parking-tile-action">Cobrar salida</span>
                             @elseif($state === 'maintenance')
                                 <small>Bloqueado</small>

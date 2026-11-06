@@ -86,7 +86,10 @@ class RentalParkingTest extends TestCase
     {
         $this->travelTo(CarbonImmutable::parse('2026-10-06 12:00:00', 'UTC'));
         [$location, $space] = $this->fixture();
-        $this->actingAs($this->user())->post('/rentas/estadias', [...$this->entry($space), 'plate' => 'c-123 abc', 'rate_cents' => 1, 'entered_at' => '2000-01-01'])->assertSessionHasNoErrors();
+        $this->actingAs($this->user())->post('/rentas/estadias', [...$this->entry($space), 'plate' => 'c-123 abc', 'rate_cents' => 1, 'entered_at' => '2000-01-01'])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('rentals.index', ['location' => $location]))
+            ->assertSessionHas('status', 'Entrada registrada: C123ABC en el espacio A-01.');
         $stay = DB::table('rental_stays')->first();
         $this->assertSame('C123ABC', $stay->plate);
         $this->assertSame(1000, $stay->rate_cents);
@@ -94,7 +97,15 @@ class RentalParkingTest extends TestCase
             ->assertSee('parking-tile parking-space-option occupied', false)
             ->assertSee('C123ABC')
             ->assertSee('Desde 06/10 06:00')
-            ->assertSee(route('rentals.show', $stay->id), false);
+            ->assertSee(route('rentals.show', $stay->id), false)
+            ->assertSee('data-live-since="0"', false);
+        $this->travelTo(CarbonImmutable::parse('2026-10-06 12:30:00', 'UTC'));
+        $this->get('/rentas/estadias/'.$stay->id)->assertOk()
+            ->assertSee('Total a cobrar ahora')
+            ->assertSee('data-seconds="1800"', false)
+            ->assertSee('se cobra en')
+            ->assertSee('0 h 30 min')
+            ->assertSee('06/10/2026 06:00 · QA');
         $this->post("/rentas/predios/$location/tarifas", ['hourly' => '99', 'daily' => '999'])->assertSessionHasNoErrors();
         $this->travelTo(CarbonImmutable::parse('2026-10-06 13:10:00', 'UTC'));
         $data = ['expected_total_cents' => 2000, 'payment_method' => 'cash'];

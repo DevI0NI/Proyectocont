@@ -116,6 +116,12 @@
 .parking-check { display:flex!important; align-items:center; gap:10px!important; font-weight:500!important; }
 .parking-check input { accent-color:var(--accent); width:18px; height:18px; }
 .parking-refresh { color:var(--accent); font-size:13px; text-align:center; }
+.parking-next-charge { display:flex; align-items:center; gap:8px; margin:-8px 0 22px; padding:10px 12px; border-radius:10px; background:color-mix(in srgb,var(--accent) 9%,transparent); color:var(--muted); font-size:12.5px; }
+.parking-next-charge strong { color:var(--ink); }
+.parking-live-dot { width:8px; height:8px; flex:0 0 8px; border-radius:50%; background:#14b8a6; box-shadow:0 0 0 0 #14b8a680; animation:parkingLivePulse 1.8s ease-out infinite; }
+@keyframes parkingLivePulse { 0% { box-shadow:0 0 0 0 #14b8a680; } 100% { box-shadow:0 0 0 8px #14b8a600; } }
+.parking-tile .parking-tile-elapsed { font-weight:750; opacity:.95; }
+@media (prefers-reduced-motion: reduce) { .parking-live-dot { animation:none; } }
 .parking-timeline { list-style:none; padding:0 0 0 18px; border-left:2px solid var(--line); }
 .parking-timeline li { position:relative; display:grid; gap:7px; padding:0 0 24px 12px; }
 .parking-timeline li::before { content:''; width:10px; height:10px; background:var(--accent); border-radius:50%; position:absolute; left:-24px; top:4px; }
@@ -214,3 +220,4 @@
 @media(max-width:1280px) { .parking-workspace { grid-template-columns:minmax(0, 1fr) 340px; } .parking-summary { grid-template-columns:repeat(3, minmax(0, 1fr)); } .parking-occupancy { grid-column:1 / -1; } }
 @media(prefers-reduced-motion: reduce) { .parking-tile, .parking-tile-action, .parking-occupancy-bar span { transition:none; } .parking-chosen.pulse { animation:none; } }
 @media print { @page { size:A4; margin:15mm; } .print-hidden, .parking-notice, .parking-dialog { display:none!important; } .parking-body { background:white; color:black; } .parking-main { padding:0; } .parking-stay-layout { display:block; } .parking-settlement { padding:20px 0; border-left:0; } .parking-body dt, .parking-body .eyebrow, .parking-body .table-muted { color:#444; } }
+.parking-plate-input::placeholder { text-transform:none; }

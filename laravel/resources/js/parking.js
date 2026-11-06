@@ -68,11 +68,47 @@ function initParking() {
     select?.addEventListener('change', syncSelection);
     if (select) syncSelection();
     initEntryChecks(document.querySelector('#parking-entry-form'));
+    initLiveTimers();
     const stage = document.querySelector('[data-parking-scene]');
     if (stage) {
         try { initScene(stage, select); }
         catch { stage.querySelector('.parking-map-error').hidden = false; }
     }
+}
+
+const pad = (value) => String(value).padStart(2, '0');
+const duration = (seconds, withSeconds = false) => {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const text = `${days ? `${days} d ` : ''}${days ? pad(hours) : hours} h ${pad(minutes)} min`;
+    return withSeconds ? `${text} ${pad(Math.floor(seconds % 60))} s` : text;
+};
+
+function initLiveTimers() {
+    const started = performance.now();
+    const elapsedSince = (base) => Number(base) + Math.floor((performance.now() - started) / 1000);
+    const tiles = [...document.querySelectorAll('[data-live-since]')];
+    const live = document.querySelector('[data-parking-live]');
+    if (!tiles.length && !live) return;
+    const money = live ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
+    const expected = document.querySelector('input[name="expected_total_cents"]');
+    const unitLabel = live && Number(live.dataset.period) === 3600 ? 'hora(s)' : 'dia(s)';
+    function tick() {
+        tiles.forEach((tile) => { tile.textContent = `${duration(elapsedSince(tile.dataset.liveSince))} dentro`; });
+        if (!live) return;
+        const seconds = elapsedSince(live.dataset.seconds);
+        const period = Number(live.dataset.period);
+        const units = Math.max(1, Math.ceil(seconds / period));
+        const total = units * Number(live.dataset.rate);
+        live.querySelector('[data-live-elapsed]').textContent = duration(seconds, true);
+        live.querySelector('[data-live-units]').textContent = `${units} ${unitLabel}`;
+        live.querySelector('[data-live-next]').textContent = duration(period - (seconds % period) || period);
+        document.querySelectorAll('[data-live-total]').forEach((node) => { node.textContent = `${live.dataset.currency} ${money.format(total / 100)}`; });
+        if (expected) expected.value = String(total);
+    }
+    tick();
+    setInterval(tick, 1000);
 }
 
 const platePattern = /^(?=(?:(?: |-)*[A-Z0-9]){6,8}$)(?=.*[0-9])[A-Z0-9]+(?:(?: |-)[A-Z0-9]+)*$/;
