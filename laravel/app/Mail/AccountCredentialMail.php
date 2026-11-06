@@ -20,7 +20,7 @@ class AccountCredentialMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            from: new Address((string) config('mail.mailers.account_credentials.username'), 'PROPORTSA'),
+            from: new Address((string) (config('mail.mailers.account_credentials.from_address') ?: config('mail.mailers.account_credentials.username')), 'PROPORTSA'),
             subject: 'PROPORTSA - Clave temporal de acceso',
         );
     }

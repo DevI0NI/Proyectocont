@@ -120,6 +120,16 @@ class AccountRecoveryTest extends UserManagementInterfaceTest
         $this->assertSame('image', $email->getAttachments()[0]->getMediaType());
     }
 
+    public function test_account_email_uses_the_configured_sender_and_falls_back_to_the_smtp_username(): void
+    {
+        config(['mail.mailers.account_credentials.username' => 'resend', 'mail.mailers.account_credentials.from_address' => 'noreply@proportsa.test']);
+        $this->assertSame('noreply@proportsa.test', (new AccountCredentialMail('codigo'))->envelope()->from->address);
+
+        config(['mail.mailers.account_credentials.username' => 'sender@example.test', 'mail.mailers.account_credentials.from_address' => null]);
+        $this->assertSame('sender@example.test', (new AccountCredentialMail('codigo'))->envelope()->from->address);
+        $this->assertSame('PROPORTSA', (new AccountCredentialMail('codigo'))->envelope()->from->name);
+    }
+
     public function test_account_recovery_is_a_filter_tab_with_counts_visible_only_to_superadmin(): void
     {
         $target = User::where('username', 'Local')->firstOrFail();
