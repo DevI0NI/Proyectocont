@@ -33,6 +33,7 @@ import './container-statuses';
 import './yard-layout';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { addContainerDetails, corrugatedTexture, createContainerDetailsGeometry, createContainerGeometry } from './container-model';
 
 document.addEventListener('click', (event) => {
     if (event.target instanceof Element && event.target.closest('.form-select-menu button, .form-select-trigger') && event.target.closest('label')) {
@@ -686,7 +687,10 @@ function initYard3d(canvas) {
     const slotWidth = 1.34;
     const rowDepth = 2.2;
     const boxHeight = 0.78;
-    const containerGeometry = new THREE.BoxGeometry(1.04, boxHeight, 1.28);
+    const containerGeometry = createContainerGeometry(0.98, boxHeight, 1.96);
+    const containerDetails = createContainerDetailsGeometry(0.98, boxHeight, 1.96);
+    const containerLineMaterial = new THREE.LineBasicMaterial({ color: 0x0a1a1e, transparent: true, opacity: 0.62 });
+    const dimmedLineMaterial = new THREE.LineBasicMaterial({ color: 0x0a1a1e, transparent: true, opacity: 0.12 });
     const containerMaterials = new Map();
     const materialForContainer = (container, isDimmed) => {
         const color = isDimmed ? dimmedContainerColor(isDark) : containerColor(container);
@@ -695,6 +699,7 @@ function initYard3d(canvas) {
         if (!containerMaterials.has(key)) {
             containerMaterials.set(key, new THREE.MeshStandardMaterial({
                 color,
+                map: corrugatedTexture(),
                 opacity: isDimmed ? 0.28 : 1,
                 roughness: 0.58,
                 metalness: 0.08,
@@ -707,6 +712,7 @@ function initYard3d(canvas) {
 
     const selectedContainerMaterial = new THREE.MeshStandardMaterial({
         color: 0x2f6df6,
+        map: corrugatedTexture(),
         emissive: 0x2f6df6,
         emissiveIntensity: 0.28,
         roughness: 0.5,
@@ -771,6 +777,7 @@ function initYard3d(canvas) {
             const mesh = new THREE.Mesh(containerGeometry, materialForContainer(container, isDimmed));
             mesh.position.set(x, 0.56 + (level * (boxHeight + 0.08)), z);
             mesh.userData = { container };
+            addContainerDetails(mesh, containerDetails, isDimmed ? dimmedLineMaterial : containerLineMaterial);
             scene.add(mesh);
             pickables.push(mesh);
         });
@@ -1266,15 +1273,19 @@ function initIngressLocation3d(canvas) {
     const selectedLabelSide = selectedPosition ? stackedLabelSide(selectedPosition) : 0;
 
     const pickables = [];
+    const ingressContainerGeometry = createContainerGeometry(0.98, boxHeight, 2.2);
+    const ingressContainerDetails = createContainerDetailsGeometry(0.98, boxHeight, 2.2);
+    const ingressLineMaterial = new THREE.LineBasicMaterial({ color: 0x0a1a1e, transparent: true, opacity: 0.55 });
     containers.forEach((container) => {
         const position = Number(container.posicion || 0);
         const selected = selectedPosition === position && String(data.selected_id) === String(container.id);
         const blocking = blockerPositions.has(position);
         const slot = slotForPosition(position);
         const mesh = new THREE.Mesh(
-            new THREE.BoxGeometry(1.0, boxHeight, 1.18),
+            ingressContainerGeometry,
             new THREE.MeshStandardMaterial({
                 color: selected ? 0xf7b844 : blocking ? 0xd15c55 : (isDark ? 0x31b996 : 0x149976),
+                map: corrugatedTexture(),
                 roughness: 0.58,
                 metalness: 0.08,
             }),
@@ -1287,6 +1298,7 @@ function initIngressLocation3d(canvas) {
                 posicion: position,
             },
         };
+        addContainerDetails(mesh, ingressContainerDetails, ingressLineMaterial);
         scene.add(mesh);
         pickables.push(mesh);
         if (!selected && !blocking) {
@@ -1340,7 +1352,9 @@ function initIngressLocation3d(canvas) {
         roughness: 0.48,
         metalness: 0.08,
     });
-    const previewMesh = new THREE.Mesh(new THREE.BoxGeometry(1.04, boxHeight, 1.22), previewMaterial);
+    previewMaterial.map = corrugatedTexture();
+    const previewMesh = new THREE.Mesh(createContainerGeometry(1.0, boxHeight, 2.24), previewMaterial);
+    addContainerDetails(previewMesh, createContainerDetailsGeometry(1.0, boxHeight, 2.24), new THREE.LineBasicMaterial({ color: 0x5c3700, transparent: true, opacity: 0.6 }));
     previewMesh.castShadow = true;
     previewMesh.position.set(previewSlot.x, previewSlot.y, 0);
     scene.add(previewMesh);

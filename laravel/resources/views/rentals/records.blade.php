@@ -1,20 +1,61 @@
 @extends('layouts.app')
 @section('content')
-    <section class="parking-hero">
-        <div>
-            <span class="eyebrow">Control de estadias</span>
-            <h1>Registros de parqueo</h1>
-            <p>Vehiculos que estan dentro del predio y estadias ya cobradas. Busca por placa o conductor.</p>
+@php($liveTable = true)
+<div class="administration-main containers-livewire-shell parking-records">
+<section class="panel-card containers-module standard-records-table" aria-label="Registros de parqueo">
+    <header class="containers-module-head">
+        <div class="view-header-copy"><h1>Registros de parqueo</h1><p>{{ $location->name }} · {{ $history ? 'Estadias ya cobradas' : 'Vehiculos dentro del predio' }}</p></div>
+        <div class="parking-records-actions">
+            <div class="admin-page-size admin-state-choice">
+                <span class="topbar-sucursal-label">Predio</span>
+                <div class="form-select-dropdown" data-admin-page-size>
+                    <button type="button" class="form-select-trigger" aria-expanded="false" aria-label="Predio de parqueo"><span>{{ $location->name }}</span><span data-admin-icon="chevron-down" aria-hidden="true"></span></button>
+                    <div class="form-select-menu">
+                        @foreach($locations as $item)
+                            <a class="topbar-dropdown-option {{ $location->id === $item->id ? 'selected' : '' }}" data-admin-page href="{{ route('rentals.records', ['location' => $item->id, 'tab' => $history ? 'history' : null]) }}">{{ $item->name }}</a>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+            <div class="admin-page-size admin-state-choice">
+                <span class="topbar-sucursal-label">Estado</span>
+                <div class="form-select-dropdown" data-admin-page-size>
+                    <button type="button" class="form-select-trigger" aria-expanded="false" aria-label="Estado de las estadias"><span>{{ $history ? 'Cobradas' : 'Dentro del predio' }}</span><span data-admin-icon="chevron-down" aria-hidden="true"></span></button>
+                    <div class="form-select-menu">
+                        <a class="topbar-dropdown-option {{ $history ? '' : 'selected' }}" data-admin-page href="{{ route('rentals.records', ['location' => $location->id]) }}">Dentro del predio</a>
+                        <a class="topbar-dropdown-option {{ $history ? 'selected' : '' }}" data-admin-page href="{{ route('rentals.records', ['location' => $location->id, 'tab' => 'history']) }}">Cobradas</a>
+                    </div>
+                </div>
+            </div>
+            <a class="button secondary" href="{{ route('rentals.index', ['location' => $location->id]) }}"><span data-admin-icon="chevron-left" aria-hidden="true"></span>Volver al plano</a>
         </div>
-        <div class="parking-hero-actions">
-            <form method="GET" action="{{ route('rentals.records') }}" class="parking-location-picker"><input type="hidden" name="tab" value="{{ $history ? 'history' : 'active' }}"><label>Predio<select name="location" data-parking-location>@foreach($locations as $item)<option value="{{ $item->id }}" @selected($location->id === $item->id)>{{ $item->name }}</option>@endforeach</select></label></form>
-            <a class="button secondary" href="{{ route('rentals.index', ['location' => $location->id]) }}"><span data-parking-icon="arrow-left"></span>Volver al plano</a>
+    </header>
+    <div class="containers-table-panel">
+        @include('partials.administration-toolbar', ['paginator' => $stays, 'clearKeys' => ['location', 'tab']])
+        <div class="containers-table-wrap" tabindex="0" role="region" aria-label="Estadias de parqueo">
+            <table class="containers-table">
+                <thead><tr>@include('partials.administration-table-head', ['actionsFirst' => true, 'actionsLabel' => 'Ver', 'defaultSort' => 'date', 'defaultOrder' => 'desc', 'containerFilters' => true])</tr></thead>
+                <tbody>
+                @forelse($stays as $stay)
+                    @php($local = fn ($time) => \Carbon\CarbonImmutable::parse($time, 'UTC')->setTimezone('America/Guatemala')->format('d/m/Y H:i'))
+                    <tr>
+                        <td data-label="Ver"><a class="button secondary" href="{{ route('rentals.show', ['stay' => $stay->id, 'return_to' => request()->getRequestUri()]) }}">{{ $stay->exited_at ? 'Comprobante' : 'Cobrar salida' }}</a></td>
+                        <td data-label="Entrada">{{ $local($stay->entered_at) }}</td>
+                        @if($history)<td data-label="Salida">{{ $local($stay->exited_at) }}</td>@endif
+                        <td data-label="Placa"><strong>{{ $stay->plate }}</strong></td>
+                        <td data-label="Conductor">{{ $stay->driver }}</td>
+                        <td data-label="Espacio">{{ $stay->space_code }}</td>
+                        <td data-label="Modalidad"><span class="status-badge {{ $stay->billing_unit === 'hour' ? 'badge-success' : 'badge-neutral' }}">{{ $stay->billing_label }}</span></td>
+                        <td data-label="{{ $history ? 'Total cobrado' : 'Tarifa' }}">{{ $stay->currency }} {{ number_format($stay->amount_cents / 100, 2) }}</td>
+                    </tr>
+                @empty
+                    <tr><td class="table-empty-cell" colspan="{{ count($tableColumns) + 1 }}">{{ $history ? 'No hay estadias cobradas para estos filtros.' : 'No hay vehiculos dentro del predio para estos filtros.' }}</td></tr>
+                @endforelse
+                </tbody>
+            </table>
         </div>
-    </section>
-
-    <section class="panel-card parking-register">
-        <div class="parking-register-toolbar"><nav class="parking-tabs" aria-label="Estadias"><a class="@unless($history) active @endunless" href="{{ route('rentals.records', ['location' => $location->id]) }}">Dentro del predio</a><a class="@if($history) active @endif" href="{{ route('rentals.records', ['location' => $location->id, 'tab' => 'history']) }}">Historial de cobros</a></nav><form method="GET" action="{{ route('rentals.records') }}" class="parking-search"><input type="hidden" name="location" value="{{ $location->id }}"><input type="hidden" name="tab" value="{{ $history ? 'history' : 'active' }}"><input name="q" maxlength="255" value="{{ request('q') }}" placeholder="Buscar placa o conductor" aria-label="Buscar placa o conductor"><button class="parking-icon" type="submit" title="Buscar" aria-label="Buscar"><span data-parking-icon="search"></span></button></form></div>
-        <div class="table-scroll"><table class="data-table parking-table"><thead><tr><th>Estadia</th><th>Placa</th><th>Conductor</th><th>Espacio</th><th>Entrada</th>@if($history)<th>Salida</th>@endif<th>Modalidad</th><th>{{ $history ? 'Total' : 'Tarifa' }}</th><th></th></tr></thead><tbody>@forelse($stays as $stay)<tr><td>#{{ str_pad($stay->id, 6, '0', STR_PAD_LEFT) }}</td><td><strong>{{ $stay->plate }}</strong></td><td>{{ $stay->driver }}</td><td>{{ $stay->space_code }}</td><td>{{ \Carbon\CarbonImmutable::parse($stay->entered_at, 'UTC')->setTimezone('America/Guatemala')->format('d/m/Y H:i') }}</td>@if($history)<td>{{ \Carbon\CarbonImmutable::parse($stay->exited_at, 'UTC')->setTimezone('America/Guatemala')->format('d/m/Y H:i') }}</td>@endif<td>{{ $stay->billing_unit === 'hour' ? 'Por hora' : 'Por dia' }}</td><td>{{ $stay->currency }} {{ number_format(($stay->exited_at ? $stay->total_cents : $stay->rate_cents) / 100, 2) }}</td><td><a class="button secondary" href="{{ route('rentals.show', $stay->id) }}">{{ $stay->exited_at ? 'Comprobante' : 'Cobrar salida' }}</a></td></tr>@empty<tr><td colspan="{{ $history ? 9 : 8 }}" class="parking-table-empty">{{ request('q') ? 'No hay resultados para esa busqueda.' : ($history ? 'Todavia no hay estadias cobradas.' : 'No hay vehiculos dentro del predio.') }}</td></tr>@endforelse</tbody></table></div>
-        {{ $stays->links() }}
-    </section>
+        @include('partials.administration-pagination', ['paginator' => $stays])
+    </div>
+</section>
+</div>
 @endsection

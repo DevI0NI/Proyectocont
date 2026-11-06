@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { documentaryTextError } from './documentary-validation.js';
 import { initializePlateInput } from './transport-plate-input.js';
-import { createElement, ArrowLeft, Settings, Sun, Truck, RotateCcw, Search, Printer, Monitor, List } from 'lucide';
+import { createElement, ArrowLeft, Settings, Sun, Truck, RotateCcw, Search, Printer, Monitor, List, Plus, ChevronRight } from 'lucide';
 
-const icons = { 'arrow-left': ArrowLeft, settings: Settings, sun: Sun, truck: Truck, 'rotate-ccw': RotateCcw, search: Search, printer: Printer, monitor: Monitor, list: List };
+const icons = { 'arrow-left': ArrowLeft, settings: Settings, sun: Sun, truck: Truck, 'rotate-ccw': RotateCcw, search: Search, printer: Printer, monitor: Monitor, list: List, plus: Plus, 'chevron-right': ChevronRight };
 let parkingInitialized = false;
 
 function initParking() {
@@ -25,7 +25,14 @@ function initParking() {
     const settlementForm = document.querySelector('[data-parking-settle]');
     const dialog = document.querySelector('[data-settlement-dialog]');
     settlementForm?.addEventListener('submit', (event) => { event.preventDefault(); dialog.showModal(); });
-    document.querySelector('[data-dialog-close]')?.addEventListener('click', () => dialog.close());
+    document.querySelectorAll('[data-dialog-close]').forEach((button) => button.addEventListener('click', () => button.closest('dialog')?.close()));
+    document.querySelectorAll('[data-dialog-open]').forEach((button) => button.addEventListener('click', () => {
+        const target = document.getElementById(button.dataset.dialogOpen);
+        target?.showModal();
+        target?.querySelector('input:not([type=hidden])')?.focus();
+    }));
+    document.querySelectorAll('dialog[data-open-on-load]').forEach((target) => target.showModal());
+    document.querySelectorAll('.parking-form-dialog').forEach((target) => target.addEventListener('click', (event) => { if (event.target === target) target.close(); }));
     document.querySelector('[data-settlement-confirm]')?.addEventListener('click', (event) => {
         event.currentTarget.disabled = true;
         settlementForm.submit();

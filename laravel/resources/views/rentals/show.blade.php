@@ -4,7 +4,7 @@
         $money = fn($cents) => $stay->currency.' '.number_format($cents / 100, 2);
         $local = fn($time) => \Carbon\CarbonImmutable::parse($time, 'UTC')->setTimezone('America/Guatemala')->format('d/m/Y H:i');
     @endphp
-    <div class="parking-heading"><div><span class="eyebrow">{{ $stay->exited_at ? 'Comprobante de liquidacion' : 'Estadia activa' }} · {{ $stay->location_name }}</span><h1>{{ $stay->plate }}</h1><span class="table-muted">Estadia #{{ str_pad($stay->id, 6, '0', STR_PAD_LEFT) }} · Espacio {{ $stay->space_code }}</span></div><div class="parking-actions print-hidden"><a class="button secondary" href="{{ route('rentals.index', ['location' => $stay->location_id]) }}">Volver</a>@if($stay->exited_at)<button class="button" type="button" data-parking-print><span data-parking-icon="printer"></span>Imprimir</button>@endif</div></div>
+    <div class="parking-heading"><div><span class="eyebrow">{{ $stay->exited_at ? 'Comprobante de liquidacion' : 'Estadia activa' }} · {{ $stay->location_name }}</span><h1>{{ $stay->plate }}</h1><span class="table-muted">Estadia #{{ str_pad($stay->id, 6, '0', STR_PAD_LEFT) }} · Espacio {{ $stay->space_code }}</span></div><div class="parking-actions print-hidden"><a class="button secondary" href="{{ $backUrl }}"><span data-parking-icon="arrow-left"></span>{{ $backLabel }}</a>@if($stay->exited_at)<button class="button" type="button" data-parking-print><span data-parking-icon="printer"></span>Imprimir</button>@endif</div></div>
     <section class="parking-stay-layout">
         <div>
             <dl class="parking-detail-grid"><div><dt>Conductor</dt><dd>{{ $stay->driver }}</dd></div><div><dt>Cliente / empresa</dt><dd>{{ $stay->customer ?: 'No registrado' }}</dd></div><div><dt>Entrada</dt><dd>{{ $local($stay->entered_at) }}</dd></div><div><dt>Salida</dt><dd>{{ $stay->exited_at ? $local($stay->exited_at) : 'Pendiente de liquidacion' }}</dd></div><div><dt>Modalidad</dt><dd>{{ $stay->billing_unit === 'hour' ? 'Hora iniciada' : 'Dia iniciado (24 h)' }}</dd></div><div><dt>Tarifa de entrada</dt><dd>{{ $money($stay->rate_cents) }}</dd></div></dl>
@@ -27,6 +27,7 @@
                 <span class="parking-state available">Liquidada · Espacio liberado</span><p>{{ $stay->payment_method === 'cash' ? 'Efectivo' : 'Transferencia' }} @if($stay->payment_reference)· {{ $stay->payment_reference }}@endif</p><small>Constancia operativa de cobro. No sustituye una factura fiscal.</small>
             @else
                 <form method="POST" action="{{ route('rentals.settle', $stay->id) }}" class="parking-form" data-parking-settle>@csrf
+                    @if($returnTo)<input type="hidden" name="return_to" value="{{ $returnTo }}">@endif
                     <input type="hidden" name="expected_total_cents" value="{{ $quote['total_cents'] }}">
                     <label>Medio de pago<select name="payment_method" data-payment-method><option value="cash">Efectivo</option><option value="transfer">Transferencia</option></select></label>
                     <label>Referencia<input name="payment_reference" maxlength="100" value="{{ old('payment_reference') }}" data-payment-reference></label>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Rules\DocumentaryText;
+use App\Services\AdministrationTable;
 use App\Services\RentalParkingService;
 use App\Services\TransportPlate;
 use Illuminate\Database\QueryException;
@@ -35,24 +36,33 @@ class RentalController extends Controller
 
     public function records(Request $request): View|RedirectResponse
     {
-        $request->validate(['q' => ['nullable', 'string', 'max:255']]);
         $locations = DB::table('rental_locations')->orderBy('name')->get();
         $location = $locations->firstWhere('id', (int) $request->query('location', $locations->first()?->id));
         if (! $location) {
             return redirect()->route('rentals.index');
         }
         $history = $request->query('tab') === 'history';
+        $scope = $history ? 'parking-history' : 'parking-stays';
         $staysQuery = DB::table('rental_stays as t')->join('rental_spaces as s', 's.id', '=', 't.space_id')
-            ->where('t.location_id', $location->id)->select('t.*', 's.code as space_code');
-        $history ? $staysQuery->whereNotNull('t.exited_at') : $staysQuery->whereNull('t.exited_at');
-        if ($search = trim((string) $request->query('q', ''))) {
-            $staysQuery->where(function ($query) use ($search): void {
-                $query->where('t.plate', 'like', '%'.$search.'%')->orWhere('t.driver', 'like', '%'.$search.'%');
-            });
-        }
-        $stays = $staysQuery->orderByDesc('t.id')->paginate(15)->withQueryString();
+            ->where('t.location_id', $location->id)
+            ->when($history, fn ($query) => $query->whereNotNull('t.exited_at'), fn ($query) => $query->whereNull('t.exited_at'))
+            ->select('t.*', 's.code as space_code')
+            ->selectRaw("CASE t.billing_unit WHEN 'hour' THEN 'Por hora' ELSE 'Por dia' END as billing_label")
+            ->selectRaw('CASE WHEN t.exited_at IS NULL THEN t.rate_cents ELSE t.total_cents END as amount_cents');
+        $table = DB::query()->fromSub($staysQuery, 'parking_stays')->select('parking_stays.*');
+        $filterOptions = [
+            'space' => (clone $table)->distinct()->orderBy('space_code')->pluck('space_code', 'space_code')->all(),
+            'mode' => ['hour' => 'Por hora', 'day' => 'Por dia'],
+        ];
 
-        return view('rentals.records', compact('locations', 'location', 'stays', 'history'));
+        return view('rentals.records', [
+            'locations' => $locations,
+            'location' => $location,
+            'history' => $history,
+            'stays' => AdministrationTable::paginate($table, $request, $scope, 'parking_stays'),
+            'tableColumns' => AdministrationTable::columns($scope),
+            'filterOptions' => $filterOptions,
+        ]);
     }
 
     public function spaces(): RedirectResponse
@@ -63,10 +73,22 @@ class RentalController extends Controller
     public function settings(): View
     {
         $locations = DB::table('rental_locations')->orderBy('name')->get();
-        $spaces = DB::table('rental_spaces')->orderBy('id')->get()->groupBy('location_id');
+        $spaceCounts = DB::table('rental_spaces')->select('location_id', 'status', DB::raw('COUNT(*) as total'))->groupBy('location_id', 'status')->get()->groupBy('location_id');
+        $occupied = DB::table('rental_stays')->whereNull('exited_at')->select('location_id', DB::raw('COUNT(*) as total'))->groupBy('location_id')->pluck('total', 'location_id');
         $rates = DB::table('rental_rates')->orderByDesc('id')->get()->unique('location_id')->keyBy('location_id');
 
-        return view('rentals.settings', compact('locations', 'spaces', 'rates'));
+        return view('rentals.settings', compact('locations', 'spaceCounts', 'occupied', 'rates'));
+    }
+
+    public function locationSettings(int $location): View
+    {
+        $record = DB::table('rental_locations')->where('id', $location)->first();
+        abort_unless($record, 404);
+        $spaces = DB::table('rental_spaces as s')->leftJoin('rental_stays as t', 't.active_space_id', '=', 's.id')
+            ->where('s.location_id', $location)->orderBy('s.id')->select('s.*', 't.plate')->get();
+        $rate = DB::table('rental_rates')->where('location_id', $location)->orderByDesc('id')->first();
+
+        return view('rentals.location-settings', ['location' => $record, 'spaces' => $spaces, 'rate' => $rate]);
     }
 
     public function storeLocation(Request $request): RedirectResponse
@@ -76,12 +98,14 @@ class RentalController extends Controller
             'address' => ['nullable', 'string', 'max:200'],
             'currency' => ['required', Rule::in(['GTQ', 'USD'])],
         ]);
-        DB::transaction(function () use ($data, $request): void {
+        $id = DB::transaction(function () use ($data, $request): int {
             $id = DB::table('rental_locations')->insertGetId([...$data, 'created_at' => now(), 'updated_at' => now()]);
             $this->parking->event($id, null, $request->user()->id, 'Predio creado', $data);
+
+            return $id;
         });
 
-        return back()->with('status', 'Predio de parqueo creado.');
+        return redirect()->route('rentals.settings.location', $id)->with('status', 'Predio creado. Ahora agrega sus espacios y tarifas.');
     }
 
     public function storeSpaces(Request $request, int $location): RedirectResponse
@@ -175,7 +199,7 @@ class RentalController extends Controller
         return redirect()->route('rentals.index', ['location' => $stay->location_id])->with('status', "Entrada registrada: {$stay->plate} en el espacio {$stay->code}.");
     }
 
-    public function show(int $stay): View
+    public function show(Request $request, int $stay): View
     {
         $record = DB::table('rental_stays as t')->join('rental_spaces as s', 's.id', '=', 't.space_id')
             ->join('rental_locations as l', 'l.id', '=', 't.location_id')->where('t.id', $stay)
@@ -184,7 +208,28 @@ class RentalController extends Controller
         $quote = $this->parking->quote($record);
         $events = DB::table('rental_events as e')->leftJoin('users as u', 'u.id', '=', 'e.user_id')->where('e.stay_id', $stay)->orderBy('e.id')->select('e.*', 'u.username')->get();
 
-        return view('rentals.show', ['stay' => $record, 'quote' => $quote, 'events' => $events]);
+        $returnTo = $this->recordsReturn($request->query('return_to'));
+
+        return view('rentals.show', [
+            'stay' => $record,
+            'quote' => $quote,
+            'events' => $events,
+            'returnTo' => $returnTo,
+            'backUrl' => $returnTo ?? route('rentals.index', ['location' => $record->location_id]),
+            'backLabel' => $returnTo ? 'Volver a registros' : 'Volver al plano',
+        ]);
+    }
+
+    /**
+     * Only a path to the parking records page is accepted, so the back button cannot leave the site.
+     */
+    private function recordsReturn(mixed $value): ?string
+    {
+        if (! is_string($value) || ! preg_match('#^/rentas/registros(\?[^\s]*)?$#', $value)) {
+            return null;
+        }
+
+        return mb_substr($value, 0, 500);
     }
 
     public function settle(Request $request, int $stay): RedirectResponse
@@ -197,6 +242,7 @@ class RentalController extends Controller
         ]);
         $this->parking->settle($stay, $data, $request->user()->id);
 
-        return redirect()->route('rentals.show', $stay)->with('status', 'Liquidacion registrada y espacio liberado.');
+        return redirect()->route('rentals.show', array_filter(['stay' => $stay, 'return_to' => $this->recordsReturn($request->input('return_to'))]))
+            ->with('status', 'Liquidacion registrada y espacio liberado.');
     }
 }

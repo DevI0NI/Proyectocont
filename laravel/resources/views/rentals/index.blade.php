@@ -35,7 +35,7 @@
         </section>
 
         @if(! $rate)
-            <div class="parking-warning parking-warning-card"><span><strong>Falta configurar las tarifas de este predio.</strong> Sin tarifas no se pueden registrar entradas.</span><a class="button" href="{{ route('rentals.settings') }}">Configurar tarifas</a></div>
+            <div class="parking-warning parking-warning-card"><span><strong>Falta configurar las tarifas de este predio.</strong> Sin tarifas no se pueden registrar entradas.</span><a class="button" href="{{ route('rentals.settings.location', $location->id) }}">Configurar tarifas</a></div>
         @endif
 
         <section class="parking-workspace">

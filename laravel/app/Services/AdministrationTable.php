@@ -34,6 +34,15 @@ class AdministrationTable
                 $column('status', 'Estado', 'repair_history.status_label') + ['filter_field' => 'repair_history.status'],
                 $column('corrections', 'Correcciones de auditoría', 'repair_history.correction_count') + ['numeric' => true, 'description' => 'Número de rondas de corrección solicitadas por la auditora para esta reparación.'],
             ],
+            'parking-stays', 'parking-history' => array_values(array_filter([
+                $column('date', 'Entrada', 'parking_stays.entered_at'),
+                $scope === 'parking-history' ? $column('exit', 'Salida', 'parking_stays.exited_at') : null,
+                $column('plate', 'Placa', 'parking_stays.plate'),
+                $column('driver', 'Conductor', 'parking_stays.driver'),
+                $column('space', 'Espacio', 'parking_stays.space_code') + ['filter_field' => 'parking_stays.space_code'],
+                $column('mode', 'Modalidad', 'parking_stays.billing_label') + ['filter_field' => 'parking_stays.billing_unit'],
+                $column('amount', $scope === 'parking-history' ? 'Total cobrado' : 'Tarifa', 'parking_stays.amount_cents') + ['numeric' => true],
+            ])),
             'branches' => [$column('name', 'Nombre', 'sucursales.nombre'), $column('location', 'Ubicacion', ['sucursales.ubicacion', 'sucursales.direccion'])],
             'users' => [
                 $column('name', 'Usuario', 'users.username'), $column('email', 'Correo', 'users.email'),
@@ -106,7 +115,7 @@ class AdministrationTable
             }
         }
         $sortableColumns = collect($columns)->filter(fn (array $column) => $column['sortable'] ?? true);
-        $history = in_array($scope, ['repair-history', 'audit-history', 'correction-history'], true);
+        $history = in_array($scope, ['repair-history', 'audit-history', 'correction-history', 'parking-stays', 'parking-history'], true);
         $defaultSort = $history ? 'date' : 'name';
         $sort = $sortableColumns->firstWhere('key', $request->query('sort')) ?? $sortableColumns->firstWhere('key', $defaultSort);
         $direction = $request->query('order', $history ? 'desc' : 'asc') === 'desc' ? 'desc' : 'asc';

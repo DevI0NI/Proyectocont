@@ -42,7 +42,7 @@ class RentalParkingTest extends TestCase
         $this->get('/rentas')->assertRedirect('/login');
         foreach ([2, 3, 4, 5] as $role) {
             $this->actingAs($this->user($role));
-            foreach (['/rentas', '/rentas/registros', '/rentas/configuracion', '/rentas/espacios', '/rentas/estadias/1'] as $path) {
+            foreach (['/rentas', '/rentas/registros', '/rentas/configuracion', '/rentas/configuracion/1', '/rentas/espacios', '/rentas/estadias/1'] as $path) {
                 $this->get($path)->assertForbidden();
             }
             foreach (['/rentas/predios', '/rentas/estadias', '/rentas/predios/1/tarifas', '/rentas/predios/1/espacios', '/rentas/estadias/1/liquidar'] as $path) {
@@ -55,15 +55,20 @@ class RentalParkingTest extends TestCase
 
     public function test_configuration_uses_independent_locations_and_records_events(): void
     {
-        $this->actingAs($this->user())->post('/rentas/predios', ['name' => 'Predio independiente', 'currency' => 'GTQ'])->assertSessionHasNoErrors();
+        $this->actingAs($this->user())->get('/rentas/configuracion')->assertOk()->assertSee('Todavia no hay predios')->assertSee('data-dialog-open="parking-location-dialog"', false);
+        $this->from('/rentas/configuracion')->followingRedirects()->post('/rentas/predios', ['name' => '', 'currency' => 'GTQ'])->assertOk()->assertSee('data-open-on-load', false);
+        $response = $this->post('/rentas/predios', ['name' => 'Predio independiente', 'currency' => 'GTQ'])->assertSessionHasNoErrors();
         $id = DB::table('rental_locations')->value('id');
+        $response->assertRedirect(route('rentals.settings.location', $id));
+        $this->get('/rentas/configuracion/999')->assertNotFound();
         $this->post("/rentas/predios/$id/espacios", ['prefix' => 'A', 'quantity' => 2])->assertSessionHasNoErrors();
         $this->post("/rentas/predios/$id/espacios", ['prefix' => 'A', 'quantity' => 1])->assertSessionHasNoErrors();
         $this->assertDatabaseHas('rental_spaces', ['code' => 'A-03']);
         $this->post("/rentas/predios/$id/tarifas", ['hourly' => '12.50', 'daily' => '100.01'])->assertSessionHasNoErrors();
         $this->assertDatabaseHas('rental_rates', ['hourly_cents' => 1250, 'daily_cents' => 10001]);
         $this->get('/rentas?location='.$id)->assertOk()->assertSee('Predio independiente');
-        $this->get('/rentas/configuracion')->assertOk();
+        $this->get('/rentas/configuracion')->assertOk()->assertSee('Predio independiente')->assertSee(route('rentals.settings.location', $id), false)->assertSee('GTQ 12.50 / hora')->assertDontSee('data-open-on-load', false);
+        $this->get('/rentas/configuracion/'.$id)->assertOk()->assertSee('Predio independiente')->assertSee('A-03')->assertSee('value="12.50"', false)->assertSee('Bloquear');
         $this->assertDatabaseCount('rental_events', 4);
     }
 
@@ -111,16 +116,23 @@ class RentalParkingTest extends TestCase
         $data = ['expected_total_cents' => 2000, 'payment_method' => 'cash'];
         $this->post("/rentas/estadias/$stay->id/liquidar", $data)->assertSessionHasErrors('payment_confirmed');
         $this->post("/rentas/estadias/$stay->id/liquidar", [...$data, 'payment_method' => 'transfer', 'payment_confirmed' => 1])->assertSessionHasErrors('payment_reference');
-        $this->post("/rentas/estadias/$stay->id/liquidar", [...$data, 'payment_confirmed' => 1])->assertSessionHasNoErrors();
+        $back = '/rentas/registros?location='.$location;
+        $this->get('/rentas/estadias/'.$stay->id.'?return_to='.urlencode($back))->assertOk()->assertSee('Volver a registros')->assertSee('href="'.e($back).'"', false);
+        $this->get('/rentas/estadias/'.$stay->id.'?return_to='.urlencode('https://evil.example/rentas/registros'))->assertOk()->assertSee('Volver al plano')->assertDontSee('evil.example');
+        $this->post("/rentas/estadias/$stay->id/liquidar", [...$data, 'payment_confirmed' => 1, 'return_to' => $back])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('rentals.show', ['stay' => $stay->id, 'return_to' => $back]));
         $this->assertDatabaseHas('rental_stays', ['id' => $stay->id, 'total_cents' => 2000, 'billable_units' => 2, 'active_space_id' => null, 'active_plate' => null, 'closed_by' => 77]);
         $this->get('/rentas/estadias/'.$stay->id)->assertOk()->assertSee('Total liquidado')->assertSee('20.00');
         $this->post("/rentas/estadias/$stay->id/liquidar", [...$data, 'payment_confirmed' => 1])->assertSessionHasErrors('settlement');
         $this->post('/rentas/estadias', $this->entry($space))->assertSessionHasNoErrors();
         $this->assertDatabaseCount('rental_stays', 2);
         $this->get('/rentas?location='.$location)->assertOk()->assertDontSee('parking-register', false)->assertSee(route('rentals.records', ['location' => $location]), false);
-        $this->get('/rentas/registros?location='.$location)->assertOk()->assertSee('Dentro del predio')->assertSee('C123ABC')->assertSee('Cobrar salida');
-        $this->get('/rentas/registros?location='.$location.'&tab=history')->assertOk()->assertSee('Historial de cobros')->assertSee('Comprobante')->assertSee('GTQ 20.00');
-        $this->get('/rentas/registros?location='.$location.'&tab=history&q=NOEXISTE')->assertOk()->assertSee('No hay resultados para esa busqueda.');
+        $this->get('/rentas/registros?location='.$location)->assertOk()->assertSee('Dentro del predio')->assertSee('C123ABC')->assertSee('Cobrar salida')->assertSee('containers-table', false)->assertSee('Pagina 1 de 1');
+        $this->get('/rentas/registros?location='.$location.'&tab=history')->assertOk()->assertSee('Cobradas')->assertSee('Total cobrado')->assertSee('Comprobante')->assertSee('GTQ 20.00');
+        $this->get('/rentas/registros?location='.$location.'&tab=history&q=NOEXISTE')->assertOk()->assertSee('No hay estadias cobradas para estos filtros.');
+        $this->get('/rentas/registros?location='.$location.'&tab=history&filters[mode]=day')->assertOk()->assertDontSee('Comprobante');
+        $this->get('/rentas/registros?location='.$location.'&tab=history&filters[space]=A-01&sort=plate&order=asc')->assertOk()->assertSee('Comprobante');
         $this->travelBack();
     }
 
