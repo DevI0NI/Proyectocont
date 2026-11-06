@@ -25,6 +25,7 @@ import './user-modals';
 import './account-password';
 import './account-recovery-dialog';
 import './account-flash';
+import './login-background';
 import './account-review-modal';
 import './unit-types';
 import './shipping-lines';
