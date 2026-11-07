@@ -49,6 +49,7 @@ class RentalParkingTest extends TestCase
                 $this->post($path, [])->assertForbidden();
             }
             $this->patch('/rentas/espacios/1', ['status' => 'available'])->assertForbidden();
+            $this->delete('/rentas/espacios/1')->assertForbidden();
         }
         $this->actingAs($this->user())->get('/rentas')->assertOk()->assertSee('Configura tu primer predio');
     }
@@ -178,6 +179,95 @@ class RentalParkingTest extends TestCase
         $this->assertDatabaseCount('rental_stays', 0);
         $this->post('/rentas/estadias', [...$this->entry($space), 'plate' => 'tc-12 abc', 'driver' => 'José Pérez', 'customer' => 'Transportes Izabal, S.A.'])->assertSessionHasNoErrors();
         $this->assertDatabaseHas('rental_stays', ['plate' => 'TC12ABC', 'driver' => 'José Pérez']);
+    }
+
+    public function test_only_the_last_space_of_a_row_can_be_removed_without_losing_history(): void
+    {
+        [$location, $first] = $this->fixture();
+        $this->actingAs($this->user())->post("/rentas/predios/$location/espacios", ['prefix' => 'A', 'quantity' => 2])->assertSessionHasNoErrors();
+        $this->post("/rentas/predios/$location/espacios", ['prefix' => 'B', 'quantity' => 1])->assertSessionHasNoErrors();
+        [$second, $third, $otherRow] = ['A-02', 'A-03', 'B-01'];
+        $ids = DB::table('rental_spaces')->pluck('id', 'code');
+        $this->get('/rentas/configuracion/'.$location)->assertOk()->assertSee('ya tiene <strong>4 espacios</strong>', false)->assertDontSee('value="10"', false)
+            ->assertSee('(A-03, B-01)')->assertSee('data-url="'.route('rentals.spaces.destroy', $ids[$third]).'"', false)->assertSee('data-url="'.route('rentals.spaces.destroy', $ids[$otherRow]).'"', false)
+            ->assertDontSee('data-url="'.route('rentals.spaces.destroy', $ids[$second]).'"', false);
+
+        $this->delete('/rentas/espacios/'.$ids[$second])->assertSessionHasErrors(['space' => 'Solo puedes quitar el ultimo espacio de la fila A (A-03), para que no queden huecos. Si A-02 no se puede usar, bloquealo.']);
+        $this->post('/rentas/estadias', $this->entry($first))->assertSessionHasNoErrors();
+        $this->delete('/rentas/espacios/'.$ids[$third])->assertSessionHasNoErrors()->assertSessionHas('status', 'Espacio A-03 quitado del predio.');
+        $this->delete('/rentas/espacios/'.$ids[$second])->assertSessionHasNoErrors();
+        $this->assertDatabaseMissing('rental_spaces', ['code' => 'A-02']);
+        $this->delete('/rentas/espacios/'.$first)->assertSessionHasErrors('space');
+        $stay = DB::table('rental_stays')->first();
+        $this->post("/rentas/estadias/$stay->id/liquidar", ['expected_total_cents' => 1000, 'payment_method' => 'cash', 'payment_confirmed' => 1])->assertSessionHasNoErrors();
+        $this->delete('/rentas/espacios/'.$first)->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('rental_spaces', ['id' => $first, 'status' => 'retired']);
+        $this->delete('/rentas/espacios/'.$first)->assertNotFound();
+        $this->patch('/rentas/espacios/'.$first, ['status' => 'maintenance'])->assertNotFound();
+        $this->post('/rentas/estadias', [...$this->entry($first), 'plate' => 'C555XYZ'])->assertSessionHasErrors('space_id');
+
+        $this->get('/rentas?location='.$location)->assertOk()->assertDontSee('data-space-code="A-01"', false)->assertSee('data-space-code="B-01"', false);
+        $this->get('/rentas/estadias/'.$stay->id)->assertOk()->assertSee('Espacio A-01');
+        $this->get('/rentas/registros?location='.$location.'&tab=history')->assertOk()->assertSee('A-01');
+
+        $this->post("/rentas/predios/$location/espacios", ['prefix' => 'A', 'quantity' => 2])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('rental_spaces', ['id' => $first, 'status' => 'available']);
+        $this->assertDatabaseHas('rental_spaces', ['code' => 'A-02', 'status' => 'available']);
+        $this->assertDatabaseCount('rental_spaces', 3);
+    }
+
+    public function test_space_settings_are_paginated_by_24(): void
+    {
+        [$location] = $this->fixture();
+        $this->actingAs($this->user())->post("/rentas/predios/$location/espacios", ['prefix' => 'A', 'quantity' => 29])->assertSessionHasNoErrors();
+        $this->get('/rentas/configuracion/'.$location)->assertOk()->assertSee('A-24')->assertDontSee('A-25')->assertSee('Pagina 1 de 2 · 30 espacios')->assertSee('Libre · 30');
+        $this->get('/rentas/configuracion/'.$location.'?page=2')->assertOk()->assertSee('A-30')->assertDontSee('>A-01<', false);
+    }
+
+    public function test_spaces_follow_their_code_order_after_being_added_back(): void
+    {
+        [$location] = $this->fixture();
+        $this->actingAs($this->user())->post("/rentas/predios/$location/espacios", ['prefix' => 'A', 'quantity' => 10])->assertSessionHasNoErrors();
+        DB::table('rental_spaces')->where('code', 'A-05')->delete();
+        $this->post("/rentas/predios/$location/espacios", ['prefix' => 'A', 'quantity' => 1])->assertSessionHasNoErrors();
+        $this->assertGreaterThan(DB::table('rental_spaces')->where('code', 'A-11')->value('id'), DB::table('rental_spaces')->where('code', 'A-05')->value('id'));
+        $this->get('/rentas?location='.$location)->assertOk()->assertSeeInOrder(['data-space-code="A-04"', 'data-space-code="A-05"', 'data-space-code="A-06"', 'data-space-code="A-11"'], false);
+        $this->get('/rentas/configuracion/'.$location)->assertOk()->assertSeeInOrder(['>A-04<', '>A-05<', '>A-06<', '>A-11<'], false);
+    }
+
+    public function test_settings_reject_invalid_rates_rows_and_location_data(): void
+    {
+        [$location] = $this->fixture();
+        $this->actingAs($this->user());
+        foreach (['10000000', '12.345', 'abc', '-5', ''] as $amount) {
+            $this->post("/rentas/predios/$location/tarifas", ['hourly' => $amount, 'daily' => '100'])->assertSessionHasErrors('hourly');
+        }
+        $this->post("/rentas/predios/$location/tarifas", ['hourly' => '50', 'daily' => '20'])->assertSessionHasErrors(['daily' => 'La tarifa por dia no puede ser menor que la tarifa por hora.']);
+        $this->post("/rentas/predios/$location/tarifas", ['hourly' => '999999.99', 'daily' => '999999.99'])->assertSessionHasNoErrors();
+
+        foreach (['A1', 'ABC', '1', '-'] as $prefix) {
+            $this->post("/rentas/predios/$location/espacios", ['prefix' => $prefix, 'quantity' => 1])->assertSessionHasErrors('prefix');
+        }
+        foreach (['0', '101', '2.5', 'diez'] as $quantity) {
+            $this->post("/rentas/predios/$location/espacios", ['prefix' => 'B', 'quantity' => $quantity])->assertSessionHasErrors('quantity');
+        }
+        $this->post("/rentas/predios/$location/espacios", ['prefix' => 'b', 'quantity' => 2])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('rental_spaces', ['code' => 'B-02']);
+        foreach (range(1, 4) as $round) {
+            $this->post("/rentas/predios/$location/espacios", ['prefix' => 'C', 'quantity' => 100])->assertSessionHasNoErrors();
+        }
+        $this->post("/rentas/predios/$location/espacios", ['prefix' => 'D', 'quantity' => 100])->assertSessionHasErrors(['quantity' => 'Un predio puede tener maximo 500 espacios. Puedes sumar 97 mas.']);
+
+        foreach (['', 'AB', '12345', '<script>', str_repeat('Predio ', 20)] as $name) {
+            $this->post('/rentas/predios', ['name' => $name, 'currency' => 'GTQ'])->assertSessionHasErrors('name');
+        }
+        $this->post('/rentas/predios', ['name' => 'Parqueo QA', 'currency' => 'GTQ'])->assertSessionHasErrors(['name' => 'Ya existe un predio con ese nombre.']);
+        foreach (['1234', '12345 67', 'Calle <b>', str_repeat('Calle ', 40)] as $address) {
+            $this->post('/rentas/predios', ['name' => 'Predio Norte', 'address' => $address, 'currency' => 'GTQ'])->assertSessionHasErrors('address');
+        }
+        $this->post('/rentas/predios', ['name' => 'Predio Norte', 'currency' => 'EUR'])->assertSessionHasErrors('currency');
+        $this->post('/rentas/predios', ['name' => '  Predio Norte  ', 'address' => '15 calle #4-20, zona 1', 'currency' => 'USD'])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('rental_locations', ['name' => 'Predio Norte', 'address' => '15 calle #4-20, zona 1']);
     }
 
     private function fixture(bool $withRate = true): array

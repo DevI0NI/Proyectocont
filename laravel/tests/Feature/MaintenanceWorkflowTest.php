@@ -1975,6 +1975,20 @@ class MaintenanceWorkflowTest extends TestCase
             });
     }
 
+    public function test_yard_scene_only_sends_the_selected_block(): void
+    {
+        $block = DB::table('bloques')->find(DB::table('contenedores')->where('id', $this->container)->value('bloque_id'));
+        $otherBlock = DB::table('bloques')->insertGetId(['numero' => 99, 'patio_id' => $block->patio_id, 'capacidad_maxima' => 25, 'capacidad_actual' => 0, 'estado_id' => 1]);
+        $activeBlocks = DB::table('bloques')->where('patio_id', $block->patio_id)->where('estado_id', 1)->count();
+        $this->actingAs($this->admin);
+        $table = Livewire::test(InventoryTable::class)->call('selectPatio', $block->patio_id)->call('setViewMode', 'yard3d');
+        $table->assertViewHas('yardScene', fn (array $scene): bool => count($scene['blocks']) === $activeBlocks && collect($scene['blocks'])->contains('id', $otherBlock));
+        $table->call('selectBlock', $block->id)->assertViewHas('yardScene', function (array $scene) use ($block): bool {
+            return count($scene['blocks']) === 1 && $scene['blocks'][0]['id'] === (int) $block->id && $scene['blocks'][0]['selected']
+                && collect($scene['blocks'][0]['containers'])->contains('id', $this->container);
+        });
+    }
+
     public function test_return_context_ignores_external_destinations_and_nested_values(): void
     {
         $this->get(route('maintenance.create', ['container_id' => $this->container,

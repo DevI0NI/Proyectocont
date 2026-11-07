@@ -462,14 +462,17 @@ class InventoryTable extends Component
                 ->flip();
         }
 
+        $onlySelectedBlock = $selectedBlockId > 0 && ! $this->maintenanceMode && ! $this->pypMode;
         $blocks = Bloque::active()
             ->where('patio_id', $patioId)
+            ->when($onlySelectedBlock, fn ($query) => $query->whereKey($selectedBlockId))
             ->withCount('contenedoresActivos')
             ->orderBy('numero')
             ->get();
 
         $containersQuery = $this->containersQuery($branchId)
             ->where('p.id', $patioId)
+            ->when($onlySelectedBlock, fn ($query) => $query->where('b.id', $selectedBlockId))
             ->orderBy('b.numero')
             ->orderBy('c.posicion');
 

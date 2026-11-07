@@ -206,6 +206,7 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/rentas/predios/{location}/espacios', [RentalController::class, 'storeSpaces'])->name('rentals.spaces.store');
         Route::post('/rentas/predios/{location}/tarifas', [RentalController::class, 'storeRate'])->name('rentals.rates.store');
         Route::patch('/rentas/espacios/{space}', [RentalController::class, 'updateSpace'])->name('rentals.spaces.update');
+        Route::delete('/rentas/espacios/{space}', [RentalController::class, 'destroySpace'])->name('rentals.spaces.destroy');
         Route::post('/rentas/estadias', [RentalController::class, 'store'])->name('rentals.store');
         Route::get('/rentas/estadias/{stay}', [RentalController::class, 'show'])->name('rentals.show');
         Route::post('/rentas/estadias/{stay}/liquidar', [RentalController::class, 'settle'])->name('rentals.settle');

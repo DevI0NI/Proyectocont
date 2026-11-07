@@ -27,13 +27,6 @@
             </div>
         </section>
 
-        <section class="parking-summary" aria-label="Resumen del predio">
-            <div class="parking-stat available"><span class="parking-stat-dot"></span><div><small>Libres</small><strong>{{ $free->count() }}</strong></div></div>
-            <div class="parking-stat occupied"><span class="parking-stat-dot"></span><div><small>Ocupados</small><strong>{{ $occupied }}</strong></div></div>
-            <div class="parking-stat maintenance"><span class="parking-stat-dot"></span><div><small>Bloqueados</small><strong>{{ $blocked }}</strong></div></div>
-            <div class="parking-stat parking-occupancy"><div><small>Ocupacion · {{ $total }} espacios</small><strong>{{ $occupancy }} %</strong></div><div class="parking-occupancy-bar" aria-hidden="true"><span style="width: {{ $occupancy }}%"></span></div></div>
-        </section>
-
         @if(! $rate)
             <div class="parking-warning parking-warning-card"><span><strong>Falta configurar las tarifas de este predio.</strong> Sin tarifas no se pueden registrar entradas.</span><a class="button" href="{{ route('rentals.settings.location', $location->id) }}">Configurar tarifas</a></div>
         @endif
@@ -41,10 +34,11 @@
         <section class="parking-workspace">
             <article class="panel-card parking-board">
                 <div class="parking-board-header">
-                    <div><h2>Espacios de {{ $location->name }}</h2><div class="parking-legend"><span class="available">Libre</span><span class="occupied">Ocupado</span><span class="maintenance">Bloqueado</span></div></div>
+                    <div><h2>Espacios de {{ $location->name }}</h2><div class="parking-board-stats" aria-label="Resumen del predio"><button type="button" class="parking-board-stat available" data-parking-filter="available" aria-pressed="false" title="Mostrar solo libres"><i></i>Libres <b>{{ $free->count() }}</b></button><button type="button" class="parking-board-stat occupied" data-parking-filter="occupied" aria-pressed="false" title="Mostrar solo ocupados"><i></i>Ocupados <b>{{ $occupied }}</b></button><button type="button" class="parking-board-stat maintenance" data-parking-filter="maintenance" aria-pressed="false" title="Mostrar solo bloqueados"><i></i>Bloqueados <b>{{ $blocked }}</b></button><span class="parking-board-occupancy">Ocupacion <b>{{ $occupancy }} %</b><span class="parking-occupancy-bar" aria-hidden="true"><span style="width: {{ $occupancy }}%"></span></span><small>{{ $total }} espacios</small></span></div></div>
                     <div class="parking-view-toggle" role="tablist" aria-label="Tipo de vista"><button type="button" class="active" role="tab" aria-selected="true" data-parking-view="plan">Plano</button><button type="button" role="tab" aria-selected="false" data-parking-view="3d">Vista 3D</button></div>
                 </div>
                 <div class="parking-grid" data-parking-view-panel="plan" aria-label="Espacios del predio">
+                    <p class="parking-table-empty parking-filter-empty" hidden>No hay espacios en este estado.</p>
                     @forelse($spaces as $space)
                         @php $state = $space->stay_id ? 'occupied' : $space->status; @endphp
                         <button type="button" class="parking-tile parking-space-option {{ $state }}" data-space-id="{{ $space->id }}" data-space-code="{{ $space->code }}" @if($space->stay_id) data-stay-url="{{ route('rentals.show', $space->stay_id) }}" @endif @disabled($state === 'maintenance') title="{{ $state === 'occupied' ? 'Cobrar salida de '.$space->plate : ($state === 'maintenance' ? 'Espacio bloqueado' : 'Elegir '.$space->code) }}">
@@ -65,6 +59,17 @@
                     @empty
                         <p class="parking-table-empty">Este predio no tiene espacios. Agregalos en Configuracion.</p>
                     @endforelse
+                </div>
+                <div data-parking-view-panel="plan">
+                    <nav class="admin-pagination parking-space-pagination" data-plan-pages aria-label="Paginacion del plano" hidden>
+                        <span role="status" data-plan-pages-status></span>
+                        <div class="admin-page-buttons">
+                            <button type="button" class="admin-action" data-plan-page="first" title="Primera pagina" aria-label="Primera pagina"><span data-parking-icon="chevrons-left"></span></button>
+                            <button type="button" class="admin-action" data-plan-page="previous" title="Pagina anterior" aria-label="Pagina anterior"><span data-parking-icon="chevron-left"></span></button>
+                            <button type="button" class="admin-action" data-plan-page="next" title="Pagina siguiente" aria-label="Pagina siguiente"><span data-parking-icon="chevron-right"></span></button>
+                            <button type="button" class="admin-action" data-plan-page="last" title="Ultima pagina" aria-label="Ultima pagina"><span data-parking-icon="chevrons-right"></span></button>
+                        </div>
+                    </nav>
                 </div>
                 <div class="parking-3d" data-parking-view-panel="3d" hidden>
                     <div class="parking-canvas-stage" data-parking-scene data-spaces="{{ $sceneData->toJson() }}"><canvas aria-label="Plano 3D de espacios de parqueo"></canvas><div class="parking-map-tooltip" hidden></div><div class="parking-map-error" hidden>Vista 3D no disponible. Usa el plano.</div><button class="parking-icon parking-3d-reset" type="button" data-parking-reset title="Restablecer vista" aria-label="Restablecer vista"><span data-parking-icon="rotate-ccw"></span></button></div>

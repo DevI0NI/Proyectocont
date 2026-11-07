@@ -51,8 +51,8 @@
         <h2 id="parking-location-title">Crear predio de parqueo</h2>
         <p>Despues de crearlo podras agregar sus espacios y tarifas.</p>
         <form method="POST" action="{{ route('rentals.locations.store') }}" class="parking-form">@csrf
-            <label>Nombre<input name="name" required maxlength="100" value="{{ old('name') }}" placeholder="Ej. Predio Santo Tomas" autocomplete="off"></label>
-            <label><span>Direccion <span class="parking-optional">(opcional)</span></span><input name="address" maxlength="200" value="{{ old('address') }}" autocomplete="off"></label>
+            <label class="parking-field">Nombre<input name="name" required minlength="3" maxlength="100" value="{{ old('name') }}" placeholder="Ej. Predio Santo Tomas" autocomplete="off" data-parking-check="company"><small class="parking-field-check" aria-live="polite">@error('name'){{ $message }}@enderror</small></label>
+            <label class="parking-field"><span>Direccion <span class="parking-optional">(opcional)</span></span><input name="address" maxlength="200" value="{{ old('address') }}" autocomplete="off" placeholder="Ej. 15 calle, zona industrial" data-parking-check="address"><small class="parking-field-check" aria-live="polite">@error('address'){{ $message }}@enderror</small></label>
             <label>Moneda<select name="currency"><option value="GTQ" @selected(old('currency', 'GTQ') === 'GTQ')>GTQ - Quetzales</option><option value="USD" @selected(old('currency') === 'USD')>USD - Dolares</option></select></label>
             <div class="parking-actions"><button type="button" class="button secondary" data-dialog-close>Cancelar</button><button class="button" type="submit">Crear predio</button></div>
         </form>

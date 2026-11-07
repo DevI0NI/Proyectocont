@@ -105,6 +105,18 @@ class YardLayoutManagementInterfaceTest extends TestCase
         $this->assertDatabaseHas('patios', ['id' => 2, 'estado_id' => 2]);
     }
 
+    public function test_a_patio_accepts_at_most_25_active_blocks(): void
+    {
+        while (DB::table('bloques')->where('patio_id', 1)->where('estado_id', 1)->count() < 25) {
+            $this->postJson('/patios-bloques/bloques', ['patio_id' => 1, 'capacidad_maxima' => 5])->assertOk();
+        }
+        $this->postJson('/patios-bloques/bloques', ['patio_id' => 1, 'capacidad_maxima' => 5])->assertUnprocessable()
+            ->assertJsonValidationErrors(['patio_id' => 'Este patio ya tiene el maximo de 25 bloques. Crea otro patio para seguir agregando.']);
+        $this->assertSame(25, DB::table('bloques')->where('patio_id', 1)->where('estado_id', 1)->count());
+        DB::table('bloques')->where('patio_id', 1)->where('estado_id', 1)->orderByDesc('id')->limit(1)->update(['estado_id' => 2]);
+        $this->postJson('/patios-bloques/bloques', ['patio_id' => 1, 'capacidad_maxima' => 5])->assertOk();
+    }
+
     public function test_branch_and_role_boundaries_remain_enforced(): void
     {
         $this->patchJson('/patios-bloques/patios/3', ['nombre' => 'Ajeno editado'])->assertForbidden();
