@@ -199,11 +199,14 @@ Route::middleware('auth')->group(function (): void {
         Route::redirect('/rentas/rentas.php', '/rentas', 302);
         Route::get('/rentas/espacios', [RentalController::class, 'spaces'])->name('rentals.spaces');
         Route::redirect('/rentas/espacios.php', '/rentas/espacios', 302);
+        Route::get('/rentas/registros', [RentalController::class, 'records'])->name('rentals.records');
         Route::get('/rentas/configuracion', [RentalController::class, 'settings'])->name('rentals.settings');
+        Route::get('/rentas/configuracion/{location}', [RentalController::class, 'locationSettings'])->whereNumber('location')->name('rentals.settings.location');
         Route::post('/rentas/predios', [RentalController::class, 'storeLocation'])->name('rentals.locations.store');
         Route::post('/rentas/predios/{location}/espacios', [RentalController::class, 'storeSpaces'])->name('rentals.spaces.store');
         Route::post('/rentas/predios/{location}/tarifas', [RentalController::class, 'storeRate'])->name('rentals.rates.store');
         Route::patch('/rentas/espacios/{space}', [RentalController::class, 'updateSpace'])->name('rentals.spaces.update');
+        Route::delete('/rentas/espacios/{space}', [RentalController::class, 'destroySpace'])->name('rentals.spaces.destroy');
         Route::post('/rentas/estadias', [RentalController::class, 'store'])->name('rentals.store');
         Route::get('/rentas/estadias/{stay}', [RentalController::class, 'show'])->name('rentals.show');
         Route::post('/rentas/estadias/{stay}/liquidar', [RentalController::class, 'settle'])->name('rentals.settle');

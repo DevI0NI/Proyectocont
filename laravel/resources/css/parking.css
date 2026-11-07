@@ -6,7 +6,7 @@
 .parking-body .parking-pc-required h1 { font-size:24px; font-weight:800; line-height:1.25; margin:0; }
 .parking-body .parking-pc-required p { max-width:440px; margin:0; color:var(--muted); line-height:1.6; }
 @media(max-width:980px) { .parking-body .parking-pc-required { display:flex; } .parking-desktop-content { display:none; } }
-.parking-body .parking-main { max-width:1600px; width:100%; }
+.parking-body .parking-main { max-width:none; width:100%; }
 .parking-body .parking-heading { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:22px; }
 .parking-body .parking-heading h1 { font-family:"Instrument Sans", "Segoe UI", Arial, sans-serif; font-size:28px; font-weight:850; letter-spacing:0; }
 .parking-body select.enhanced-native-select { position:absolute; width:1px; height:1px; min-height:1px; padding:0; margin:0; opacity:0; pointer-events:none; }
@@ -28,7 +28,7 @@
 .parking-account { margin-left:auto; display:flex; gap:12px; align-items:center; font-size:13px; }
 .parking-icon { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; flex-shrink:0; padding:0; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); cursor:pointer; }
 .parking-icon svg, .parking-actions svg, .parking-heading .button svg { width:18px; height:18px; }
-.parking-main { max-width:1600px; margin:0 auto; padding:28px 32px 40px; }
+.parking-main { max-width:none; margin:0 auto; padding:28px 32px 40px; }
 .parking-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
 .parking-heading h1 { font-size:28px; font-weight:800; margin:4px 0; line-height:1.25; }
 .parking-body h2 { font-size:18px; font-weight:750; margin:0 0 16px; }
@@ -116,6 +116,12 @@
 .parking-check { display:flex!important; align-items:center; gap:10px!important; font-weight:500!important; }
 .parking-check input { accent-color:var(--accent); width:18px; height:18px; }
 .parking-refresh { color:var(--accent); font-size:13px; text-align:center; }
+.parking-next-charge { display:flex; align-items:center; gap:8px; margin:-8px 0 22px; padding:10px 12px; border-radius:10px; background:color-mix(in srgb,var(--accent) 9%,transparent); color:var(--muted); font-size:12.5px; }
+.parking-next-charge strong { color:var(--ink); }
+.parking-live-dot { width:8px; height:8px; flex:0 0 8px; border-radius:50%; background:#14b8a6; box-shadow:0 0 0 0 #14b8a680; animation:parkingLivePulse 1.8s ease-out infinite; }
+@keyframes parkingLivePulse { 0% { box-shadow:0 0 0 0 #14b8a680; } 100% { box-shadow:0 0 0 8px #14b8a600; } }
+.parking-tile .parking-tile-elapsed { font-weight:750; opacity:.95; }
+@media (prefers-reduced-motion: reduce) { .parking-live-dot { animation:none; } }
 .parking-timeline { list-style:none; padding:0 0 0 18px; border-left:2px solid var(--line); }
 .parking-timeline li { position:relative; display:grid; gap:7px; padding:0 0 24px 12px; }
 .parking-timeline li::before { content:''; width:10px; height:10px; background:var(--accent); border-radius:50%; position:absolute; left:-24px; top:4px; }
@@ -198,6 +204,15 @@
 @keyframes parkingPulse { from { transform:scale(.94); } to { transform:scale(1); } }
 .parking-body select.parking-plain-select { position:absolute; width:1px; height:1px; min-height:1px; padding:0; border:0; opacity:0; pointer-events:none; }
 .parking-optional { color:var(--muted); font-weight:500; }
+.parking-field { position:relative; }
+.parking-field-title { display:flex; align-items:center; gap:6px; }
+.parking-body .parking-field input[data-state="valid"] { border-color:#14b8a6; }
+.parking-body .parking-field input[data-state="invalid"] { border-color:#dc2626; }
+.parking-field-check { display:block; min-height:16px; margin-top:-2px; font-size:11.5px; font-weight:600; line-height:1.35; color:var(--muted); opacity:0; transition:opacity .2s ease; }
+.parking-field-check.is-visible { opacity:1; }
+.parking-field-check[data-state="valid"] { color:#0f9f8c; }
+.parking-field-check[data-state="invalid"] { color:#dc2626; }
+.parking-field-counter { text-align:right; font-weight:500; }
 .parking-entry-card .parking-billing { grid-template-columns:1fr 1fr; }
 .parking-entry-card .parking-billing label { border-radius:12px; }
 .parking-body .button.parking-submit { width:100%; min-height:48px; border-radius:12px; font-size:15px; }
@@ -205,3 +220,111 @@
 @media(max-width:1280px) { .parking-workspace { grid-template-columns:minmax(0, 1fr) 340px; } .parking-summary { grid-template-columns:repeat(3, minmax(0, 1fr)); } .parking-occupancy { grid-column:1 / -1; } }
 @media(prefers-reduced-motion: reduce) { .parking-tile, .parking-tile-action, .parking-occupancy-bar span { transition:none; } .parking-chosen.pulse { animation:none; } }
 @media print { @page { size:A4; margin:15mm; } .print-hidden, .parking-notice, .parking-dialog { display:none!important; } .parking-body { background:white; color:black; } .parking-main { padding:0; } .parking-stay-layout { display:block; } .parking-settlement { padding:20px 0; border-left:0; } .parking-body dt, .parking-body .eyebrow, .parking-body .table-muted { color:#444; } }
+.parking-plate-input::placeholder { text-transform:none; }
+.parking-records .parking-records-actions { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:12px; }
+.parking-records .standard-records-table .admin-state-choice .form-select-dropdown, .parking-records.containers-livewire-shell .admin-state-choice .form-select-dropdown { width:210px; }
+.parking-records .admin-state-choice .form-select-trigger span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.parking-records .admin-table-toolbar { border-top:0; border-bottom:0; padding-top:0; }
+.parking-body .containers-header-menu { scrollbar-width:thin; scrollbar-color:#80cbc480 transparent; }
+.parking-body .containers-header-menu::-webkit-scrollbar { width:6px; }
+.parking-body .containers-header-menu::-webkit-scrollbar-track { background:transparent; }
+.parking-body .containers-header-menu::-webkit-scrollbar-thumb { background:#80cbc480; border-radius:8px; }
+.parking-body .containers-header-menu::-webkit-scrollbar-button { display:none; width:0; height:0; }
+.dashboard-body.parking-body .containers-header-menu .containers-status-filter .form-select-menu { position:static; display:none; margin-top:2px; box-shadow:none; }
+.dashboard-body.parking-body .containers-header-menu .containers-status-filter .form-select-dropdown.open .form-select-menu { display:grid; animation:parkingMenuIn .18s ease both; }
+@keyframes parkingMenuIn { from { opacity:0; transform:translateY(-6px) scale(.98); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce) { .dashboard-body.parking-body .containers-header-menu .containers-status-filter .form-select-dropdown.open .form-select-menu { animation:none; } }
+.parking-location-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:16px; }
+.parking-location-card { position:relative; display:grid; grid-template-columns:auto 1fr; gap:12px 14px; padding:20px; border-radius:16px; border:1px solid var(--line); background:var(--panel); color:var(--ink); text-decoration:none; transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.parking-location-card:hover { transform:translateY(-2px); border-color:color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow:0 12px 28px #0000001f; }
+.parking-location-card:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.parking-location-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:12px; background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
+.parking-location-copy { display:grid; gap:4px; min-width:0; }
+.parking-location-copy strong { font-size:17px; font-weight:800; }
+.parking-location-copy small { color:var(--muted); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.parking-location-facts { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:8px; }
+.parking-location-facts span { padding:6px 10px; border-radius:999px; background:color-mix(in srgb, var(--muted) 12%, transparent); font-size:12px; color:var(--muted); }
+.parking-location-facts b { color:var(--ink); }
+.parking-location-rate { grid-column:1 / -1; font-size:13px; font-weight:700; color:var(--accent); }
+.parking-location-rate.is-missing { color:#d97706; }
+.parking-location-go { grid-column:1 / -1; display:inline-flex; align-items:center; gap:4px; justify-self:end; font-size:13px; font-weight:750; color:var(--accent); }
+.parking-location-go svg { width:16px; height:16px; transition:transform .18s ease; }
+.parking-location-card:hover .parking-location-go svg { transform:translateX(3px); }
+.parking-settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+.parking-body .panel-card.parking-settings-card { padding:20px; }
+.parking-settings-card .parking-form { gap:14px; }
+.parking-settings-card .parking-form > .button { justify-self:start; }
+.parking-settings-hint { margin:6px 0 14px; color:var(--muted); font-size:13px; line-height:1.5; max-width:640px; }
+.parking-space-admin { display:grid; grid-template-columns:repeat(8, minmax(0, 1fr)); gap:10px; }
+.parking-space-admin-item { display:grid; grid-template-columns:1fr auto; align-items:center; gap:2px 10px; padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:var(--panel); border-left:4px solid #14b8a6; }
+.parking-space-admin-item strong { font-size:15px; }
+.parking-space-admin-item small { grid-column:1; color:var(--muted); font-size:11.5px; font-weight:650; }
+.parking-space-admin-item .button { grid-row:1 / span 2; grid-column:2; min-height:34px; padding:6px 12px; font-size:12px; }
+.parking-space-admin-item.occupied { border-left-color:#3b82f6; }
+.parking-space-admin-item.maintenance { border-left-color:#f59e0b; background:repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, #f59e0b 7%, transparent) 10px 20px), var(--panel); }
+.parking-form-dialog { overflow:visible; width:min(520px, calc(100vw - 32px)); border:1px solid var(--line); border-radius:16px; box-shadow:0 24px 70px rgb(0 0 0 / 30%); }
+.parking-form-dialog .parking-actions { display:flex; gap:10px; margin-top:6px; }
+.parking-dialog[open] { animation:parkingDialogIn .22s ease both; }
+.parking-dialog[open]::backdrop { animation:parkingBackdropIn .22s ease both; }
+@keyframes parkingDialogIn { from { opacity:0; transform:translateY(12px) scale(.97); } to { opacity:1; transform:none; } }
+@keyframes parkingBackdropIn { from { opacity:0; } to { opacity:1; } }
+@media(max-width:1100px) { .parking-settings-grid { grid-template-columns:1fr; } }
+@media (prefers-reduced-motion: reduce) { .parking-location-card, .parking-location-go svg { transition:none; } .parking-dialog[open], .parking-dialog[open]::backdrop { animation:none; } }
+.parking-space-admin-item { min-width:0; }
+.parking-space-admin-item strong { white-space:nowrap; }
+.parking-space-admin-item small { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.parking-space-admin-item .button { white-space:nowrap; }
+@media(max-width:1500px) { .parking-space-admin { grid-template-columns:repeat(6, minmax(0, 1fr)); } }
+@media(max-width:1200px) { .parking-space-admin { grid-template-columns:repeat(4, minmax(0, 1fr)); } }
+.parking-board-stats { display:flex; align-items:center; flex-wrap:wrap; gap:8px 10px; }
+.parking-board-stat, .parking-board-occupancy { display:inline-flex; align-items:center; gap:7px; padding:6px 12px; border-radius:999px; border:1px solid var(--line); background:color-mix(in srgb, var(--muted) 8%, transparent); color:var(--muted); font-size:13px; font-weight:650; }
+.parking-board-stat b, .parking-board-occupancy b { color:var(--ink); font-size:15px; font-weight:850; }
+.parking-board-stat i { width:9px; height:9px; border-radius:50%; flex:0 0 9px; }
+.parking-board-stat.available i { background:#159c87; box-shadow:0 0 0 3px #159c8733; }
+.parking-board-stat.occupied i { background:#367caf; box-shadow:0 0 0 3px #367caf33; }
+.parking-board-stat.maintenance i { background:#bf8a34; box-shadow:0 0 0 3px #bf8a3433; }
+.parking-board-occupancy .parking-occupancy-bar { width:90px; height:6px; }
+.parking-board-occupancy small { color:var(--muted); font-size:11.5px; font-weight:600; }
+.parking-board-header { flex-wrap:nowrap; } .parking-board-header > div:first-child { flex:1 1 0; min-width:0; } .parking-board-header .parking-view-toggle { flex:0 0 auto; }
+.parking-board .parking-grid { max-height:max(440px, calc(100dvh - 300px)); overflow-y:auto; overscroll-behavior:contain; padding:4px 8px 6px 2px; margin-right:-8px; align-content:start; scrollbar-width:thin; scrollbar-color:#80cbc480 transparent; }
+.parking-board .parking-grid::-webkit-scrollbar { width:6px; }
+.parking-board .parking-grid::-webkit-scrollbar-track { background:transparent; }
+.parking-board .parking-grid::-webkit-scrollbar-thumb { background:#80cbc480; border-radius:8px; }
+.parking-board .parking-grid::-webkit-scrollbar-button { display:none; width:0; height:0; }
+.parking-tile[hidden], .parking-filter-empty[hidden] { display:none; }
+.parking-filter-empty { grid-column:1 / -1; }
+button.parking-board-stat { font:inherit; font-size:13px; font-weight:650; cursor:pointer; transition:transform .16s ease, border-color .16s ease, background-color .16s ease; }
+button.parking-board-stat:hover { transform:translateY(-1px); border-color:color-mix(in srgb, var(--accent) 50%, var(--line)); }
+button.parking-board-stat[aria-pressed="true"] { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 16%, transparent); color:var(--ink); }
+button.parking-board-stat:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.parking-space-admin-actions { grid-row:1 / span 2; grid-column:2; display:flex; align-items:center; gap:6px; }
+.parking-space-admin-actions form { margin:0; }
+.parking-space-admin-item .parking-space-admin-actions .button { min-height:34px; padding:6px 10px; font-size:12px; }
+.parking-space-remove { display:grid; place-items:center; width:32px; height:32px; padding:0; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--muted); cursor:pointer; transition:color .16s ease, border-color .16s ease, background-color .16s ease, transform .16s ease; }
+.parking-space-remove svg { width:16px; height:16px; }
+.parking-space-remove:hover:not(:disabled) { color:#ef4444; border-color:#ef444480; background:#ef44441a; transform:translateY(-1px); }
+.parking-space-remove:disabled { opacity:.35; cursor:not-allowed; }
+.parking-body .button.parking-danger { background:#dc2626; border-color:#dc2626; }
+@media(max-width:1500px) { .parking-space-admin { grid-template-columns:repeat(5, minmax(0, 1fr)); } }
+@media(max-width:1200px) { .parking-space-admin { grid-template-columns:repeat(4, minmax(0, 1fr)); } }
+.parking-space-admin-item { grid-template-columns:1fr auto; grid-template-rows:auto auto auto; row-gap:6px; }
+.parking-space-admin-item strong { grid-column:1; grid-row:1; align-self:center; }
+.parking-space-admin-item small { grid-column:1 / -1; grid-row:2; }
+.parking-space-admin-actions { display:contents; }
+.parking-space-admin-actions form { grid-column:1 / -1; grid-row:3; }
+.parking-space-admin-item .parking-space-admin-actions .button { width:100%; }
+.parking-space-remove { grid-column:2; grid-row:1; }
+.parking-space-pagination { margin-top:16px; }
+.parking-space-pagination .admin-action svg { width:16px; height:16px; }
+#espacios { scroll-margin-top:90px; }
+.parking-space-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--muted); font-size:13px; }
+.parking-space-pagination .admin-page-buttons { display:flex; gap:6px; }
+.parking-space-pagination .admin-action { display:grid; place-items:center; width:34px; height:34px; border-radius:8px; border:1px solid var(--line); color:var(--ink); text-decoration:none; transition:transform .16s ease, border-color .16s ease, background-color .16s ease; }
+.parking-space-pagination a.admin-action:hover { transform:translateY(-1px); border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, transparent); }
+.parking-space-pagination .admin-action.disabled { opacity:.4; }
+.parking-board .parking-grid { grid-template-columns:repeat(8, minmax(0, 1fr)); max-height:none; overflow:visible; margin-right:0; padding:4px 2px 6px; }
+.parking-board .parking-space-pagination { margin-top:14px; }
+.parking-space-pagination button.admin-action { background:transparent; padding:0; font:inherit; cursor:pointer; }
+.parking-space-pagination button.admin-action:hover:not(:disabled) { transform:translateY(-1px); border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, transparent); }
+.parking-space-pagination button.admin-action:disabled { opacity:.4; cursor:default; }
+@media(max-width:1400px) { .parking-board .parking-grid { grid-template-columns:repeat(6, minmax(0, 1fr)); } }

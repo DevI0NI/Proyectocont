@@ -22,6 +22,8 @@ class YardLayoutController extends Controller
 
     private const MAX_BLOCK_CAPACITY = 25;
 
+    private const MAX_BLOCKS_PER_PATIO = 25;
+
     public function index(Request $request): View
     {
         $branch = $this->activeBranch($request);
@@ -170,6 +172,10 @@ class YardLayoutController extends Controller
         $this->ensurePatioBelongsToBranch($patio, $branch);
 
         DB::transaction(function () use ($patio, $data): void {
+            Patio::whereKey($patio->id)->lockForUpdate()->first();
+            if ($patio->bloquesActivos()->count() >= self::MAX_BLOCKS_PER_PATIO) {
+                throw ValidationException::withMessages(['patio_id' => 'Este patio ya tiene el maximo de '.self::MAX_BLOCKS_PER_PATIO.' bloques. Crea otro patio para seguir agregando.']);
+            }
             $nextNumber = ((int) Bloque::where('patio_id', $patio->id)->max('numero')) + 1;
 
             Bloque::create([

@@ -33,6 +33,7 @@ import './container-statuses';
 import './yard-layout';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { addContainerDetails, corrugatedTexture, createContainerDetailsGeometry, createContainerGeometry } from './container-model';
 
 document.addEventListener('click', (event) => {
     if (event.target instanceof Element && event.target.closest('.form-select-menu button, .form-select-trigger') && event.target.closest('label')) {
@@ -615,6 +616,7 @@ function initYard3d(canvas) {
     const data = parseYardScene(canvas);
     const blocks = Array.isArray(data.blocks) ? data.blocks : [];
     const hasVisualFilters = Boolean(data.has_visual_filters);
+    const hasBlockFocus = Array.isArray(data.blocks) && data.blocks.length > 1 && data.blocks.some((block) => block.selected);
     const stage = canvas.closest('.containers-yard3d-stage');
     const tooltip = stage?.querySelector('.containers-yard3d-tooltip');
     const actionPanel = stage?.querySelector('.containers-yard3d-actions');
@@ -667,26 +669,34 @@ function initYard3d(canvas) {
     scene.add(keyLight);
 
     const floorMaterial = new THREE.MeshStandardMaterial({
-        color: isDark ? 0x10272e : 0xe9f5f3,
-        roughness: 0.86,
+        color: isDark ? 0x263238 : 0x9aa6ac,
+        roughness: 0.95,
         metalness: 0.02,
     });
     const blockMaterial = new THREE.MeshStandardMaterial({
-        color: isDark ? 0x173b42 : 0xd9efec,
-        roughness: 0.78,
-        metalness: 0.03,
+        color: isDark ? 0x3b4c52 : 0xd3dbde,
+        roughness: 0.9,
+        metalness: 0.02,
     });
     const selectedBlockMaterial = new THREE.MeshStandardMaterial({
-        color: isDark ? 0x20564d : 0xbfe9e3,
-        roughness: 0.72,
-        metalness: 0.04,
+        color: isDark ? 0x2b5f57 : 0xbfe9e3,
+        roughness: 0.82,
+        metalness: 0.03,
     });
-    const edgeMaterial = new THREE.LineBasicMaterial({ color: isDark ? 0x70ccc4 : 0x087866, transparent: true, opacity: 0.35 });
-    const blockGap = 3.2;
+    const edgeMaterial = new THREE.LineBasicMaterial({ color: isDark ? 0x8fd8cf : 0x087866, transparent: true, opacity: 0.55 });
+    const fadedEdgeMaterial = new THREE.LineBasicMaterial({ color: isDark ? 0x8fd8cf : 0x087866, transparent: true, opacity: 0.12 });
+    const fadedBlockMaterial = new THREE.MeshStandardMaterial({ color: isDark ? 0x3b4c52 : 0xd3dbde, roughness: 0.9, transparent: true, opacity: 0.35 });
+    const slotLineMaterial = new THREE.MeshBasicMaterial({ color: isDark ? 0xe8eef0 : 0x5f7177, transparent: true, opacity: isDark ? 0.55 : 0.75 });
+    const fadedSlotLineMaterial = new THREE.MeshBasicMaterial({ color: isDark ? 0xe8eef0 : 0x5f7177, transparent: true, opacity: 0.15 });
+    const laneMaterial = new THREE.MeshBasicMaterial({ color: 0xf2c94c });
+    const blockGap = 4.9;
     const slotWidth = 1.34;
     const rowDepth = 2.2;
     const boxHeight = 0.78;
-    const containerGeometry = new THREE.BoxGeometry(1.04, boxHeight, 1.28);
+    const containerGeometry = createContainerGeometry(0.98, boxHeight, 1.96);
+    const containerDetails = createContainerDetailsGeometry(0.98, boxHeight, 1.96);
+    const containerLineMaterial = new THREE.LineBasicMaterial({ color: 0x0a1a1e, transparent: true, opacity: 0.62 });
+    const dimmedLineMaterial = new THREE.LineBasicMaterial({ color: 0x0a1a1e, transparent: true, opacity: 0.12 });
     const containerMaterials = new Map();
     const materialForContainer = (container, isDimmed) => {
         const color = isDimmed ? dimmedContainerColor(isDark) : containerColor(container);
@@ -695,6 +705,7 @@ function initYard3d(canvas) {
         if (!containerMaterials.has(key)) {
             containerMaterials.set(key, new THREE.MeshStandardMaterial({
                 color,
+                map: corrugatedTexture(),
                 opacity: isDimmed ? 0.28 : 1,
                 roughness: 0.58,
                 metalness: 0.08,
@@ -707,41 +718,129 @@ function initYard3d(canvas) {
 
     const selectedContainerMaterial = new THREE.MeshStandardMaterial({
         color: 0x2f6df6,
+        map: corrugatedTexture(),
         emissive: 0x2f6df6,
         emissiveIntensity: 0.28,
         roughness: 0.5,
         metalness: 0.08,
     });
 
-    const rowCount = blocks.length;
     const maxColumns = Math.max(...blocks.map((block) => Math.ceil((Number(block.capacidad) || 1) / 2)), 1);
-    const floorWidth = Math.max(14, maxColumns * slotWidth + 4);
-    const floorDepth = Math.max(8, rowCount * blockGap + 4);
+    const blockSpan = maxColumns * slotWidth + 4.4;
+    let groupColumns = 1;
+    for (let candidate = 2; candidate <= Math.min(4, blocks.length); candidate++) {
+        const aspect = (columns) => (columns * blockSpan) / (Math.ceil(blocks.length / columns) * blockGap);
+        if (Math.abs(Math.log(aspect(candidate) / 1.7)) < Math.abs(Math.log(aspect(groupColumns) / 1.7))) groupColumns = candidate;
+    }
+    const rowCount = Math.ceil(blocks.length / groupColumns);
+    const blockX = (blockIndex) => (Math.floor(blockIndex / rowCount) - (groupColumns - 1) / 2) * blockSpan;
+    const floorWidth = Math.max(14, groupColumns * blockSpan + 3.6);
+    const floorDepth = Math.max(8, rowCount * blockGap + 4.6);
 
     const floor = new THREE.Mesh(new THREE.BoxGeometry(floorWidth, 0.16, floorDepth), floorMaterial);
     floor.position.y = -0.1;
     scene.add(floor);
+    const yardBox = (w, h, d, x, y, z, material) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+        mesh.position.set(x, y, z);
+        scene.add(mesh);
+        return mesh;
+    };
+    const dashGeometry = new THREE.BoxGeometry(0.7, 0.01, 0.07);
+    for (let lane = 0; lane <= rowCount; lane++) {
+        const laneZ = (lane - rowCount / 2) * blockGap;
+        for (let x = -floorWidth / 2 + 0.8; x < floorWidth / 2 - 0.8; x += 1.4) {
+            const dash = new THREE.Mesh(dashGeometry, laneMaterial);
+            dash.position.set(x + 0.35, -0.015, laneZ);
+            scene.add(dash);
+        }
+    }
+    for (let lane = 1; lane < groupColumns; lane++) {
+        const laneX = (lane - groupColumns / 2) * blockSpan;
+        for (let z = -floorDepth / 2 + 0.8; z < floorDepth / 2 - 0.8; z += 1.4) {
+            const dash = new THREE.Mesh(dashGeometry, laneMaterial);
+            dash.rotation.y = Math.PI / 2;
+            dash.position.set(laneX, -0.015, z + 0.35);
+            scene.add(dash);
+        }
+    }
+    const frontLaneZ = (rowCount / 2) * blockGap;
+    const gateX = floorWidth / 2 - 1.4;
+    const boothZ = frontLaneZ + 1.45;
+    const boothWall = new THREE.MeshStandardMaterial({ color: 0xf1f4f5, roughness: 0.65 });
+    const boothGlass = new THREE.MeshStandardMaterial({ color: 0x4f86a0, roughness: 0.15, metalness: 0.35 });
+    const boothTrim = new THREE.MeshStandardMaterial({ color: 0x0f7f72, roughness: 0.55 });
+    yardBox(1.75, 0.08, 1.55, gateX, 0.0, boothZ, new THREE.MeshStandardMaterial({ color: 0xbfc8cc, roughness: 0.9 }));
+    yardBox(1.5, 1.15, 1.3, gateX, 0.62, boothZ, boothWall);
+    yardBox(1.5, 0.12, 1.3, gateX, 0.1, boothZ, boothTrim);
+    yardBox(1.22, 0.42, 0.02, gateX, 0.82, boothZ - 0.66, boothGlass);
+    yardBox(0.02, 0.42, 0.9, gateX - 0.76, 0.82, boothZ, boothGlass);
+    yardBox(0.42, 0.8, 0.02, gateX + 0.35, 0.47, boothZ + 0.66, new THREE.MeshStandardMaterial({ color: 0x5b6b73, roughness: 0.6 }));
+    yardBox(1.95, 0.14, 1.75, gateX, 1.27, boothZ, boothTrim);
+    const signCanvas = document.createElement('canvas');
+    signCanvas.width = 256;
+    signCanvas.height = 64;
+    const signContext = signCanvas.getContext('2d');
+    signContext.fillStyle = '#0f7f72';
+    signContext.fillRect(0, 0, 256, 64);
+    signContext.fillStyle = '#ffffff';
+    signContext.font = '800 34px Instrument Sans, Segoe UI, Arial';
+    signContext.textAlign = 'center';
+    signContext.textBaseline = 'middle';
+    signContext.fillText('CONTROL', 128, 34);
+    const signTexture = new THREE.CanvasTexture(signCanvas);
+    signTexture.colorSpace = THREE.SRGBColorSpace;
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), new THREE.MeshBasicMaterial({ map: signTexture }));
+    sign.position.set(gateX, 1.5, boothZ + 0.88);
+    scene.add(sign);
+    const frontSign = sign.clone();
+    frontSign.rotation.y = Math.PI;
+    frontSign.position.z = boothZ - 0.88;
+    scene.add(frontSign);
+    const barrierX = gateX - 1.15;
+    yardBox(0.26, 0.55, 0.26, barrierX, 0.27, frontLaneZ + 0.95, new THREE.MeshStandardMaterial({ color: 0xf2c94c, roughness: 0.6 }));
+    for (let i = 0; i < 6; i++) {
+        yardBox(0.07, 0.07, 0.48, barrierX, 0.5, frontLaneZ + 0.68 - i * 0.48, new THREE.MeshBasicMaterial({ color: i % 2 ? 0xffffff : 0xd94b3d }));
+    }
+    const poleMaterial = new THREE.MeshStandardMaterial({ color: isDark ? 0x8a9ba1 : 0x6d7c82, roughness: 0.6, metalness: 0.4 });
+    const lampMaterial = new THREE.MeshBasicMaterial({ color: 0xfff3c4 });
+    [-1, 1].forEach((sideX) => [-1, 1].forEach((sideZ) => {
+        const poleX = sideX * (floorWidth / 2 - 0.35);
+        const poleZ = sideZ * (floorDepth / 2 - 0.35);
+        yardBox(0.08, 3.2, 0.08, poleX, 1.52, poleZ, poleMaterial);
+        yardBox(0.42, 0.1, 0.24, poleX - sideX * 0.12, 3.14, poleZ, lampMaterial);
+    }));
 
     const pickables = [];
     let selectedBlockZ = 0;
+    let selectedBlockX = 0;
     blocks.forEach((block, blockIndex) => {
-        const z = (blockIndex - (rowCount - 1) / 2) * blockGap;
+        const z = ((blockIndex % rowCount) - (rowCount - 1) / 2) * blockGap;
+        const offsetX = blockX(blockIndex);
         if (block.selected) {
             selectedBlockZ = z;
+            selectedBlockX = offsetX;
         }
         const capacity = Math.max(Number(block.capacidad) || 1, 1);
         const columnCount = Math.ceil(capacity / 2);
         const baseWidth = columnCount * slotWidth;
         const base = new THREE.Mesh(
             new THREE.BoxGeometry(baseWidth, 0.18, rowDepth),
-            block.selected ? selectedBlockMaterial : blockMaterial,
+            block.selected ? selectedBlockMaterial : (hasBlockFocus ? fadedBlockMaterial : blockMaterial),
         );
-        base.position.set(0, 0.04, z);
+        base.position.set(offsetX, 0.04, z);
         scene.add(base);
 
-        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(base.geometry), edgeMaterial);
+        const faded = hasBlockFocus && !block.selected;
+        const blockLines = faded ? fadedSlotLineMaterial : slotLineMaterial;
+        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(base.geometry), faded ? fadedEdgeMaterial : edgeMaterial);
         edges.position.copy(base.position);
         scene.add(edges);
+        for (let column = 0; column <= columnCount; column++) {
+            yardBox(0.045, 0.012, rowDepth - 0.18, offsetX - baseWidth / 2 + column * slotWidth, 0.137, z, blockLines);
+        }
+        yardBox(baseWidth, 0.012, 0.045, offsetX, 0.137, z - rowDepth / 2 + 0.09, blockLines);
+        yardBox(baseWidth, 0.012, 0.045, offsetX, 0.137, z + rowDepth / 2 - 0.09, blockLines);
 
         const labelCanvas = document.createElement('canvas');
         const labelContext = labelCanvas.getContext('2d');
@@ -753,8 +852,8 @@ function initYard3d(canvas) {
         labelContext.textAlign = 'center';
         labelContext.fillText(`Bloque ${block.numero}`, 128, 42);
         const texture = new THREE.CanvasTexture(labelCanvas);
-        const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
-        label.position.set(-(baseWidth / 2) - 1.35, 1.0, z);
+        const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: faded ? 0.35 : 1 }));
+        label.position.set(offsetX - (baseWidth / 2) - 1.35, 1.0, z);
         label.scale.set(2.6, 0.65, 1);
         scene.add(label);
 
@@ -766,18 +865,33 @@ function initYard3d(canvas) {
                 : index;
             const column = Math.floor(stackOffset / 2);
             const level = stackOffset % 2;
-            const x = ((column + 0.5) * slotWidth) - (baseWidth / 2);
-            const isDimmed = hasVisualFilters && !container.matches;
+            const x = offsetX + ((column + 0.5) * slotWidth) - (baseWidth / 2);
+            const isDimmed = (hasVisualFilters && !container.matches) || faded;
             const mesh = new THREE.Mesh(containerGeometry, materialForContainer(container, isDimmed));
             mesh.position.set(x, 0.56 + (level * (boxHeight + 0.08)), z);
             mesh.userData = { container };
+            addContainerDetails(mesh, containerDetails, isDimmed ? dimmedLineMaterial : containerLineMaterial);
             scene.add(mesh);
-            pickables.push(mesh);
+            if (!faded) pickables.push(mesh);
         });
     });
 
-    camera.position.set(floorWidth * 0.02, Math.max(5.4, floorDepth * 0.44), selectedBlockZ + (floorDepth * 1.54));
-    controls.target.set(0, 0.52, selectedBlockZ - (floorDepth * 0.04));
+    const viewDirection = new THREE.Vector3(0.05, 0.62, 0.78).normalize();
+    function frameYard(aspect) {
+        const focusWidth = hasBlockFocus ? blockSpan + 1 : floorWidth;
+        const focusDepth = hasBlockFocus ? blockGap * 2.2 : floorDepth;
+        const halfFov = THREE.MathUtils.degToRad(camera.fov / 2);
+        const horizontalFit = focusWidth / (2 * Math.tan(halfFov) * aspect);
+        const verticalFit = (focusDepth * 0.8) / (2 * Math.tan(halfFov));
+        const distance = Math.max(horizontalFit, verticalFit, 6) * (hasBlockFocus ? 1 : 1.3);
+        controls.target.set(hasBlockFocus ? selectedBlockX : 0, 0.52, hasBlockFocus ? selectedBlockZ : 0);
+        camera.position.copy(controls.target).addScaledVector(viewDirection, distance);
+        controls.maxDistance = Math.max(90, distance * 3);
+        camera.far = Math.max(1000, distance * 4);
+        controls.update();
+    }
+    camera.position.set(selectedBlockX, Math.max(5.4, floorDepth * 0.95), selectedBlockZ + (floorDepth * 1.35));
+    controls.target.set(selectedBlockX, 0.52, selectedBlockZ);
     controls.update();
 
     const raycaster = new THREE.Raycaster();
@@ -798,7 +912,9 @@ function initYard3d(canvas) {
         renderer.setSize(width, height, false);
         camera.aspect = width / height;
         const viewport = `${width}:${height}`;
-        if (data.fit_to_viewport && viewport !== previousViewport) {
+        if (!data.fit_to_viewport && viewport !== previousViewport) {
+            frameYard(width / height);
+        } else if (data.fit_to_viewport && viewport !== previousViewport) {
             const halfFov = THREE.MathUtils.degToRad(camera.fov / 2);
             const horizontalFit = (floorWidth + 5) / (2 * Math.tan(halfFov) * camera.aspect);
             const verticalFit = (floorDepth + 4) / (2 * Math.tan(halfFov));
@@ -1266,15 +1382,19 @@ function initIngressLocation3d(canvas) {
     const selectedLabelSide = selectedPosition ? stackedLabelSide(selectedPosition) : 0;
 
     const pickables = [];
+    const ingressContainerGeometry = createContainerGeometry(0.98, boxHeight, 2.2);
+    const ingressContainerDetails = createContainerDetailsGeometry(0.98, boxHeight, 2.2);
+    const ingressLineMaterial = new THREE.LineBasicMaterial({ color: 0x0a1a1e, transparent: true, opacity: 0.55 });
     containers.forEach((container) => {
         const position = Number(container.posicion || 0);
         const selected = selectedPosition === position && String(data.selected_id) === String(container.id);
         const blocking = blockerPositions.has(position);
         const slot = slotForPosition(position);
         const mesh = new THREE.Mesh(
-            new THREE.BoxGeometry(1.0, boxHeight, 1.18),
+            ingressContainerGeometry,
             new THREE.MeshStandardMaterial({
                 color: selected ? 0xf7b844 : blocking ? 0xd15c55 : (isDark ? 0x31b996 : 0x149976),
+                map: corrugatedTexture(),
                 roughness: 0.58,
                 metalness: 0.08,
             }),
@@ -1287,6 +1407,7 @@ function initIngressLocation3d(canvas) {
                 posicion: position,
             },
         };
+        addContainerDetails(mesh, ingressContainerDetails, ingressLineMaterial);
         scene.add(mesh);
         pickables.push(mesh);
         if (!selected && !blocking) {
@@ -1340,7 +1461,9 @@ function initIngressLocation3d(canvas) {
         roughness: 0.48,
         metalness: 0.08,
     });
-    const previewMesh = new THREE.Mesh(new THREE.BoxGeometry(1.04, boxHeight, 1.22), previewMaterial);
+    previewMaterial.map = corrugatedTexture();
+    const previewMesh = new THREE.Mesh(createContainerGeometry(1.0, boxHeight, 2.24), previewMaterial);
+    addContainerDetails(previewMesh, createContainerDetailsGeometry(1.0, boxHeight, 2.24), new THREE.LineBasicMaterial({ color: 0x5c3700, transparent: true, opacity: 0.6 }));
     previewMesh.castShadow = true;
     previewMesh.position.set(previewSlot.x, previewSlot.y, 0);
     scene.add(previewMesh);
