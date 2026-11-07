@@ -18,6 +18,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(SecurityHeaders::class);
+        $middleware->trustHosts(at: fn (): array => array_map(
+            fn (string $host): string => '^'.preg_quote(strtolower($host)).'$',
+            config('app.trusted_hosts', []),
+        ));
         $middleware->web(append: [ValidateCredentialSession::class, EnforceAccessPermissions::class]);
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
